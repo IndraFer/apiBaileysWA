@@ -316,8 +316,8 @@ baileys-wa-api/
 │   │       └── shouldIgnoreJid.ts  # JID filtering
 │   ├── lib/
 │   │   ├── runtime.ts              # The magic abstraction layer that enables dual-runtime compatibility for file reading & bcrypt hashing.
-│   ├── dashboard/                   # Modular backend APIs for the visual UI.
-│   ├── dashboard-ui/                # Modular Frontend SPA for the visual UI.
+│   ├── dashboard/                  # Modular backend APIs for the visual UI.
+│   ├── dashboard-ui/               # Modular Frontend SPA for the visual UI.
 │   ├── routes/
 │   │   ├── session.ts              # Session CRUD
 │   │   ├── chat.ts                 # Chat operations
@@ -340,11 +340,11 @@ baileys-wa-api/
 │       ├── asyncSleep.ts           # Async sleep utilities
 │       ├── phone.ts                # Phone/JID formatting
 │       └── validation.ts           # Validation utilities
-├── data/                            # JSON storage for Dashboard Users and Webhooks.
-├── media/                           # Auto-downloaded media files from chats.
+├── data/                           # JSON storage for Dashboard Users and Webhooks.
+├── media/                          # Auto-downloaded media files from chats.
 ├── scripts/
 │   └── manage-api-keys.ts          # API key management CLI
-├── sessions/                        # Auto-generated auth state & JSON stores per session.
+├── sessions/                       # Auto-generated auth state & JSON stores per session.
 ├── .env.example
 ├── Dockerfile
 ├── docker-compose.yml
