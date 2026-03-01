@@ -9,8 +9,6 @@
 >
 > Thus, we do not store WhatsApp messages or any other data (aside from credentials for auto-reconnecting).
 
-> > > > > > > a0246e6ce24860bb43ee8731b082f3b2c6eb05dd
-
 ---
 
 ## ✨ Features
@@ -391,4 +389,6 @@ baileys-wa-api/
 
 ## 📝 License
 
-MIT
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details. [web:37]
