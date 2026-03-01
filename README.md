@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-# Baileys WA API
-
-**Production-ready WhatsApp REST API** powered by [Baileys 7.0.0-rc.9](https://github.com/WhiskeySockets/Baileys). Built with **Hono + TypeScript** and features **Dual-Runtime Support** (runs natively on **Bun** or **Node.js**). Includes a beautiful built-in Visual Dashboard for easy management.
-
-=======
 # API Baileys WA Socket
 
 **Production-ready WhatsApp REST API** powered by [Baileys 7.0.0-rc.9](https://github.com/WhiskeySockets/Baileys). Built with **Hono + TypeScript** and features **Dual-Runtime Support** (runs natively on **Bun** or **Node.js**). Includes a beautiful built-in Visual Dashboard for easy management.
@@ -15,7 +9,8 @@
 >
 > Thus, we do not store WhatsApp messages or any other data (aside from credentials for auto-reconnecting).
 
->>>>>>> a0246e6ce24860bb43ee8731b082f3b2c6eb05dd
+> > > > > > > a0246e6ce24860bb43ee8731b082f3b2c6eb05dd
+
 ---
 
 ## ✨ Features
