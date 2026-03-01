@@ -1,7 +1,21 @@
+<<<<<<< HEAD
 # Baileys WA API
 
 **Production-ready WhatsApp REST API** powered by [Baileys 7.0.0-rc.9](https://github.com/WhiskeySockets/Baileys). Built with **Hono + TypeScript** and features **Dual-Runtime Support** (runs natively on **Bun** or **Node.js**). Includes a beautiful built-in Visual Dashboard for easy management.
 
+=======
+# API Baileys WA Socket
+
+**Production-ready WhatsApp REST API** powered by [Baileys 7.0.0-rc.9](https://github.com/WhiskeySockets/Baileys). Built with **Hono + TypeScript** and features **Dual-Runtime Support** (runs natively on **Bun** or **Node.js**). Includes a beautiful built-in Visual Dashboard for easy management.
+
+> [!NOTE]
+> This project is not meant to be a full-fledged WhatsApp server. It is a wrapper around the Baileys library, providing an HTTP interface for easier integration with other applications, don't use it for spamming or any activities that's prohibited by **WhatsApp META**.
+>
+> **Disclaimer:** This project is 100% AI-assisted and intended for educational purposes only. It will be maintained as a side project in spare time only, with no guarantees of ongoing support, updates, or production readiness.
+>
+> Thus, we do not store WhatsApp messages or any other data (aside from credentials for auto-reconnecting).
+
+>>>>>>> a0246e6ce24860bb43ee8731b082f3b2c6eb05dd
 ---
 
 ## ✨ Features
