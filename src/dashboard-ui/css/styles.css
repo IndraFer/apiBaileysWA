@@ -248,6 +248,33 @@ a:active {
 	color: var(--text-muted);
 }
 
+/* Password toggle eye */
+.input-password-wrapper {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+.input-password-wrapper input {
+	padding-right: 2.75rem;
+}
+.password-toggle {
+	position: absolute;
+	right: 0.5rem;
+	background: none;
+	border: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 0.3rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-xs);
+	transition: color var(--transition);
+}
+.password-toggle:hover {
+	color: var(--accent);
+}
+
 /* ── Buttons ──────────────────────────────────────── */
 .btn {
 	display: inline-flex;
@@ -413,6 +440,7 @@ a:active {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
+	justify-content: space-between; /* flex-end */
 }
 
 .theme-toggle,

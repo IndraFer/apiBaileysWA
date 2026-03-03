@@ -91,4 +91,29 @@
 			}
 		},
 	};
+
+	/** Global password toggle — works on any .password-toggle with data-target */
+	window.initPasswordToggles = function (container) {
+		const root = container || document;
+		root.querySelectorAll(".password-toggle").forEach((btn) => {
+			if (btn._toggleBound) return;
+			btn._toggleBound = true;
+			btn.addEventListener("click", () => {
+				const input = document.getElementById(btn.dataset.target);
+				if (!input) return;
+				const isPassword = input.type === "password";
+				input.type = isPassword ? "text" : "password";
+				btn.querySelector(".eye-open").style.display = isPassword
+					? "none"
+					: "";
+				btn.querySelector(".eye-closed").style.display = isPassword
+					? ""
+					: "none";
+				btn.title = isPassword ? "Hide password" : "Show password";
+			});
+		});
+	};
+
+	// Auto-init toggles when auth screen loads
+	document.addEventListener("DOMContentLoaded", () => initPasswordToggles());
 })();

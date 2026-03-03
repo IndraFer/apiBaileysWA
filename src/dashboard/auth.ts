@@ -49,7 +49,13 @@ export function hasUsers(): boolean {
   return loadUsers().length > 0;
 }
 
-const dashboardAuth = new Hono();
+type DashboardEnv = {
+  Variables: {
+    dashboardUser: { sub: string; username: string; role: string; exp: number };
+  };
+};
+
+const dashboardAuth = new Hono<DashboardEnv>();
 
 /**
  * POST /dashboard/api/auth/login
@@ -205,5 +211,126 @@ export async function dashboardAuthMiddleware(c: any, next: any) {
     return c.json({ success: false, message: "Invalid or expired token" }, 401);
   }
 }
+
+/**
+ * PUT /dashboard/api/auth/password
+ * Change current user password
+ */
+dashboardAuth.put("/password", dashboardAuthMiddleware, async (c) => {
+  const userPayload = c.get("dashboardUser") as any;
+  const body = await c.req.json().catch(() => ({}));
+  const { currentPassword, newPassword } = body;
+
+  if (!currentPassword || !newPassword) {
+    return c.json({ success: false, message: "Current and new password required" }, 400);
+  }
+
+  if (newPassword.length < 6) {
+    return c.json({ success: false, message: "New password must be at least 6 characters" }, 400);
+  }
+
+  const users = loadUsers();
+  const userIndex = users.findIndex((u) => u.id === userPayload.sub);
+  if (userIndex === -1) return c.json({ success: false, message: "User not found" }, 404);
+
+  const valid = await verifyPassword(currentPassword, users[userIndex].passwordHash);
+  if (!valid) {
+    return c.json({ success: false, message: "Incorrect current password" }, 401);
+  }
+
+  users[userIndex].passwordHash = await hashPassword(newPassword);
+  saveUsers(users);
+
+  return c.json({ success: true, message: "Password updated successfully" });
+});
+
+/**
+ * GET /dashboard/api/auth/users
+ * List all users (Admin only)
+ */
+dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
+  const userPayload = c.get("dashboardUser") as any;
+  if (userPayload.role !== "admin") return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const users = loadUsers().map(u => ({
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    createdAt: u.createdAt
+  }));
+  return c.json({ success: true, data: users });
+});
+
+/**
+ * PUT /dashboard/api/auth/users/:id/role
+ * Change user role (Admin only)
+ */
+dashboardAuth.put("/users/:id/role", dashboardAuthMiddleware, async (c) => {
+  const userPayload = c.get("dashboardUser") as any;
+  if (userPayload.role !== "admin") return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const targetId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+
+  if (body.role !== "admin" && body.role !== "user") {
+    return c.json({ success: false, message: "Invalid role (must be admin or user)" }, 400);
+  }
+
+  const users = loadUsers();
+  
+  // Prevent removing the last admin
+  if (body.role === "user") {
+    const adminCount = users.filter(u => u.role === "admin").length;
+    const targetIsAdmin = users.find(u => u.id === targetId)?.role === "admin";
+    if (adminCount <= 1 && targetIsAdmin) {
+      return c.json({ success: false, message: "Cannot demote the last admin" }, 400);
+    }
+  }
+
+  const userIndex = users.findIndex((u) => u.id === targetId);
+  if (userIndex === -1) return c.json({ success: false, message: "User not found" }, 404);
+
+  users[userIndex].role = body.role;
+  saveUsers(users);
+
+  return c.json({ success: true, message: "Role updated" });
+});
+
+/**
+ * DELETE /dashboard/api/auth/users/:id
+ * Delete a user (Admin only)
+ */
+dashboardAuth.delete("/users/:id", dashboardAuthMiddleware, (c) => {
+  const userPayload = c.get("dashboardUser") as any;
+  if (userPayload.role !== "admin") return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const targetId = c.req.param("id");
+  
+  // Prevent self-deletion
+  if (targetId === userPayload.sub) {
+    return c.json({ success: false, message: "Cannot delete your own account" }, 400);
+  }
+
+  let users = loadUsers();
+  
+  // Prevent deleting the last admin
+  const targetIsAdmin = users.find(u => u.id === targetId)?.role === "admin";
+  if (targetIsAdmin) {
+    const adminCount = users.filter(u => u.role === "admin").length;
+    if (adminCount <= 1) {
+      return c.json({ success: false, message: "Cannot delete the last admin" }, 400);
+    }
+  }
+
+  const initialCount = users.length;
+  users = users.filter(u => u.id !== targetId);
+  
+  if (users.length === initialCount) {
+    return c.json({ success: false, message: "User not found" }, 404);
+  }
+
+  saveUsers(users);
+  return c.json({ success: true, message: "User deleted" });
+});
 
 export default dashboardAuth;

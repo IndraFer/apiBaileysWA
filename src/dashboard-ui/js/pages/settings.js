@@ -8,11 +8,17 @@
 
 			document.getElementById("page-content").innerHTML = `
         <div class="card mb-2">
-          <div class="card-header"><h3>Account</h3></div>
-          <table>
+          <div class="card-header">
+            <h3>Account</h3>
+          </div>
+          <table style="margin-bottom: 1rem">
             <tr><td class="text-muted" style="width:100px">Username</td><td><strong>${user.username || "—"}</strong></td></tr>
-            <tr><td class="text-muted">Role</td><td><span class="badge badge-info">${(user.role || "user").toUpperCase()}</span></td></tr>
+            <tr><td class="text-muted">Role</td><td><span class="badge ${user.role === "admin" ? "badge-success" : "badge-info"}">${(user.role || "user").toUpperCase()}</span></td></tr>
           </table>
+          <button class="btn btn-outline btn-sm" id="btn-show-password-modal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Change Password
+          </button>
         </div>
 
         <div class="card mb-2">
@@ -21,6 +27,7 @@
             <a href="/docs" target="_blank" class="btn btn-outline">📖 Swagger Docs</a>
             <button class="btn btn-outline" id="btn-health-check">💚 Health Check</button>
             <button class="btn btn-outline" id="btn-openapi">📋 OpenAPI Spec</button>
+            ${user.role === "admin" ? `<button class="btn btn-outline" id="btn-show-users-modal">👥 Users & Roles</button>` : ""}
           </div>
         </div>
 
@@ -41,8 +48,25 @@
 				.getElementById("btn-openapi")
 				.addEventListener("click", () => this.showOpenAPI());
 
-			// Load simulation config
+			// Password logic
+			document
+				.getElementById("btn-show-password-modal")
+				.addEventListener("click", () =>
+					this.showChangePasswordModal(),
+				);
+
+			// Load simulation config & users (if admin)
 			this.loadSimulationConfig();
+
+			if (user.role === "admin") {
+				const btnUsers = document.getElementById(
+					"btn-show-users-modal",
+				);
+				if (btnUsers)
+					btnUsers.addEventListener("click", () =>
+						this.showUsersModal(),
+					);
+			}
 
 			try {
 				const res = await fetch("/dashboard/api/about", {
@@ -229,7 +253,7 @@
 			if (!card) return;
 
 			try {
-				const result = await API.get("/config/simulation");
+				const result = await window.API.get("/config/simulation");
 				if (!result.success) throw new Error(result.message);
 
 				const d = result.data;
@@ -251,9 +275,196 @@
 			} catch (err) {
 				card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
-				  <p class="text-muted text-sm" style="padding:1rem">Unable to load simulation config: ${err.message}</p>
+				  <div style="padding: 1.5rem; text-align: center;">
+					<p class="text-danger" style="margin-bottom:0.5rem">Unable to load simulation config</p>
+					<p class="text-muted text-sm">${err.message}</p>
+				  </div>
 				`;
 			}
+		},
+
+		showChangePasswordModal() {
+			Modal.show(
+				"Change Password",
+				`
+                <form id="modal-form-change-password">
+                    <p class="text-muted text-sm mb-2">Update your account password. Must be at least 6 characters.</p>
+                    <div class="form-group">
+                        <label for="current-password">Current Password</label>
+                        <div class="input-password-wrapper">
+                            <input type="password" id="current-password" required autocomplete="current-password">
+                            <button type="button" class="password-toggle" data-target="current-password" title="Show password">
+                            <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <div class="input-password-wrapper">
+                            <input type="password" id="new-password" required minlength="6" autocomplete="new-password">
+                            <button type="button" class="password-toggle" data-target="new-password" title="Show password">
+                            <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex gap-1" style="margin-top:1.5rem">
+                        <button type="submit" class="btn btn-primary" id="btn-submit-change">Update Password</button>
+                        <button type="button" class="btn btn-outline" onclick="Modal.hide()">Cancel</button>
+                    </div>
+                </form>
+            `,
+			);
+
+			if (window.initPasswordToggles)
+				window.initPasswordToggles(
+					document.getElementById("modal-body"),
+				);
+
+			document
+				.getElementById("modal-form-change-password")
+				.addEventListener("submit", (e) => {
+					e.preventDefault();
+					this.changePassword();
+				});
+		},
+
+		async changePassword() {
+			const currentPassword =
+				document.getElementById("current-password").value;
+			const newPassword = document.getElementById("new-password").value;
+			const btn = document.getElementById("btn-submit-change");
+
+			if (!currentPassword || !newPassword)
+				return Toast.error("Missing fields");
+
+			btn.disabled = true;
+			btn.textContent = "Updating...";
+
+			const res = await window.API.put("/auth/password", {
+				currentPassword,
+				newPassword,
+			});
+
+			btn.disabled = false;
+			btn.textContent = "Update Password";
+
+			if (res.success) {
+				Toast.success("Password updated successfully");
+				Modal.hide();
+			} else {
+				Toast.error(res.message);
+			}
+		},
+
+		showUsersModal() {
+			Modal.show(
+				"Users & Roles",
+				`
+                <p class="text-muted text-sm mb-2">Manage the users who have access to this dashboard.</p>
+                <div class="table-wrapper">
+                    <table id="modal-users-table">
+                        <tr><td style="text-align:center"><span class="loader" style="width:20px;height:20px;border-width:2px;display:inline-block"></span></td></tr>
+                    </table>
+                </div>
+            `,
+			);
+
+			// Allow wider modal for table
+			document.getElementById("modal").style.maxWidth = "700px";
+
+			this.loadUsers();
+		},
+
+		async loadUsers() {
+			const table = document.getElementById("modal-users-table");
+			if (!table) return;
+
+			const res = await window.API.get("/auth/users");
+			if (!res.success) {
+				table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${res.message}</td></tr>`;
+				return;
+			}
+
+			let html = `
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Joined</th>
+                    <th style="width:100px;text-align:right">Actions</th>
+                </tr>
+            `;
+
+			res.data.forEach((u) => {
+				const isCurrentUser =
+					JSON.parse(
+						localStorage.getItem("wa-dashboard-user") || "{}",
+					).id === u.id;
+				const date = new Date(u.createdAt).toLocaleDateString();
+
+				html += `
+                <tr>
+                    <td><strong>${u.username}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}</td>
+                    <td>
+                        <select class="user-role-select" data-id="${u.id}" ${isCurrentUser ? "disabled" : ""} style="padding:0.2rem;font-size:0.8rem;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg-input);color:var(--text-primary)">
+                            <option value="user" ${u.role === "user" ? "selected" : ""}>USER</option>
+                            <option value="admin" ${u.role === "admin" ? "selected" : ""}>ADMIN</option>
+                        </select>
+                    </td>
+                    <td class="text-muted">${date}</td>
+                    <td style="text-align:right">
+                        ${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user" data-id="${u.id}" data-username="${u.username}" style="padding:0.2rem 0.6rem">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
+                    </td>
+                </tr>`;
+			});
+
+			table.innerHTML = html;
+
+			table.querySelectorAll(".user-role-select").forEach((sel) => {
+				sel.addEventListener("change", async (e) => {
+					const id = e.target.dataset.id;
+					const role = e.target.value;
+					const res = await window.API.put(`/auth/users/${id}/role`, {
+						role,
+					});
+					if (res.success) {
+						Toast.success(`Role updated to ${role.toUpperCase()}`);
+
+						// If they changed their own role somehow, reload the app (though UI disables it)
+						const currentUserId = JSON.parse(
+							localStorage.getItem("wa-dashboard-user") || "{}",
+						).id;
+						if (currentUserId === id) {
+							setTimeout(() => window.location.reload(), 1500);
+						}
+					} else {
+						Toast.error(res.message);
+						this.loadUsers(); // Revert on failure
+					}
+				});
+			});
+
+			table.querySelectorAll(".btn-delete-user").forEach((btn) => {
+				btn.addEventListener("click", async (e) => {
+					const id = e.target.dataset.id;
+					const username = e.target.dataset.username;
+
+					if (
+						confirm(
+							`Are you sure you want to delete user @${username}?`,
+						)
+					) {
+						const res = await window.API.del(`/auth/users/${id}`);
+						if (res.success) {
+							Toast.success(`User @${username} deleted`);
+							this.loadUsers();
+						} else {
+							Toast.error(res.message);
+						}
+					}
+				});
+			});
 		},
 	};
 })();
