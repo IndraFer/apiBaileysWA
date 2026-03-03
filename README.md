@@ -358,32 +358,37 @@ baileys-wa-api/
 
 ## ⚙️ Configuration Reference (`.env`)
 
-| Variable                         | Default                  | Description                                  |
-| -------------------------------- | ------------------------ | -------------------------------------------- |
-| `NODE_ENV`                       | `development`            | Environment (`development` / `production`)   |
-| `HOST`                           | `0.0.0.0`                | Server host                                  |
-| `PORT`                           | `3000`                   | Server port                                  |
-| `LOG_LEVEL`                      | `info`                   | Log level (`debug`, `info`, `warn`, `error`) |
-| `AUTH_GLOBAL_TOKEN`              | —                        | Simple auth token                            |
-| `REDIS_ENABLED`                  | `false`                  | Enable Redis integration                     |
-| `REDIS_URL`                      | `redis://localhost:6379` | Redis connection URL                         |
-| `REDIS_PASSWORD`                 | —                        | Redis password                               |
-| `BAILEYS_LOG_LEVEL`              | `warn`                   | Baileys internal log level                   |
-| `MAX_RETRIES`                    | `5`                      | Max reconnection attempts                    |
-| `RECONNECT_INTERVAL`             | `5000`                   | Reconnection delay (ms)                      |
-| `WEBHOOK_URL`                    | —                        | Default webhook URL                          |
-| `WEBHOOK_ALLOWED_EVENTS`         | `ALL`                    | Comma-separated event filter                 |
-| `WEBHOOK_RETRY_MAX`              | `3`                      | Webhook delivery retry count                 |
-| `BROADCAST_MIN_DELAY_MS`         | `1500`                   | Min delay between bulk messages              |
-| `BROADCAST_MAX_DELAY_MS`         | `3000`                   | Max delay between bulk messages              |
-| `BROADCAST_BATCH_SIZE`           | `10`                     | Messages per batch before pause              |
-| `BROADCAST_BATCH_PAUSE_MS`       | `5000`                   | Pause between batches                        |
-| `MEDIA_INCLUDE_BASE64`           | `false`                  | Include media in webhooks                    |
-| `MEDIA_CLEANUP_ENABLED`          | `true`                   | Auto-delete old media files                  |
-| `MEDIA_MAX_AGE_HOURS`            | `24`                     | Max age of media files                       |
-| `CORS_ORIGIN`                    | `*`                      | CORS allowed origins                         |
-| `DASHBOARD_ENABLED`              | `true`                   | Enable internal UI dashboard                 |
-| `DASHBOARD_REGISTRATION_ENABLED` | `true`                   | Allow account creation                       |
+| Variable                         | Default                  | Description                                                              |
+| -------------------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| `NODE_ENV`                       | `development`            | Environment (`development` / `production`)                               |
+| `HOST`                           | `0.0.0.0`                | Server host                                                              |
+| `PORT`                           | `3000`                   | Server port                                                              |
+| `LOG_LEVEL`                      | `info`                   | Log level (`debug`, `info`, `warn`, `error`)                             |
+| `AUTH_GLOBAL_TOKEN`              | —                        | Simple auth token                                                        |
+| `REDIS_ENABLED`                  | `false`                  | Enable Redis integration                                                 |
+| `REDIS_URL`                      | `redis://localhost:6379` | Redis connection URL                                                     |
+| `REDIS_PASSWORD`                 | —                        | Redis password                                                           |
+| `BAILEYS_LOG_LEVEL`              | `warn`                   | Baileys internal log level                                               |
+| `MAX_RETRIES`                    | `5`                      | Max reconnection attempts                                                |
+| `RECONNECT_INTERVAL`             | `5000`                   | Reconnection delay (ms)                                                  |
+| `WEBHOOK_URL`                    | —                        | Default webhook URL                                                      |
+| `WEBHOOK_ALLOWED_EVENTS`         | `ALL`                    | Comma-separated event filter                                             |
+| `WEBHOOK_RETRY_MAX`              | `3`                      | Webhook delivery retry count                                             |
+| `BROADCAST_MIN_DELAY_MS`         | `1500`                   | Min delay between bulk messages                                          |
+| `BROADCAST_MAX_DELAY_MS`         | `3000`                   | Max delay between bulk messages                                          |
+| `BROADCAST_BATCH_SIZE`           | `10`                     | Messages per batch before pause                                          |
+| `BROADCAST_BATCH_PAUSE_MS`       | `5000`                   | Pause between batches                                                    |
+| `MEDIA_INCLUDE_BASE64`           | `false`                  | Include media in webhooks                                                |
+| `MEDIA_CLEANUP_ENABLED`          | `true`                   | Auto-delete old media files                                              |
+| `MEDIA_MAX_AGE_HOURS`            | `24`                     | Max age of media files                                                   |
+| `CORS_ORIGIN`                    | `*`                      | CORS allowed origins                                                     |
+| `DASHBOARD_ENABLED`              | `true`                   | Enable internal UI dashboard                                             |
+| `DASHBOARD_REGISTRATION_ENABLED` | `true`                   | Allow account creation                                                   |
+| `SIMULATE_TYPING_BEFORE_SEND`    | `true`                   | Auto-send "composing" presence before each message (default: true)       |
+| `SIMULATE_TYPING_DELAY_MIN_MS`   | `1500`                   | Typing delay range in ms (random between min-max)                        |
+| `SIMULATE_TYPING_DELAY_MAX_MS`   | `3000`                   | Typing delay range in ms (random between min-max)                        |
+| `AUTO_READ_MESSAGES`             | `false`                  | Auto-mark incoming messages as read (default: false, like WA Web toggle) |
+| `AUTO_MARK_ONLINE`               | `true`                   | Auto-set presence to "available" when sending messages (default: true)   |
 
 ---
 
