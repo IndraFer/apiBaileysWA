@@ -232,4 +232,21 @@ dashboardApi.post("/events/clear", (c) => {
   return c.json({ success: true, message: "Events cleared" });
 });
 
+/**
+ * GET /dashboard/api/config/simulation
+ * Get WA Web behavior simulation settings (read-only).
+ */
+dashboardApi.get("/config/simulation", (c) => {
+  return c.json({
+    success: true,
+    data: {
+      typingBeforeSend: config.simulation.typingBeforeSend,
+      typingDelayMinMs: config.simulation.typingDelayMinMs,
+      typingDelayMaxMs: config.simulation.typingDelayMaxMs,
+      autoReadMessages: config.simulation.autoReadMessages,
+      autoMarkOnline: config.simulation.autoMarkOnline,
+    },
+  });
+});
+
 export default dashboardApi;

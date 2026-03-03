@@ -28,6 +28,10 @@ export interface SessionOptions {
   onConnectionClose?: () => void;
   /** Whether this is a reconnection */
   isReconnect?: boolean;
+  /** Override: simulate typing before send (per-session) */
+  simulateTyping?: boolean;
+  /** Override: auto-read incoming messages (per-session) */
+  autoReadMessages?: boolean;
 }
 
 export interface SessionMetadata {

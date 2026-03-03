@@ -4,6 +4,7 @@ import { BaileysNotConnectedError } from "@/baileys/connection";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionValidator } from "@/middleware/sessionValidator";
 import { createBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastJobs } from "@/services/broadcastQueue";
+import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
 import { formatPhone, formatGroup } from "@/utils/phone";
 import { success, error } from "@/lib/response";
 
@@ -289,6 +290,47 @@ chatRoutes.get("/:sessionId/list", sessionValidator, (c) => {
     return success(c, chatList);
   } catch (err) {
     return error(c, `Failed to get chat list: ${(err as Error).message}`);
+  }
+});
+
+/**
+ * GET /chats/:sessionId/conversation/:jid
+ * Get messages from a specific chat conversation.
+ */
+chatRoutes.get("/:sessionId/conversation/:jid", sessionValidator, (c) => {
+  const sessionId = c.req.param("sessionId");
+  const jid = c.req.param("jid");
+  const limit = Number(c.req.query("limit") || "25");
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const messages = session.getStore().loadMessages(jid, limit);
+    return success(c, messages);
+  } catch (err) {
+    return error(c, `Failed to get conversation: ${(err as Error).message}`);
+  }
+});
+
+/**
+ * POST /chats/:sessionId/download-media
+ * Download media from a stored message.
+ */
+chatRoutes.post("/:sessionId/download-media", sessionValidator, async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const body = await c.req.json();
+  const { remoteJid, messageId } = body;
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const msg = session.getStore().getMessage(remoteJid, messageId);
+    if (!msg) {
+      return error(c, "Message not found in store", 404);
+    }
+
+    const media = await downloadMediaFromMessages([msg], { includeBase64: true });
+    return success(c, media);
+  } catch (err) {
+    return error(c, `Failed to download media: ${(err as Error).message}`);
   }
 });
 

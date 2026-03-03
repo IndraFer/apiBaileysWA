@@ -24,6 +24,11 @@
           </div>
         </div>
 
+        <div class="card mb-2" id="simulation-card">
+          <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
+          <div style="padding: 1rem"><div class="skeleton skeleton-text" style="width: 200px; height: 16px; margin-bottom: 8px;"></div><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></div>
+        </div>
+
         <div class="card" id="about-card">
           <div class="card-header"><h3>About</h3></div>
           <div style="padding: 1rem;"><div class="skeleton skeleton-text" style="width: 200px; height: 16px; margin-bottom: 8px;"></div><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></div>
@@ -35,6 +40,9 @@
 			document
 				.getElementById("btn-openapi")
 				.addEventListener("click", () => this.showOpenAPI());
+
+			// Load simulation config
+			this.loadSimulationConfig();
 
 			try {
 				const res = await fetch("/dashboard/api/about", {
@@ -213,6 +221,38 @@
             <p class="text-danger">Failed to load OpenAPI spec</p>
             <p class="text-muted text-sm">${err.message}</p>
           </div>`;
+			}
+		},
+
+		async loadSimulationConfig() {
+			const card = document.getElementById("simulation-card");
+			if (!card) return;
+
+			try {
+				const result = await API.get("/config/simulation");
+				if (!result.success) throw new Error(result.message);
+
+				const d = result.data;
+				const badge = (val) =>
+					val
+						? '<span class="badge badge-success">ON</span>'
+						: '<span class="badge badge-warning">OFF</span>';
+
+				card.innerHTML = `
+				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
+				  <table>
+					<tr><td class="text-muted" style="width:200px">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
+					<tr><td class="text-muted">Typing Delay</td><td><strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
+					<tr><td class="text-muted">Auto-Read Messages</td><td>${badge(d.autoReadMessages)}</td></tr>
+					<tr><td class="text-muted">Auto-Mark Online</td><td>${badge(d.autoMarkOnline)}</td></tr>
+				  </table>
+				  <p class="text-muted text-sm" style="padding:0.75rem 1rem 0.75rem;margin:0"><span style="font-weight:bold; color:var(--warning)">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
+				`;
+			} catch (err) {
+				card.innerHTML = `
+				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
+				  <p class="text-muted text-sm" style="padding:1rem">Unable to load simulation config: ${err.message}</p>
+				`;
 			}
 		},
 	};

@@ -12,6 +12,8 @@ import profileRoutes from "@/routes/profile";
 import mediaRoutes from "@/routes/media";
 import storyRoutes from "@/routes/story";
 import statusRoutes from "@/routes/status";
+import { authMiddleware } from "@/middleware/auth";
+import { success } from "@/lib/response";
 import { loadDashboard } from "@/dashboard/loader";
 import fs from "node:fs";
 import path from "node:path";
@@ -78,6 +80,7 @@ app.get("/openapi.json", (c) => {
       { name: "Profile", description: "Profile management — status, name, picture, block" },
       { name: "Media", description: "Media download and retrieval" },
       { name: "Story", description: "Story/status broadcasting" },
+      { name: "Config", description: "Server configuration (read-only)" },
     ],
     components: {
       securitySchemes: {
@@ -316,8 +319,17 @@ app.get("/openapi.json", (c) => {
       "/media/file/{id}": {
         get: { tags: ["Media"], summary: "Retrieve a saved media file", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Media file" } } },
       },
+      "/chats/{sessionId}/conversation/{jid}": {
+        get: { tags: ["Chats"], summary: "Get conversation messages from a chat", description: "Load stored messages from a specific chat. Use ?limit=N to control count (default 25).", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }, { name: "jid", in: "path", required: true, schema: { type: "string" } }, { name: "limit", in: "query", schema: { type: "integer", default: 25 } }], responses: { 200: { description: "List of messages" } } },
+      },
+      "/chats/{sessionId}/download-media": {
+        post: { tags: ["Chats"], summary: "Download media from a stored message", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], requestBody: { content: { "application/json": { schema: { type: "object", required: ["remoteJid", "messageId"], properties: { remoteJid: { type: "string" }, messageId: { type: "string" } } } } } }, responses: { 200: { description: "Media content (base64)" } } },
+      },
       "/story/{sessionId}/share": {
         post: { tags: ["Story"], summary: "Share a story/status to contacts", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Story shared" } } },
+      },
+      "/config/simulation": {
+        get: { tags: ["Config"], summary: "Get WA Web behavior simulation settings", description: "Returns current simulation config (read-only, set via .env)", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], responses: { 200: { description: "Simulation config" } } },
       },
     },
   };
@@ -334,6 +346,17 @@ app.route("/groups", groupRoutes);
 app.route("/profile", profileRoutes);
 app.route("/media", mediaRoutes);
 app.route("/story", storyRoutes);
+
+// ── Config Endpoints ────────────────────────────────
+app.get("/config/simulation", authMiddleware, (c) => {
+  return success(c, {
+    typingBeforeSend: config.simulation.typingBeforeSend,
+    typingDelayMinMs: config.simulation.typingDelayMinMs,
+    typingDelayMaxMs: config.simulation.typingDelayMaxMs,
+    autoReadMessages: config.simulation.autoReadMessages,
+    autoMarkOnline: config.simulation.autoMarkOnline,
+  });
+});
 
 // ── Dashboard (modular — never breaks main API) ────
 try {

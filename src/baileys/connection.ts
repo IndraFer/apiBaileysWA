@@ -316,6 +316,22 @@ export class BaileysConnection {
   }
 
   private async handleMessagesUpsert(data: BaileysEventMap["messages.upsert"]) {
+    // Auto-read incoming messages if enabled (like WA Web read-receipts toggle)
+    const shouldAutoRead = this.options.autoReadMessages ?? config.simulation.autoReadMessages;
+    if (shouldAutoRead) {
+      const incomingKeys = data.messages
+        .filter((m) => !m.key.fromMe && m.key.remoteJid)
+        .map((m) => m.key);
+      if (incomingKeys.length > 0) {
+        try {
+          await this.readMessages(incomingKeys);
+          logger.debug("[%s] Auto-read %d incoming message(s)", this.sessionId, incomingKeys.length);
+        } catch (err) {
+          logger.error("[%s] Auto-read failed: %s", this.sessionId, errorToString(err));
+        }
+      }
+    }
+
     const payload: WebhookPayload = {
       sessionId: this.sessionId,
       event: "messages.upsert",
@@ -363,6 +379,33 @@ export class BaileysConnection {
   }
 
   async sendMessage(receiver: string, message: AnyMessageContent, options?: { quoted?: WAMessage }) {
+    const shouldSimulateTyping = this.options.simulateTyping ?? config.simulation.typingBeforeSend;
+
+    if (shouldSimulateTyping) {
+      try {
+        // Mark as "available" first (like opening WA Web)
+        if (config.simulation.autoMarkOnline) {
+          await this.sendPresenceUpdate("available", receiver);
+        }
+        // Subscribe to presence & send "composing" indicator
+        await this.safeSocket().presenceSubscribe(receiver);
+        await this.sendPresenceUpdate("composing", receiver);
+
+        // Random human-like typing delay
+        const delayMs = Math.floor(
+          Math.random() * (config.simulation.typingDelayMaxMs - config.simulation.typingDelayMinMs)
+          + config.simulation.typingDelayMinMs
+        );
+        logger.debug("[%s] Simulating typing for %dms to %s", this.sessionId, delayMs, receiver);
+        await delay(delayMs);
+
+        // Clear composing indicator
+        await this.sendPresenceUpdate("paused", receiver);
+      } catch (err) {
+        logger.warn("[%s] Typing simulation error (non-fatal): %s", this.sessionId, errorToString(err));
+      }
+    }
+
     return this.safeSocket().sendMessage(receiver, message, { quoted: options?.quoted });
   }
 

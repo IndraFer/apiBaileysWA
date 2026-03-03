@@ -36,6 +36,11 @@ const {
   DASHBOARD_ENABLED,
   DASHBOARD_REGISTRATION_ENABLED,
   DASHBOARD_JWT_SECRET,
+  SIMULATE_TYPING_BEFORE_SEND,
+  SIMULATE_TYPING_DELAY_MIN_MS,
+  SIMULATE_TYPING_DELAY_MAX_MS,
+  AUTO_READ_MESSAGES,
+  AUTO_MARK_ONLINE,
 } = process.env;
 
 const config = {
@@ -105,6 +110,14 @@ const config = {
     enabled: DASHBOARD_ENABLED ? DASHBOARD_ENABLED === "true" : true,
     registrationEnabled: DASHBOARD_REGISTRATION_ENABLED === "true",
     jwtSecret: DASHBOARD_JWT_SECRET || "baileys-wa-api-dashboard-secret-change-me",
+  },
+
+  simulation: {
+    typingBeforeSend: SIMULATE_TYPING_BEFORE_SEND !== "false",
+    typingDelayMinMs: SIMULATE_TYPING_DELAY_MIN_MS ? Number(SIMULATE_TYPING_DELAY_MIN_MS) : 1500,
+    typingDelayMaxMs: SIMULATE_TYPING_DELAY_MAX_MS ? Number(SIMULATE_TYPING_DELAY_MAX_MS) : 3000,
+    autoReadMessages: AUTO_READ_MESSAGES === "true",
+    autoMarkOnline: AUTO_MARK_ONLINE !== "false",
   },
 };
 
