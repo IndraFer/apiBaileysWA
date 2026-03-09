@@ -318,6 +318,9 @@ baileys-wa-api/
 │   │   ├── runtime.ts              # The magic abstraction layer that enables dual-runtime compatibility for file reading & bcrypt hashing.
 │   ├── dashboard/                  # Modular backend APIs for the visual UI.
 │   ├── dashboard-ui/               # Modular Frontend SPA for the visual UI.
+│   ├── middleware/
+│   │   ├── auth.ts                 # API authentication
+│   │   └── sessionValidator.ts     # Session existence check
 │   ├── routes/
 │   │   ├── session.ts              # Session CRUD
 │   │   ├── chat.ts                 # Chat operations
@@ -326,9 +329,10 @@ baileys-wa-api/
 │   │   ├── media.ts                # Media handling
 │   │   ├── story.ts                # Story broadcasting
 │   │   └── status.ts               # Server health
-│   ├── middleware/
-│   │   ├── auth.ts                 # API authentication
-│   │   └── sessionValidator.ts     # Session existence check
+│   ├── schemas/
+│   │   ├── chat.ts                 # Chat schemas
+│   │   ├── group.ts                # Group schemas
+│   │   └── session.ts              # Session schemas
 │   ├── services/
 │   │   ├── broadcastQueue.ts       # Broadcast queue with delays
 │   │   └── mediaCleanup.ts         # Media file cleanup
