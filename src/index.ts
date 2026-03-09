@@ -62,7 +62,7 @@ if (config.env === "production") {
     logger.warn("⚠️  DASHBOARD_JWT_SECRET is using default value! Set a secure random secret for production.");
   }
   if (config.corsOrigin === "*") {
-    logger.warn("⚠️  CORS_ORIGIN is set to '*'. Consider restricting to specific domains in production.");
+    logger.warn("⚠️  CORS_ORIGIN is set to '*'. Consider restricting to specific domains (comma-separated) in production.");
   }
   if (!config.auth.globalToken && !config.redis.enabled) {
     logger.warn("⚠️  No authentication configured! Set AUTH_GLOBAL_TOKEN or enable Redis API keys.");

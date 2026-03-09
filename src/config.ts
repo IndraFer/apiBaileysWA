@@ -105,7 +105,12 @@ const config = {
     maxAgeHours: MEDIA_MAX_AGE_HOURS ? Number(MEDIA_MAX_AGE_HOURS) : 24,
   },
 
-  corsOrigin: CORS_ORIGIN || "*",
+  corsOrigin: (() => {
+    const raw = CORS_ORIGIN || "*";
+    if (raw === "*") return "*";
+    const origins = raw.split(",").map((o) => o.trim()).filter(Boolean);
+    return origins.length === 1 ? origins[0] : origins;
+  })(),
 
   /** Maximum concurrent sessions allowed */
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
