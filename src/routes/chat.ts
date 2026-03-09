@@ -1,12 +1,28 @@
+import type { AnyMessageContent } from "@whiskeysockets/baileys";
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { BaileysNotConnectedError } from "@/baileys/connection";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionValidator } from "@/middleware/sessionValidator";
+import { sendRateLimit, bulkRateLimit } from "@/middleware/rateLimit";
 import { createBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastJobs } from "@/services/broadcastQueue";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
 import { formatPhone, formatGroup } from "@/utils/phone";
 import { success, error } from "@/lib/response";
+import {
+  sendMessageSchema,
+  sendBulkSchema,
+  forwardMessageSchema,
+  deleteMessageSchema,
+  editMessageSchema,
+  readMessagesSchema,
+  presenceSchema,
+  onWhatsAppSchema,
+  chatModifySchema,
+  fetchHistorySchema,
+  sendReceiptsSchema,
+  downloadMediaSchema,
+} from "@/schemas/chat";
 
 const chatRoutes = new Hono();
 
@@ -16,10 +32,11 @@ chatRoutes.use("*", authMiddleware);
  * POST /chats/:sessionId/send
  * Send a message (text, image, video, audio, document, sticker, location, contact, poll).
  */
-chatRoutes.post("/:sessionId/send", sessionValidator, async (c) => {
+chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { receiver, message, isGroup, quoted } = body;
+  const parsed = sendMessageSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { receiver, message, isGroup, quoted } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -33,7 +50,7 @@ chatRoutes.post("/:sessionId/send", sessionValidator, async (c) => {
       }
     }
 
-    const result = await session.sendMessage(jid, message, { quoted });
+    const result = await session.sendMessage(jid, message as AnyMessageContent, { quoted });
 
     return success(c, {
       key: result?.key,
@@ -52,17 +69,14 @@ chatRoutes.post("/:sessionId/send", sessionValidator, async (c) => {
  * Send bulk messages with anti-spam delays.
  * Returns a broadcast job ID for tracking progress.
  */
-chatRoutes.post("/:sessionId/send-bulk", sessionValidator, async (c) => {
+chatRoutes.post("/:sessionId/send-bulk", sessionValidator, bulkRateLimit, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { messages } = body;
-
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return error(c, "Messages array is required and must not be empty", 400);
-  }
+  const parsed = sendBulkSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { messages } = parsed.data;
 
   try {
-    const job = await createBroadcastJob(sessionId, messages);
+    const job = await createBroadcastJob(sessionId, messages as any);
     return success(c, {
       jobId: job.id,
       total: job.total,
@@ -111,8 +125,9 @@ chatRoutes.get("/:sessionId/broadcast", sessionValidator, (c) => {
  */
 chatRoutes.post("/:sessionId/forward", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { receiver, isGroup, forward } = body;
+  const parsed = forwardMessageSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { receiver, isGroup, forward } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -139,12 +154,13 @@ chatRoutes.post("/:sessionId/forward", sessionValidator, async (c) => {
  */
 chatRoutes.delete("/:sessionId/message", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { jid, key } = body;
+  const parsed = deleteMessageSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { jid, key } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.deleteMessage(jid, key);
+    await session.deleteMessage(jid, key as any);
     return success(c, null, "Message deleted successfully");
   } catch (err) {
     return error(c, `Failed to delete message: ${(err as Error).message}`);
@@ -157,12 +173,13 @@ chatRoutes.delete("/:sessionId/message", sessionValidator, async (c) => {
  */
 chatRoutes.patch("/:sessionId/message", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { jid, key, messageContent } = body;
+  const parsed = editMessageSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { jid, key, messageContent } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const result = await session.editMessage(jid, key, messageContent);
+    const result = await session.editMessage(jid, key as any, messageContent as any);
     return success(c, {
       key: result?.key,
       messageTimestamp: result?.messageTimestamp,
@@ -178,11 +195,12 @@ chatRoutes.patch("/:sessionId/message", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/read", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
+  const parsed = readMessagesSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.readMessages(body.keys);
+    await session.readMessages(parsed.data.keys as any);
     return success(c, null, "Messages marked as read");
   } catch (err) {
     return error(c, `Failed to read messages: ${(err as Error).message}`);
@@ -195,8 +213,9 @@ chatRoutes.post("/:sessionId/read", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/presence", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { type, jid } = body;
+  const parsed = presenceSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { type, jid } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -213,8 +232,9 @@ chatRoutes.post("/:sessionId/presence", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/on-whatsapp", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { jids } = body;
+  const parsed = onWhatsAppSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { jids } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -231,11 +251,12 @@ chatRoutes.post("/:sessionId/on-whatsapp", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/chat-modify", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
+  const parsed = chatModifySchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.chatModify(body.mod, body.jid);
+    await session.chatModify(parsed.data.mod as any, parsed.data.jid);
     return success(c, null, "Chat modified successfully");
   } catch (err) {
     return error(c, `Failed to modify chat: ${(err as Error).message}`);
@@ -248,11 +269,12 @@ chatRoutes.post("/:sessionId/chat-modify", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/fetch-history", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
+  const parsed = fetchHistorySchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.fetchMessageHistory(body.count, body.oldestMsgKey, body.oldestMsgTimestamp);
+    await session.fetchMessageHistory(parsed.data.count, parsed.data.oldestMsgKey as any, parsed.data.oldestMsgTimestamp);
     return success(c, null, "Message history fetch initiated");
   } catch (err) {
     return error(c, `Failed to fetch history: ${(err as Error).message}`);
@@ -265,11 +287,12 @@ chatRoutes.post("/:sessionId/fetch-history", sessionValidator, async (c) => {
  */
 chatRoutes.post("/:sessionId/send-receipts", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
+  const parsed = sendReceiptsSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.sendReceipts(body.keys, body.type ?? "read");
+    await session.sendReceipts(parsed.data.keys as any, parsed.data.type as any);
     return success(c, null, "Receipts sent");
   } catch (err) {
     return error(c, `Failed to send receipts: ${(err as Error).message}`);
@@ -300,7 +323,7 @@ chatRoutes.get("/:sessionId/list", sessionValidator, (c) => {
 chatRoutes.get("/:sessionId/conversation/:jid", sessionValidator, (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = c.req.param("jid");
-  const limit = Number(c.req.query("limit") || "25");
+  const limit = Math.min(Math.max(Number(c.req.query("limit") || "25"), 1), 500);
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -317,8 +340,9 @@ chatRoutes.get("/:sessionId/conversation/:jid", sessionValidator, (c) => {
  */
 chatRoutes.post("/:sessionId/download-media", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { remoteJid, messageId } = body;
+  const parsed = downloadMediaSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { remoteJid, messageId } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);

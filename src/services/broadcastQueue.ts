@@ -9,6 +9,13 @@ import { errorToString } from "@/utils/validation";
 
 const jobs = new Map<string, BroadcastJob>();
 
+/** Maximum age of completed jobs before cleanup (1 hour) */
+const MAX_JOB_AGE_MS = 3600_000;
+/** Maximum total jobs stored in memory */
+const MAX_JOBS = 200;
+/** Cleanup interval (5 minutes) */
+const CLEANUP_INTERVAL_MS = 300_000;
+
 function generateJobId(): string {
   return `bc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
@@ -20,6 +27,14 @@ export async function createBroadcastJob(
   sessionId: string,
   messages: BroadcastMessage[]
 ): Promise<BroadcastJob> {
+  // Enforce max per-job limit
+  if (messages.length > 1000) {
+    throw new Error("Maximum 1000 messages per broadcast job");
+  }
+
+  // Clean up old jobs before creating new ones
+  cleanupOldJobs();
+
   const jobId = generateJobId();
   const job: BroadcastJob = {
     id: jobId,
@@ -100,9 +115,43 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
   }
 
   job.status = job.errors.length === job.total ? "failed" : "completed";
+
+  // Clear message references to free memory after completion
+  job.messages = [];
+
   logger.info("[Broadcast:%s] Completed (%d/%d sent, %d errors)",
     job.id, job.total - job.errors.length, job.total, job.errors.length);
 }
+
+/**
+ * Clean up old completed/failed/cancelled jobs to prevent memory leaks.
+ */
+function cleanupOldJobs(): void {
+  const now = Date.now();
+  for (const [id, job] of jobs) {
+    if (
+      job.status !== "running" &&
+      job.status !== "pending" &&
+      now - job.createdAt > MAX_JOB_AGE_MS
+    ) {
+      jobs.delete(id);
+    }
+  }
+
+  // Hard cap: remove oldest completed jobs if over limit
+  if (jobs.size > MAX_JOBS) {
+    const completedJobs = [...jobs.entries()]
+      .filter(([, j]) => j.status !== "running" && j.status !== "pending")
+      .sort(([, a], [, b]) => a.createdAt - b.createdAt);
+
+    for (const [id] of completedJobs.slice(0, jobs.size - MAX_JOBS)) {
+      jobs.delete(id);
+    }
+  }
+}
+
+// Periodic cleanup every 5 minutes
+setInterval(cleanupOldJobs, CLEANUP_INTERVAL_MS);
 
 export function getBroadcastJob(jobId: string): BroadcastJob | undefined {
   return jobs.get(jobId);

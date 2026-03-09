@@ -13,6 +13,15 @@ import path from "path";
 
 const dashboardApi = new Hono();
 
+// Cache package.json at module load
+const pkgPath = path.join(process.cwd(), "package.json");
+let cachedPkg: Record<string, unknown>;
+try {
+  cachedPkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+} catch {
+  cachedPkg = { name: "Baileys WA API", version: "1.0.0" };
+}
+
 dashboardApi.use("*", dashboardAuthMiddleware);
 
 /**
@@ -21,15 +30,14 @@ dashboardApi.use("*", dashboardAuthMiddleware);
  */
 dashboardApi.get("/about", (c) => {
   try {
-    const pkgPath = path.join(process.cwd(), "package.json");
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const pkg = cachedPkg;
     return c.json({
       success: true,
       data: {
         project: `${pkg.name || "Baileys WA API"}`,
         version: `v${pkg.version || "1.0.0"}`,
         author: `${pkg.author || "KoiN CoDeveloper"}`,
-        engine: `Baileys ${pkg.dependencies?.["@whiskeysockets/baileys"]?.replace(/[\^~]/, "") || ""}`,
+        engine: `Baileys ${(pkg as any).dependencies?.["@whiskeysockets/baileys"]?.replace(/[\^~]/, "") || ""}`,
         runtime: isBun ? "Bun + Hono" : "Node.js + Hono",
       }
     });
@@ -52,8 +60,7 @@ dashboardApi.get("/about", (c) => {
  * Overview statistics.
  */
 dashboardApi.get("/stats", (c) => {
-  const pkgPath = path.join(process.cwd(), "package.json");
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+  const pkg = cachedPkg;
   const sessions = connectionManager.listSessions();
   return c.json({
     success: true,

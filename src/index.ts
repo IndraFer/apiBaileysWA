@@ -56,6 +56,19 @@ async function startServer() {
 
 startServer();
 
+// ── Production Config Validation ────────────────────
+if (config.env === "production") {
+  if (config.dashboard.jwtSecret.includes("change-me") || config.dashboard.jwtSecret.includes("change_me")) {
+    logger.warn("⚠️  DASHBOARD_JWT_SECRET is using default value! Set a secure random secret for production.");
+  }
+  if (config.corsOrigin === "*") {
+    logger.warn("⚠️  CORS_ORIGIN is set to '*'. Consider restricting to specific domains in production.");
+  }
+  if (!config.auth.globalToken && !config.redis.enabled) {
+    logger.warn("⚠️  No authentication configured! Set AUTH_GLOBAL_TOKEN or enable Redis API keys.");
+  }
+}
+
 // ── Initialize Redis & Reconnect Sessions ───────────
 (async () => {
   await initializeRedis();

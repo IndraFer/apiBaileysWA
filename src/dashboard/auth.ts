@@ -8,6 +8,7 @@ import { join } from "path";
 import config from "@/config";
 import logger from "@/lib/logger";
 import { hashPassword, verifyPassword } from "@/lib/runtime";
+import { authRateLimit } from "@/middleware/rateLimit";
 
 const DATA_DIR = join(process.cwd(), "data");
 const USERS_FILE = join(DATA_DIR, "dashboard-users.json");
@@ -60,7 +61,7 @@ const dashboardAuth = new Hono<DashboardEnv>();
 /**
  * POST /dashboard/api/auth/login
  */
-dashboardAuth.post("/login", async (c) => {
+dashboardAuth.post("/login", authRateLimit, async (c) => {
   const body = await c.req.json();
   const { username, password } = body;
 
@@ -98,7 +99,7 @@ dashboardAuth.post("/login", async (c) => {
 /**
  * POST /dashboard/api/auth/register
  */
-dashboardAuth.post("/register", async (c) => {
+dashboardAuth.post("/register", authRateLimit, async (c) => {
   const users = loadUsers();
 
   // If users exist and registration is disabled
@@ -200,7 +201,7 @@ dashboardAuth.get("/status", (c) => {
  */
 export async function dashboardAuthMiddleware(c: any, next: any) {
   const authHeader = c.req.header("Authorization");
-  const token = authHeader?.replace("Bearer ", "") || c.req.query("token");
+  const token = authHeader?.replace("Bearer ", "");
   if (!token) return c.json({ success: false, message: "Not authenticated" }, 401);
 
   try {

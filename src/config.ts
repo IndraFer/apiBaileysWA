@@ -41,6 +41,7 @@ const {
   SIMULATE_TYPING_DELAY_MAX_MS,
   AUTO_READ_MESSAGES,
   AUTO_MARK_ONLINE,
+  MAX_SESSIONS,
 } = process.env;
 
 const config = {
@@ -105,6 +106,9 @@ const config = {
   },
 
   corsOrigin: CORS_ORIGIN || "*",
+
+  /** Maximum concurrent sessions allowed */
+  maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
 
   dashboard: {
     enabled: DASHBOARD_ENABLED ? DASHBOARD_ENABLED === "true" : true,

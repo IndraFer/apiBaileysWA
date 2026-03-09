@@ -9,7 +9,7 @@
  * If absent or disabled, logs an info message. Never throws.
  */
 import { existsSync } from "fs";
-import { join, extname } from "path";
+import { join, extname, resolve } from "path";
 import type { Hono } from "hono";
 import config from "@/config";
 import logger from "@/lib/logger";
@@ -71,7 +71,12 @@ export function loadDashboard(app: Hono): boolean {
       return serveFile(indexPath, "text/html; charset=utf-8");
     }
 
-    const fullPath = join(DASHBOARD_UI_DIR, filePath);
+    const fullPath = resolve(join(DASHBOARD_UI_DIR, filePath));
+
+    // Prevent path traversal attacks
+    if (!fullPath.startsWith(resolve(DASHBOARD_UI_DIR))) {
+      return c.json({ success: false, message: "Forbidden" }, 403);
+    }
 
     if (await fileExists(fullPath)) {
       const ext = extname(fullPath);

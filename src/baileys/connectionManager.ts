@@ -1,6 +1,7 @@
 import { BaileysConnection, BaileysNotConnectedError } from "@/baileys/connection";
 import { getSavedSessionsWithMetadata, deleteAuthState } from "@/baileys/authState";
 import type { SessionOptions, SessionMetadata } from "@/baileys/types";
+import config from "@/config";
 import logger from "@/lib/logger";
 import { errorToString } from "@/utils/validation";
 
@@ -63,6 +64,11 @@ class ConnectionManager {
     if (existing) {
       await existing.destroy();
       this.connections.delete(sessionId);
+    }
+
+    // Enforce maximum session limit
+    if (this.connections.size >= config.maxSessions) {
+      throw new Error(`Maximum session limit (${config.maxSessions}) reached. Delete unused sessions first.`);
     }
 
     const connection = new BaileysConnection(sessionId, {

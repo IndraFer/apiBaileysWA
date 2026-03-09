@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { authMiddleware } from "@/middleware/auth";
+import { sessionRateLimit } from "@/middleware/rateLimit";
 import { success, error } from "@/lib/response";
+import { createSessionSchema, SESSION_ID_REGEX } from "@/schemas/session";
 
 const sessionRoutes = new Hono();
 
@@ -11,14 +13,22 @@ sessionRoutes.use("*", authMiddleware);
  * POST /sessions/:sessionId
  * Create a new session (QR code or pairing code).
  */
-sessionRoutes.post("/:sessionId", async (c) => {
+sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json().catch(() => ({}));
+
+  // Validate session ID format
+  if (!SESSION_ID_REGEX.test(sessionId)) {
+    return error(c, "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)", 400);
+  }
+
+  const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const body = parsed.data;
 
   try {
     const result = await connectionManager.createSession(sessionId, {
       clientName: body.clientName,
-      webhookUrl: body.webhookUrl,
+      webhookUrl: body.webhookUrl || undefined,
       usePairingCode: body.usePairingCode ?? false,
       phoneNumber: body.phoneNumber,
       includeMedia: body.includeMedia,

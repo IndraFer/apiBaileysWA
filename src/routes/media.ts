@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import connectionManager from "@/baileys/connectionManager";
 import { getMessageMedia } from "@/baileys/helpers/downloadMedia";
 import { authMiddleware } from "@/middleware/auth";
@@ -48,7 +48,12 @@ mediaRoutes.post("/:sessionId/download", sessionValidator, async (c) => {
  */
 mediaRoutes.get("/file/:id", async (c) => {
   const id = c.req.param("id");
-  const filePath = join(MEDIA_DIR, id);
+  const filePath = resolve(join(MEDIA_DIR, id));
+
+  // Prevent path traversal
+  if (!filePath.startsWith(resolve(MEDIA_DIR))) {
+    return error(c, "Forbidden", 403);
+  }
 
   if (!existsSync(filePath)) {
     return error(c, "Media file not found", 404);

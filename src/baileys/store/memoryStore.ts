@@ -1,7 +1,7 @@
 import { jidNormalizedUser, toNumber } from "@whiskeysockets/baileys";
 import type { BaileysEventEmitter, WAMessage } from "@whiskeysockets/baileys";
 import { EventEmitter } from "events";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
 import logger from "@/lib/logger";
 
@@ -199,8 +199,6 @@ export class MemoryStore extends EventEmitter {
       };
       const tempFile = `${this.storeFile}.tmp.${Date.now()}`;
       writeFileSync(tempFile, JSON.stringify(data));
-      // Atomic rename
-      const { renameSync } = require("fs");
       renameSync(tempFile, this.storeFile);
     } catch (error) {
       logger.error("[Store:%s] Write error: %s", this.sessionId, (error as Error).message);

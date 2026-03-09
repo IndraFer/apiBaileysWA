@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
 import { logger as honoLogger } from "hono/logger";
 import { swaggerUI } from "@hono/swagger-ui";
 
@@ -13,6 +14,7 @@ import mediaRoutes from "@/routes/media";
 import storyRoutes from "@/routes/story";
 import statusRoutes from "@/routes/status";
 import { authMiddleware } from "@/middleware/auth";
+import { generalRateLimit } from "@/middleware/rateLimit";
 import { success } from "@/lib/response";
 import { loadDashboard } from "@/dashboard/loader";
 import fs from "node:fs";
@@ -22,6 +24,14 @@ const app = new Hono();
 
 // ── Global Middleware ───────────────────────────────
 app.use("*", cors({ origin: config.corsOrigin }));
+
+// Body size limit: 10MB max to prevent DoS
+app.use("*", bodyLimit({ maxSize: 10 * 1024 * 1024 }));
+
+// General rate limit: 100 req/min per IP (production only)
+if (config.env === "production") {
+  app.use("*", generalRateLimit);
+}
 
 if (config.env === "development") {
   app.use("*", honoLogger());
@@ -35,12 +45,20 @@ app.onError((err, c) => {
 });
 
 // ── OpenAPI / Swagger Documentation ─────────────────
+
+// Cache package.json at startup instead of reading on every request
+const pkgPath = path.join(process.cwd(), "package.json");
+let cachedPkg: Record<string, unknown>;
+try {
+  cachedPkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+} catch {
+  cachedPkg = { name: "Baileys WA API", version: "1.0.0", description: "" };
+}
+
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 
 app.get("/openapi.json", (c) => {
-  const pkgPath = path.join(process.cwd(), "package.json");
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-  //return c.json({
+  const pkg = cachedPkg;
   const spec = {
     openapi: "3.1.0",
     info: {

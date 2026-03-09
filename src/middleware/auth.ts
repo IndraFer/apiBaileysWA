@@ -1,4 +1,5 @@
 import type { Context, Next } from "hono";
+import { timingSafeEqual } from "crypto";
 import config from "@/config";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
 import logger from "@/lib/logger";
@@ -7,6 +8,19 @@ const REDIS_API_KEY_PREFIX = "@baileys-wa-api:api-keys";
 
 export interface AuthData {
   role: "user" | "admin";
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(a, "utf-8"), Buffer.from(b, "utf-8"));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -21,12 +35,12 @@ export async function authMiddleware(c: Context, next: Next) {
     return next();
   }
 
-  // Try simple token auth first
+  // Try simple token auth first (timing-safe comparison)
   if (config.auth.globalToken) {
     const authHeader = c.req.header("Authorization");
     const token = authHeader?.replace("Bearer ", "");
 
-    if (token === config.auth.globalToken) {
+    if (token && safeCompare(token, config.auth.globalToken)) {
       return next();
     }
   }

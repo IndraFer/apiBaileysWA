@@ -2,8 +2,19 @@ import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionValidator } from "@/middleware/sessionValidator";
+import { sendRateLimit } from "@/middleware/rateLimit";
 import { formatPhone, formatGroup } from "@/utils/phone";
 import { success, error } from "@/lib/response";
+import {
+  groupCreateSchema,
+  groupParticipantsSchema,
+  groupSendSchema,
+  groupSubjectSchema,
+  groupDescriptionSchema,
+  groupSettingSchema,
+  groupProfilePictureSchema,
+  groupAcceptInviteSchema,
+} from "@/schemas/group";
 
 const groupRoutes = new Hono();
 
@@ -14,12 +25,13 @@ groupRoutes.use("*", authMiddleware);
  */
 groupRoutes.post("/:sessionId/create", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { groupName, participants } = body;
+  const parsed = groupCreateSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { groupName, participants } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const formatted = (participants as string[]).map(formatPhone);
+    const formatted = participants.map(formatPhone);
     const group = await session.groupCreate(groupName, formatted);
     return success(c, group, "Group created successfully");
   } catch (err) {
@@ -77,15 +89,16 @@ groupRoutes.get("/:sessionId/metadata/:jid", sessionValidator, async (c) => {
  * POST /groups/:sessionId/send
  * Send a message to a group.
  */
-groupRoutes.post("/:sessionId/send", sessionValidator, async (c) => {
+groupRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
-  const { receiver, message } = body;
+  const parsed = groupSendSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { receiver, message } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
     const jid = formatGroup(receiver);
-    await session.sendMessage(jid, message);
+    await session.sendMessage(jid, message as any);
     return success(c, null, "Message sent to group");
   } catch (err) {
     return error(c, `Failed to send group message: ${(err as Error).message}`);
@@ -99,12 +112,13 @@ groupRoutes.post("/:sessionId/send", sessionValidator, async (c) => {
 groupRoutes.post("/:sessionId/participants/:jid", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = formatGroup(c.req.param("jid"));
-  const body = await c.req.json();
-  const { participants, action } = body;
+  const parsed = groupParticipantsSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const { participants, action } = parsed.data;
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const formatted = (participants as string[]).map(formatPhone);
+    const formatted = participants.map(formatPhone);
     const result = await session.groupParticipantsUpdate(jid, formatted, action);
     return success(c, result, "Participants updated successfully");
   } catch (err) {
@@ -118,11 +132,12 @@ groupRoutes.post("/:sessionId/participants/:jid", sessionValidator, async (c) =>
 groupRoutes.patch("/:sessionId/subject/:jid", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = formatGroup(c.req.param("jid"));
-  const body = await c.req.json();
+  const parsed = groupSubjectSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.groupUpdateSubject(jid, body.subject);
+    await session.groupUpdateSubject(jid, parsed.data.subject);
     return success(c, null, "Group subject updated");
   } catch (err) {
     return error(c, `Failed to update subject: ${(err as Error).message}`);
@@ -135,11 +150,12 @@ groupRoutes.patch("/:sessionId/subject/:jid", sessionValidator, async (c) => {
 groupRoutes.patch("/:sessionId/description/:jid", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = formatGroup(c.req.param("jid"));
-  const body = await c.req.json();
+  const parsed = groupDescriptionSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.groupUpdateDescription(jid, body.description);
+    await session.groupUpdateDescription(jid, parsed.data.description);
     return success(c, null, "Group description updated");
   } catch (err) {
     return error(c, `Failed to update description: ${(err as Error).message}`);
@@ -153,11 +169,12 @@ groupRoutes.patch("/:sessionId/description/:jid", sessionValidator, async (c) =>
 groupRoutes.patch("/:sessionId/settings/:jid", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = formatGroup(c.req.param("jid"));
-  const body = await c.req.json();
+  const parsed = groupSettingSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.groupSettingUpdate(jid, body.setting);
+    await session.groupSettingUpdate(jid, parsed.data.setting);
     return success(c, null, "Group settings updated");
   } catch (err) {
     return error(c, `Failed to update settings: ${(err as Error).message}`);
@@ -170,11 +187,12 @@ groupRoutes.patch("/:sessionId/settings/:jid", sessionValidator, async (c) => {
 groupRoutes.patch("/:sessionId/profile-picture/:jid", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const jid = formatGroup(c.req.param("jid"));
-  const body = await c.req.json();
+  const parsed = groupProfilePictureSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.updateProfilePicture(jid, { url: body.url });
+    await session.updateProfilePicture(jid, { url: parsed.data.url });
     return success(c, null, "Group profile picture updated");
   } catch (err) {
     return error(c, `Failed to update profile picture: ${(err as Error).message}`);
@@ -218,11 +236,12 @@ groupRoutes.get("/:sessionId/invite-code/:jid", sessionValidator, async (c) => {
  */
 groupRoutes.post("/:sessionId/accept-invite", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
-  const body = await c.req.json();
+  const parsed = groupAcceptInviteSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const result = await session.groupAcceptInvite(body.inviteCode);
+    const result = await session.groupAcceptInvite(parsed.data.inviteCode);
     return success(c, result, "Invite accepted");
   } catch (err) {
     return error(c, `Failed to accept invite: ${(err as Error).message}`);
