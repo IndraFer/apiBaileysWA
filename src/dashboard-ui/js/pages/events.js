@@ -7,15 +7,22 @@
 	window.EventsPage = {
 		async render() {
 			document.getElementById("page-content").innerHTML = `
-        <div class="toolbar">
-          <button class="btn btn-outline btn-sm" id="btn-pause-events">⏸ Pause</button>
-          <button class="btn btn-outline btn-sm" id="btn-clear-events">🗑 Clear</button>
-          <div class="toolbar-spacer"></div>
-          <span class="badge badge-success" id="sse-status"><span class="badge-dot pulse"></span>LISTENING</span>
-        </div>
-        <div class="events-feed" id="events-feed">
-          <div class="empty-state"><p class="text-muted">Waiting for events...</p></div>
-        </div>`;
+				<div class="card events-panel">
+					<div class="toolbar events-panel-toolbar">
+						<div class="events-panel-title">
+							<h3>Realtime Event Feed</h3>
+						</div>
+						<button class="btn btn-outline btn-sm" id="btn-pause-events">⏸ Pause</button>
+						<button class="btn btn-outline btn-sm" id="btn-clear-events">🗑 Clear</button>
+						<div class="toolbar-spacer"></div>
+						<span class="badge badge-success" id="sse-status"><span class="badge-dot pulse"></span>LISTENING</span>
+					</div>
+					<div class="events-feed-shell">
+						<div class="events-feed" id="events-feed">
+							<div class="empty-state"><p class="text-muted">Waiting for events...</p></div>
+						</div>
+					</div>
+				</div>`;
 
 			document
 				.getElementById("btn-pause-events")

@@ -997,6 +997,38 @@ tr:hover td {
 }
 
 /* ── Events Feed ──────────────────────────────────── */
+.events-panel {
+	padding: 1rem;
+}
+
+.events-panel-toolbar {
+	margin-bottom: 0.9rem;
+	align-items: flex-start;
+}
+
+.events-panel-title {
+	min-width: 220px;
+}
+
+.events-panel-title h3 {
+	margin-bottom: 0.25rem;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+.events-panel-title p {
+	margin: 0;
+	font-size: 0.8rem;
+	line-height: 1.5;
+}
+
+.events-feed-shell {
+	min-height: 420px;
+	max-height: calc(100vh - 240px);
+	overflow-y: auto;
+	padding-right: 0.2rem;
+}
+
 .events-feed {
 	display: flex;
 	flex-direction: column;
@@ -1072,6 +1104,21 @@ tr:hover td {
 
 .toolbar-spacer {
 	flex: 1;
+}
+
+@media (max-width: 768px) {
+	.events-feed-shell {
+		min-height: 320px;
+		max-height: calc(100vh - 220px);
+	}
+
+	.events-panel-toolbar {
+		align-items: stretch;
+	}
+
+	.events-panel-title {
+		width: 100%;
+	}
 }
 
 /* ── Empty State ──────────────────────────────────── */
