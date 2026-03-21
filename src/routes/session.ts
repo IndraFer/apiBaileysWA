@@ -26,9 +26,15 @@ sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
   const body = parsed.data;
 
   try {
+    if (body.freshAuth) {
+      // Force a clean auth state so QR/pairing starts from a fresh login.
+      await connectionManager.deleteSession(sessionId);
+    }
+
     const result = await connectionManager.createSession(sessionId, {
       clientName: body.clientName,
       webhookUrl: body.webhookUrl || undefined,
+      webhookSecret: body.webhookSecret || undefined,
       usePairingCode: body.usePairingCode ?? false,
       phoneNumber: body.phoneNumber,
       includeMedia: body.includeMedia,

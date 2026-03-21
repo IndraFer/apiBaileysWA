@@ -124,3 +124,9 @@ export async function deleteRedisAuthState(sessionId: string): Promise<void> {
   if (!redis) return;
   await redis.del(`${REDIS_KEY_PREFIX}:${sessionId}:authState`);
 }
+
+export async function updateRedisSessionMetadata(sessionId: string, metadata: unknown): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  await redis.hSet(`${REDIS_KEY_PREFIX}:${sessionId}:authState`, "metadata", JSON.stringify(metadata));
+}

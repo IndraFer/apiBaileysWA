@@ -11,6 +11,7 @@ import { formatPhone, formatGroup } from "@/utils/phone";
 import { success, error } from "@/lib/response";
 import {
   sendMessageSchema,
+  sendMessageStaticSchema,
   sendBulkSchema,
   forwardMessageSchema,
   deleteMessageSchema,
@@ -28,6 +29,57 @@ const chatRoutes = new Hono();
 
 chatRoutes.use("*", authMiddleware);
 
+async function sendMessageHandler(
+  sessionId: string,
+  payload: {
+    receiver: string;
+    message: Record<string, unknown>;
+    isGroup?: boolean;
+    quoted?: unknown;
+  }
+) {
+  const session = connectionManager.getSession(sessionId);
+  const jid = payload.isGroup ? formatGroup(payload.receiver) : formatPhone(payload.receiver);
+
+  // Optionally verify number exists
+  if (!payload.isGroup) {
+    const exists = await session.isOnWhatsApp(jid);
+    if (!exists) {
+      throw new Error("The receiver number is not registered on WhatsApp");
+    }
+  }
+
+  return session.sendMessage(jid, payload.message as AnyMessageContent, { quoted: payload.quoted as any });
+}
+
+/**
+ * POST /chats/send
+ * Static endpoint for third-party integrations. Session ID is provided in body.
+ */
+chatRoutes.post("/send", sendRateLimit, async (c) => {
+  const parsed = sendMessageStaticSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+
+  const { sessionId, receiver, message, isGroup, quoted } = parsed.data;
+
+  try {
+    const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
+    return success(c, {
+      key: result?.key,
+      messageTimestamp: result?.messageTimestamp,
+    }, "Message sent successfully");
+  } catch (err) {
+    if (err instanceof BaileysNotConnectedError) {
+      return error(c, err.message, 404);
+    }
+    const messageText = (err as Error).message;
+    if (messageText.includes("not registered on WhatsApp")) {
+      return error(c, messageText, 400);
+    }
+    return error(c, `Failed to send message: ${messageText}`);
+  }
+});
+
 /**
  * POST /chats/:sessionId/send
  * Send a message (text, image, video, audio, document, sticker, location, contact, poll).
@@ -39,18 +91,7 @@ chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) =
   const { receiver, message, isGroup, quoted } = parsed.data;
 
   try {
-    const session = connectionManager.getSession(sessionId);
-    const jid = isGroup ? formatGroup(receiver) : formatPhone(receiver);
-
-    // Optionally verify number exists
-    if (!isGroup) {
-      const exists = await session.isOnWhatsApp(jid);
-      if (!exists) {
-        return error(c, "The receiver number is not registered on WhatsApp", 400);
-      }
-    }
-
-    const result = await session.sendMessage(jid, message as AnyMessageContent, { quoted });
+    const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
 
     return success(c, {
       key: result?.key,

@@ -79,6 +79,9 @@
           <div class="form-group">
             <label class="checkbox-label"><input type="checkbox" id="session-pairing" /> Use Pairing Code (instead of QR)</label>
           </div>
+					<div class="form-group">
+						<label class="checkbox-label"><input type="checkbox" id="session-fresh-auth" checked /> Fresh Auth (clear old auth state before create)</label>
+					</div>
           <div class="form-group hidden" id="pairing-phone-group">
             <label for="session-phone">Phone Number</label>
             <input type="text" id="session-phone" placeholder="+6281234567890" />
@@ -108,6 +111,8 @@
 						.value.trim();
 					const usePairingCode =
 						document.getElementById("session-pairing").checked;
+					const freshAuth =
+						document.getElementById("session-fresh-auth").checked;
 					const phoneNumber = document
 						.getElementById("session-phone")
 						.value.trim();
@@ -115,7 +120,7 @@
 					if (!sessionId)
 						return Toast.warning("Session ID is required");
 
-					const body = { webhookUrl, usePairingCode };
+					const body = { webhookUrl, usePairingCode, freshAuth };
 					if (usePairingCode && phoneNumber)
 						body.phoneNumber = phoneNumber;
 
@@ -129,7 +134,7 @@
 						if (result.data?.pairingCode) {
 							this.showPairingCode(result.data.pairingCode);
 						} else {
-							this.showQR(sessionId);
+							this.showQR(sessionId, { freshAuth });
 						}
 					} else {
 						Toast.error(
@@ -139,13 +144,21 @@
 				});
 		},
 
-		async showQR(sessionId) {
+		async showQR(sessionId, options = {}) {
+			const freshAuthBadge = options.freshAuth
+				? '<div class="badge badge-info qr-fresh-auth-badge">FRESH AUTH ENABLED</div>'
+				: "";
 			Modal.show(
 				`QR Code — ${sessionId}`,
 				`
-        <div class="qr-container" id="qr-container">
-          <div class="skeleton" style="width:260px;height:260px;margin:0 auto"></div>
-          <p>Waiting for QR code...</p>
+        <div class="qr-container">
+          ${freshAuthBadge}
+          <p class="qr-subtitle">QR Login Mode</p>
+          <div class="badge badge-warning qr-status-chip" id="qr-status-chip">WAITING</div>
+          <div id="qr-container-body">
+            <div class="skeleton" style="width:260px;height:260px;margin:0 auto"></div>
+            <p>Waiting for QR code...</p>
+          </div>
         </div>
       `,
 			);
@@ -154,11 +167,20 @@
 
 		async pollQR(sessionId) {
 			if (pollTimer) clearInterval(pollTimer);
+			let missingQrCount = 0;
+
+			const setQrStatus = (label, tone) => {
+				const chip = document.getElementById("qr-status-chip");
+				if (!chip) return;
+				chip.className = `badge qr-status-chip ${tone}`;
+				chip.textContent = label;
+			};
+
 			const update = async () => {
 				const result = await API.get(`/sessions/${sessionId}`);
 				if (!result.success) return;
 				const status = result.data;
-				const el = document.getElementById("qr-container");
+				const el = document.getElementById("qr-container-body");
 				if (!el) {
 					clearInterval(pollTimer);
 					return;
@@ -166,6 +188,7 @@
 
 				if (status.connected) {
 					clearInterval(pollTimer);
+					setQrStatus("CONNECTED", "badge-success");
 					el.innerHTML = `<div style="font-size:3rem;margin-bottom:1rem">✓</div><p style="color:var(--success);font-weight:600">Connected successfully!</p>`;
 					Toast.success(`Session ${sessionId} connected!`);
 					setTimeout(() => {
@@ -175,8 +198,21 @@
 					return;
 				}
 				if (status.qrCode) {
+					missingQrCount = 0;
+					setQrStatus("READY TO SCAN", "badge-info");
 					el.innerHTML = `<img src="${status.qrCode}" alt="QR Code" /><p>Scan this QR code with WhatsApp</p>`;
+					return;
 				}
+
+				missingQrCount += 1;
+				if (missingQrCount >= 5 || status.exists === false) {
+					setQrStatus("EXPIRED", "badge-danger");
+					el.innerHTML = `<div style="font-size:2rem;margin-bottom:0.75rem">!</div><p>QR code is no longer available. Recreate the session to start a new login.</p>`;
+					clearInterval(pollTimer);
+					return;
+				}
+
+				setQrStatus("WAITING", "badge-warning");
 			};
 			await update();
 			pollTimer = setInterval(update, 3000);
@@ -187,6 +223,8 @@
 				"Pairing Code",
 				`
         <div class="qr-container">
+          <p class="qr-subtitle">Pairing Code Login Mode</p>
+          <div class="badge badge-info qr-status-chip">READY</div>
           <p class="pairing-code">${code}</p>
           <p>Enter this code in WhatsApp &gt; Linked Devices &gt; Link a Device</p>
         </div>

@@ -8,6 +8,11 @@
 			destroy: () => SessionsPage.destroy?.(),
 		},
 		messaging: { title: "Messaging", render: () => MessagingPage.render() },
+		chatrooms: {
+			title: "Chat Rooms",
+			render: () => ChatRoomsPage.render(),
+			destroy: () => ChatRoomsPage.destroy?.(),
+		},
 		groups: { title: "Groups", render: () => GroupsPage.render() },
 		webhooks: { title: "Webhooks", render: () => WebhooksPage.render() },
 		events: {

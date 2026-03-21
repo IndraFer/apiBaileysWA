@@ -1,7 +1,7 @@
 import type { AuthenticationState } from "@whiskeysockets/baileys";
 import { isRedisAvailable } from "@/lib/redis";
-import { useRedisAuthState, getRedisSavedSessionIds, deleteRedisAuthState } from "./redis";
-import { useFileAuthState, getFileSavedSessionIds, deleteFileAuthState } from "./file";
+import { useRedisAuthState, getRedisSavedSessionIds, deleteRedisAuthState, updateRedisSessionMetadata } from "./redis";
+import { useFileAuthState, getFileSavedSessionIds, deleteFileAuthState, getFileSavedSessionsWithMetadata, saveFileSessionMetadata } from "./file";
 import logger from "@/lib/logger";
 
 export interface AuthStateResult {
@@ -28,7 +28,7 @@ export async function useAuthState(
   }
 
   logger.info("[AuthState] Using file auth state for session: %s", sessionId);
-  const { state, saveCreds } = await useFileAuthState(sessionId);
+  const { state, saveCreds } = await useFileAuthState(sessionId, metadata);
   return { state, saveCreds };
 }
 
@@ -52,7 +52,15 @@ export async function getSavedSessionsWithMetadata<T>(): Promise<
   if (isRedisAvailable()) {
     return getRedisSavedSessionIds<T>();
   }
-  return getFileSavedSessionIds().map((id) => ({ id, metadata: null }));
+  return getFileSavedSessionsWithMetadata<T>();
+}
+
+export async function updateSessionMetadata(sessionId: string, metadata: unknown): Promise<void> {
+  if (isRedisAvailable()) {
+    await updateRedisSessionMetadata(sessionId, metadata);
+    return;
+  }
+  saveFileSessionMetadata(sessionId, metadata);
 }
 
 /**

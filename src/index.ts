@@ -29,6 +29,7 @@ async function startServer() {
     const server = Bun.serve({
       port: config.port,
       hostname: config.host,
+      idleTimeout: 120,
       fetch: app.fetch,
     });
     hostname = String(server.hostname ?? config.host);

@@ -128,6 +128,8 @@ app.get("/openapi.json", (c) => {
           properties: {
             clientName: { type: "string", description: "Client browser name", example: "Chrome" },
             webhookUrl: { type: "string", format: "uri", description: "Webhook URL for events", example: "http://localhost:3001/webhook" },
+            webhookSecret: { type: "string", description: "Optional webhook secret sent in x-webhook-secret header", example: "my-webhook-secret" },
+            freshAuth: { type: "boolean", description: "Delete old auth state before creating session", default: false },
             usePairingCode: { type: "boolean", description: "Use pairing code instead of QR", default: false },
             phoneNumber: { type: "string", description: "Phone number for pairing code (with country code)", example: "+6281234567890" },
             includeMedia: { type: "boolean", description: "Include media as base64 in webhooks", default: false },
@@ -255,6 +257,33 @@ app.get("/openapi.json", (c) => {
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
           parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/SendMessage" } } } },
+          responses: { 200: { description: "Message sent" } },
+        },
+      },
+      "/chats/send": {
+        post: {
+          tags: ["Chats"],
+          summary: "Send a message (static endpoint)",
+          description: "Third-party friendly endpoint. Pass sessionId in request body instead of URL path.",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  allOf: [
+                    { $ref: "#/components/schemas/SendMessage" },
+                    {
+                      type: "object",
+                      required: ["sessionId"],
+                      properties: {
+                        sessionId: { type: "string", example: "my-session" },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
           responses: { 200: { description: "Message sent" } },
         },
       },

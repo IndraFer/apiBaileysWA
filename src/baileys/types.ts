@@ -16,12 +16,16 @@ export interface SessionOptions {
   clientName?: string;
   /** Webhook URL for this session */
   webhookUrl?: string;
+  /** Optional per-session webhook secret header value */
+  webhookSecret?: string;
   /** Whether to use pairing code instead of QR */
   usePairingCode?: boolean;
   /** Phone number for pairing code */
   phoneNumber?: string;
   /** Include media as base64 in webhook events */
   includeMedia?: boolean;
+  /** Session-level webhook events */
+  webhookEvents?: string[];
   /** Sync full message history */
   syncFullHistory?: boolean;
   /** Callback when connection closes */
@@ -37,6 +41,8 @@ export interface SessionOptions {
 export interface SessionMetadata {
   clientName?: string;
   webhookUrl?: string;
+  webhookSecret?: string;
+  webhookEvents?: string[];
   includeMedia?: boolean;
   syncFullHistory?: boolean;
 }

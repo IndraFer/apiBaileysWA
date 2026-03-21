@@ -31,6 +31,7 @@ import { asyncSleep } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import eventBus from "@/dashboard/eventBus";
+import { addWebhookLog } from "@/services/webhookLog";
 
 const msgRetryCounterCache = new NodeCache({
   stdTTL: 3600,
@@ -88,12 +89,29 @@ export class BaileysConnection {
     this.options = { ...this.options, ...options };
   }
 
+  getOptions(): SessionOptions {
+    return { ...this.options };
+  }
+
+  getSessionMetadata(): SessionMetadata {
+    return {
+      clientName: this.options.clientName,
+      webhookUrl: this.options.webhookUrl,
+      webhookSecret: this.options.webhookSecret,
+      webhookEvents: this.options.webhookEvents,
+      includeMedia: this.options.includeMedia,
+      syncFullHistory: this.options.syncFullHistory,
+    };
+  }
+
   async connect(): Promise<{ qrCode?: string; pairingCode?: string }> {
     if (this.socket) return {};
 
     const metadata: SessionMetadata = {
       clientName: this.options.clientName,
       webhookUrl: this.options.webhookUrl,
+      webhookSecret: this.options.webhookSecret,
+      webhookEvents: this.options.webhookEvents,
       includeMedia: this.options.includeMedia,
       syncFullHistory: this.options.syncFullHistory,
     };
@@ -366,6 +384,14 @@ export class BaileysConnection {
   }
 
   private async handleMessageReceiptUpdate(data: BaileysEventMap["message-receipt.update"]) {
+    // Emit to dashboard event bus (for SSE monitor) so frontend can update message status
+    eventBus.emit("baileys-event", {
+      sessionId: this.sessionId,
+      event: "message-receipt.update",
+      data,
+      timestamp: Date.now(),
+    });
+
     this.sendToWebhook({ sessionId: this.sessionId, event: "message-receipt.update", data });
   }
 
@@ -579,12 +605,39 @@ export class BaileysConnection {
 
   private async sendToWebhook(payload: WebhookPayload) {
     const webhookUrl = this.options.webhookUrl || config.webhook.url;
-    if (!webhookUrl) return;
+    const webhookSecret = this.options.webhookSecret || config.webhook.secret;
+    if (!webhookUrl) {
+      return;
+    }
 
     // Check allowed events
     const eventName = payload.event.toUpperCase().replace(/[.-]/g, "_");
     if (!config.webhook.allowedEvents.has("ALL") && !config.webhook.allowedEvents.has(eventName)) {
+      addWebhookLog({
+        sessionId: this.sessionId,
+        event: payload.event,
+        webhookUrl,
+        status: "skipped",
+        attempt: 0,
+        error: `Event filtered by WEBHOOK_ALLOWED_EVENTS: ${eventName}`,
+      });
       return;
+    }
+
+    // Optional session-level filtering configured from dashboard.
+    if (Array.isArray(this.options.webhookEvents) && this.options.webhookEvents.length > 0) {
+      const allow = this.options.webhookEvents.includes(payload.event);
+      if (!allow) {
+        addWebhookLog({
+          sessionId: this.sessionId,
+          event: payload.event,
+          webhookUrl,
+          status: "skipped",
+          attempt: 0,
+          error: `Event filtered by session webhook events: ${payload.event}`,
+        });
+        return;
+      }
     }
 
     // Emit to dashboard event bus (for SSE monitor)
@@ -599,37 +652,82 @@ export class BaileysConnection {
     logger.debug({ sessionId: this.sessionId, payload: sanitizedPayload }, "Webhook payload");
 
     const { maxRetries, retryInterval, backoffFactor } = config.webhook.retryPolicy;
+    const maxAttempts = Math.max(1, maxRetries);
     let attempt = 0;
     let currentDelay = retryInterval;
+    let lastFailureReason = "";
 
-    while (attempt <= maxRetries) {
+    while (attempt < maxAttempts) {
+      const startedAt = Date.now();
+      const currentAttempt = attempt + 1;
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (webhookSecret) {
+          headers["x-webhook-secret"] = webhookSecret;
+        }
+
         const response = await fetch(webhookUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(payload),
         });
 
         if (response.ok) {
           logger.debug("[%s] Webhook delivered successfully", this.sessionId);
+          addWebhookLog({
+            sessionId: this.sessionId,
+            event: payload.event,
+            webhookUrl,
+            status: "success",
+            attempt: attempt + 1,
+            httpStatus: response.status,
+            latencyMs: Date.now() - startedAt,
+          });
           return;
         }
 
-        logger.warn("[%s] Webhook failed (HTTP %d), attempt %d/%d",
-          this.sessionId, response.status, attempt + 1, maxRetries);
+        addWebhookLog({
+          sessionId: this.sessionId,
+          event: payload.event,
+          webhookUrl,
+          status: "http-error",
+          attempt: currentAttempt,
+          httpStatus: response.status,
+          latencyMs: Date.now() - startedAt,
+          error: `HTTP ${response.status}`,
+        });
+
+        lastFailureReason = `HTTP ${response.status}`;
+        if (currentAttempt < maxAttempts) {
+          logger.warn("[%s] Webhook failed (HTTP %d), attempt %d/%d",
+            this.sessionId, response.status, currentAttempt, maxAttempts);
+        }
       } catch (error) {
-        logger.error("[%s] Webhook error: %s, attempt %d/%d",
-          this.sessionId, errorToString(error), attempt + 1, maxRetries);
+        const reason = errorToString(error);
+        addWebhookLog({
+          sessionId: this.sessionId,
+          event: payload.event,
+          webhookUrl,
+          status: "network-error",
+          attempt: currentAttempt,
+          latencyMs: Date.now() - startedAt,
+          error: reason,
+        });
+        lastFailureReason = reason;
+        if (currentAttempt < maxAttempts) {
+          logger.warn("[%s] Webhook error: %s, attempt %d/%d",
+            this.sessionId, reason, currentAttempt, maxAttempts);
+        }
       }
 
       attempt++;
-      if (attempt <= maxRetries) {
+      if (attempt < maxAttempts) {
         const jitter = Math.floor(Math.random() * 1000);
         await asyncSleep(currentDelay + jitter);
         currentDelay *= backoffFactor;
       }
     }
 
-    logger.error("[%s] Webhook failed after %d attempts", this.sessionId, maxRetries + 1);
+    logger.error("[%s] Webhook failed after %d attempts (last error: %s)", this.sessionId, maxAttempts, lastFailureReason || "unknown");
   }
 }

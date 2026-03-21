@@ -201,7 +201,9 @@ dashboardAuth.get("/status", (c) => {
  */
 export async function dashboardAuthMiddleware(c: any, next: any) {
   const authHeader = c.req.header("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
+  const tokenFromHeader = authHeader?.replace("Bearer ", "");
+  const tokenFromQuery = c.req.query("token");
+  const token = tokenFromHeader || tokenFromQuery;
   if (!token) return c.json({ success: false, message: "Not authenticated" }, 401);
 
   try {

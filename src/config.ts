@@ -20,6 +20,7 @@ const {
   IGNORE_BOT_MESSAGES,
   IGNORE_META_AI_MESSAGES,
   WEBHOOK_URL,
+  WEBHOOK_SECRET,
   WEBHOOK_ALLOWED_EVENTS,
   WEBHOOK_RETRY_MAX,
   WEBHOOK_RETRY_INTERVAL,
@@ -79,6 +80,7 @@ const config = {
 
   webhook: {
     url: WEBHOOK_URL || "",
+    secret: WEBHOOK_SECRET || "",
     allowedEvents: new Set(
       WEBHOOK_ALLOWED_EVENTS
         ? WEBHOOK_ALLOWED_EVENTS.split(",").map((e) => e.trim())

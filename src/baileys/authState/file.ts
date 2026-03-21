@@ -1,6 +1,6 @@
 import { useMultiFileAuthState, type AuthenticationState } from "@whiskeysockets/baileys";
 import { join } from "path";
-import { rmSync, readdirSync, existsSync, mkdirSync } from "fs";
+import { rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import logger from "@/lib/logger";
 
 const SESSIONS_DIR = join(process.cwd(), "sessions");
@@ -15,8 +15,13 @@ function getSessionDir(sessionId: string): string {
   return join(SESSIONS_DIR, `md_${sessionId}`);
 }
 
+function getMetadataFile(sessionId: string): string {
+  return join(getSessionDir(sessionId), "metadata.json");
+}
+
 export async function useFileAuthState(
-  sessionId: string
+  sessionId: string,
+  metadata?: unknown
 ): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
@@ -24,6 +29,9 @@ export async function useFileAuthState(
   ensureSessionsDir();
   const sessionDir = getSessionDir(sessionId);
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  if (metadata) {
+    saveFileSessionMetadata(sessionId, metadata);
+  }
   logger.debug("[File Auth] Using file auth state for session: %s", sessionId);
   return { state, saveCreds };
 }
@@ -41,6 +49,33 @@ export function getFileSavedSessionIds(): string[] {
   } catch {
     return [];
   }
+}
+
+export function saveFileSessionMetadata(sessionId: string, metadata: unknown): void {
+  ensureSessionsDir();
+  const sessionDir = getSessionDir(sessionId);
+  if (!existsSync(sessionDir)) {
+    mkdirSync(sessionDir, { recursive: true });
+  }
+  const metadataFile = getMetadataFile(sessionId);
+  writeFileSync(metadataFile, JSON.stringify(metadata), "utf-8");
+}
+
+export function getFileSavedSessionsWithMetadata<T>(): Array<{ id: string; metadata: T | null }> {
+  const ids = getFileSavedSessionIds();
+  return ids.map((id) => {
+    const metadataFile = getMetadataFile(id);
+    if (!existsSync(metadataFile)) {
+      return { id, metadata: null };
+    }
+    try {
+      const raw = readFileSync(metadataFile, "utf-8");
+      const parsed = JSON.parse(raw) as T;
+      return { id, metadata: parsed };
+    } catch {
+      return { id, metadata: null };
+    }
+  });
 }
 
 /**

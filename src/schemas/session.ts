@@ -6,6 +6,8 @@ import { z } from "zod";
 export const createSessionSchema = z.object({
   clientName: z.string().optional(),
   webhookUrl: z.string().url("Invalid webhook URL").optional().or(z.literal("")),
+  webhookSecret: z.string().optional(),
+  freshAuth: z.boolean().optional().default(false),
   usePairingCode: z.boolean().optional().default(false),
   phoneNumber: z.string().optional(),
   includeMedia: z.boolean().optional(),

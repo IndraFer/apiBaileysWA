@@ -29,6 +29,8 @@ class ConnectionManager {
         const connection = new BaileysConnection(id, {
           clientName: metadata?.clientName,
           webhookUrl: metadata?.webhookUrl,
+          webhookSecret: metadata?.webhookSecret,
+          webhookEvents: metadata?.webhookEvents,
           includeMedia: metadata?.includeMedia,
           syncFullHistory: metadata?.syncFullHistory,
           isReconnect: true,
@@ -124,11 +126,21 @@ class ConnectionManager {
   /**
    * List all active sessions.
    */
-  listSessions(): Array<{ sessionId: string; connected: boolean; user: unknown }> {
+  listSessions(): Array<{
+    sessionId: string;
+    connected: boolean;
+    user: unknown;
+    webhookUrl: string;
+    webhookSecret: string;
+    webhookEvents: string[];
+  }> {
     return [...this.connections.entries()].map(([id, conn]) => ({
       sessionId: id,
       connected: conn.isConnected,
       user: conn.user,
+      webhookUrl: conn.getOptions().webhookUrl || "",
+      webhookSecret: conn.getOptions().webhookSecret || "",
+      webhookEvents: conn.getOptions().webhookEvents || [],
     }));
   }
 

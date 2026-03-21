@@ -13,6 +13,10 @@ export const sendMessageSchema = z.object({
   quoted: z.any().optional(),
 });
 
+export const sendMessageStaticSchema = sendMessageSchema.extend({
+  sessionId: z.string().min(1, "Session ID is required"),
+});
+
 export const sendBulkSchema = z.object({
   messages: z
     .array(
