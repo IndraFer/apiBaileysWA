@@ -156,7 +156,10 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
   const sessionId = c.req.param("sessionId");
   const body = await c.req.json().catch(() => ({}));
   const webhookUrl = String(body.webhookUrl || "").trim();
-  const webhookSecret = String(body.webhookSecret || "").trim();
+  // Use undefined (not empty string) when secret is blank so sendToWebhook
+  // correctly falls back to the global WEBHOOK_SECRET env variable.
+  const rawSecret = String(body.webhookSecret ?? "").trim();
+  const webhookSecret = rawSecret || undefined;
   const events = Array.isArray(body.events)
     ? body.events.map((e) => String(e).trim()).filter(Boolean)
     : [];

@@ -605,6 +605,8 @@ export class BaileysConnection {
 
   private async sendToWebhook(payload: WebhookPayload) {
     const webhookUrl = this.options.webhookUrl || config.webhook.url;
+    // options.webhookSecret is stored as undefined (not "") when blank, so this
+    // fallback to the global WEBHOOK_SECRET env variable works correctly.
     const webhookSecret = this.options.webhookSecret || config.webhook.secret;
     if (!webhookUrl) {
       return;
