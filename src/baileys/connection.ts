@@ -248,8 +248,43 @@ export class BaileysConnection {
     });
 
     // Presence & labels
+    // Presence state tracking to filter anomalous "paused" events
+    /**
+     * Map: chatJid -> userJid -> lastPresenceType
+     * Example: presenceState[chatJid][userJid] = "composing" | "recording" | "paused" | ...
+     */
+    const presenceState = new Map();
     this.socket.ev.on("presence.update", (p) => {
-      this.sendToWebhook({ sessionId: this.sessionId, event: "presence.update", data: p });
+      // p: { id: chatJid, presences: { [userJid]: { lastKnownPresence: "composing"|... } } }
+      if (!p || !p.id || !p.presences) return;
+      const chatJid = p.id;
+      let chatMap = presenceState.get(chatJid);
+      if (!chatMap) {
+        chatMap = new Map();
+        presenceState.set(chatJid, chatMap);
+      }
+      let shouldEmit = false;
+      for (const [userJid, presence] of Object.entries(p.presences)) {
+        const prev = chatMap.get(userJid);
+        const curr = presence.lastKnownPresence;
+        // If paused, only emit if previous was composing/recording
+        if (curr === "paused") {
+          if (prev === "composing" || prev === "recording") {
+            shouldEmit = true;
+            chatMap.set(userJid, curr);
+          } else {
+            // Anomali: abaikan, jangan emit/jangan update state
+            continue;
+          }
+        } else {
+          // Always update state and emit for composing/recording/available/unavailable
+          shouldEmit = true;
+          chatMap.set(userJid, curr);
+        }
+      }
+      if (shouldEmit) {
+        this.sendToWebhook({ sessionId: this.sessionId, event: "presence.update", data: p });
+      }
     });
 
     this.socket.ev.on("labels.edit", (l) => {
@@ -404,8 +439,13 @@ export class BaileysConnection {
     return this.socket;
   }
 
-  async sendMessage(receiver: string, message: AnyMessageContent, options?: { quoted?: WAMessage }) {
-    const shouldSimulateTyping = this.options.simulateTyping ?? config.simulation.typingBeforeSend;
+  async sendMessage(
+    receiver: string,
+    message: AnyMessageContent,
+    options?: { quoted?: WAMessage; simulateTyping?: boolean },
+  ) {
+    const shouldSimulateTyping =
+      options?.simulateTyping ?? this.options.simulateTyping ?? config.simulation.typingBeforeSend;
 
     if (shouldSimulateTyping) {
       try {

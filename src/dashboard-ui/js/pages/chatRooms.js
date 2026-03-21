@@ -11,6 +11,14 @@
 	let isSending = false;
 	const draftByJid = new Map();
 	const typingTimers = new Map();
+	let outgoingTypingPauseTimer = null;
+	let outgoingTypingStartTimer = null;
+	let outgoingTypingKeepAliveTimer = null;
+	let outgoingTypingActive = false;
+	let outgoingTypingComposingSent = false;
+	let outgoingTypingSessionId = "";
+	let outgoingTypingJid = "";
+	const outgoingPresenceState = new Map();
 	const lastReadSyncAt = new Map();
 	const sentMessageStatus = new Map(); // Track sent message status: "text:timestamp" → "sent"|"read"|"delivered"
 	let latestSessions = [];
@@ -20,6 +28,21 @@
 	const DEFAULT_POLL_ACTIVE_MS = 5000;
 	const DEFAULT_POLL_IDLE_MS = 20000;
 	const READ_SYNC_COOLDOWN_MS = 12000;
+	const TYPING_COMPOSING_START_MIN_MS = 280;
+	const TYPING_COMPOSING_START_MAX_MS = 900;
+	const TYPING_PAUSE_AFTER_IDLE_MIN_MS = 2200;
+	const TYPING_PAUSE_AFTER_IDLE_MAX_MS = 3600;
+	const TYPING_KEEPALIVE_MIN_MS = 5200;
+	const TYPING_KEEPALIVE_MAX_MS = 9000;
+	const OUTGOING_PRESENCE_THROTTLE_MIN_MS = 900;
+	const OUTGOING_PRESENCE_THROTTLE_MAX_MS = 1800;
+
+	function randomBetween(min, max) {
+		const floorMin = Math.ceil(Number(min) || 0);
+		const floorMax = Math.floor(Number(max) || floorMin);
+		if (floorMax <= floorMin) return floorMin;
+		return Math.floor(Math.random() * (floorMax - floorMin + 1)) + floorMin;
+	}
 
 	function loadPollingConfig() {
 		try {
@@ -244,6 +267,183 @@
 			el.textContent = text;
 			el.className = `chatroom-read-status ${kind}`;
 			el.style.display = "inline-flex";
+		},
+
+		async sendChatPresence(
+			type,
+			jid,
+			sessionId = selectedSessionId,
+			force = false,
+		) {
+			if (!sessionId || !jid) return;
+
+			const targetKey = `${sessionId}:${normalizeJid(jid)}`;
+			const now = Date.now();
+			const last = outgoingPresenceState.get(targetKey);
+			if (
+				!force &&
+				last &&
+				last.type === type &&
+				now - last.at < Number(last.cooldownMs || 0)
+			) {
+				return;
+			}
+
+			try {
+				const nextCooldownMs = randomBetween(
+					OUTGOING_PRESENCE_THROTTLE_MIN_MS,
+					OUTGOING_PRESENCE_THROTTLE_MAX_MS,
+				);
+				await API.post(
+					`/sessions/${encodeURIComponent(sessionId)}/chats/presence`,
+					{ type, jid },
+				);
+				outgoingPresenceState.set(targetKey, {
+					type,
+					at: now,
+					cooldownMs: nextCooldownMs,
+				});
+			} catch {
+				// Presence send is best-effort for UX only.
+			}
+		},
+
+		armOutgoingTypingKeepAlive() {
+			if (outgoingTypingKeepAliveTimer) {
+				clearTimeout(outgoingTypingKeepAliveTimer);
+				outgoingTypingKeepAliveTimer = null;
+			}
+
+			if (!outgoingTypingActive || !outgoingTypingComposingSent) return;
+
+			const keepAliveMs = randomBetween(
+				TYPING_KEEPALIVE_MIN_MS,
+				TYPING_KEEPALIVE_MAX_MS,
+			);
+
+			outgoingTypingKeepAliveTimer = setTimeout(() => {
+				if (
+					!outgoingTypingActive ||
+					!outgoingTypingSessionId ||
+					!outgoingTypingJid
+				) {
+					return;
+				}
+
+				void this.sendChatPresence(
+					"composing",
+					outgoingTypingJid,
+					outgoingTypingSessionId,
+				);
+				this.armOutgoingTypingKeepAlive();
+			}, keepAliveMs);
+		},
+
+		scheduleOutgoingTypingPresence(jid) {
+			if (!selectedSessionId || !jid || isSending) return;
+
+			const sameTarget =
+				outgoingTypingActive &&
+				outgoingTypingSessionId === selectedSessionId &&
+				normalizeJid(outgoingTypingJid) === normalizeJid(jid);
+
+			if (!sameTarget && outgoingTypingActive) {
+				void this.pauseOutgoingTypingPresence();
+			}
+
+			if (!sameTarget) {
+				outgoingTypingSessionId = selectedSessionId;
+				outgoingTypingJid = jid;
+				outgoingTypingActive = true;
+				outgoingTypingComposingSent = false;
+				if (outgoingTypingStartTimer) {
+					clearTimeout(outgoingTypingStartTimer);
+					outgoingTypingStartTimer = null;
+				}
+				if (outgoingTypingKeepAliveTimer) {
+					clearTimeout(outgoingTypingKeepAliveTimer);
+					outgoingTypingKeepAliveTimer = null;
+				}
+
+				const startDelayMs = randomBetween(
+					TYPING_COMPOSING_START_MIN_MS,
+					TYPING_COMPOSING_START_MAX_MS,
+				);
+				const startSessionId = selectedSessionId;
+				const startJid = jid;
+				outgoingTypingStartTimer = setTimeout(() => {
+					outgoingTypingStartTimer = null;
+					if (
+						!outgoingTypingActive ||
+						outgoingTypingSessionId !== startSessionId ||
+						normalizeJid(outgoingTypingJid) !==
+							normalizeJid(startJid)
+					) {
+						return;
+					}
+
+					void this.sendChatPresence(
+						"composing",
+						startJid,
+						startSessionId,
+					);
+					outgoingTypingComposingSent = true;
+					this.armOutgoingTypingKeepAlive();
+				}, startDelayMs);
+			} else if (
+				outgoingTypingComposingSent &&
+				!outgoingTypingKeepAliveTimer
+			) {
+				this.armOutgoingTypingKeepAlive();
+			}
+
+			if (outgoingTypingPauseTimer) {
+				clearTimeout(outgoingTypingPauseTimer);
+			}
+
+			const idlePauseMs = randomBetween(
+				TYPING_PAUSE_AFTER_IDLE_MIN_MS,
+				TYPING_PAUSE_AFTER_IDLE_MAX_MS,
+			);
+			outgoingTypingPauseTimer = setTimeout(() => {
+				void this.pauseOutgoingTypingPresence();
+			}, idlePauseMs);
+		},
+
+		async pauseOutgoingTypingPresence(forceSendPaused = false) {
+			if (outgoingTypingPauseTimer) {
+				clearTimeout(outgoingTypingPauseTimer);
+				outgoingTypingPauseTimer = null;
+			}
+			if (outgoingTypingStartTimer) {
+				clearTimeout(outgoingTypingStartTimer);
+				outgoingTypingStartTimer = null;
+			}
+			if (outgoingTypingKeepAliveTimer) {
+				clearTimeout(outgoingTypingKeepAliveTimer);
+				outgoingTypingKeepAliveTimer = null;
+			}
+
+			const hasActiveTyping = outgoingTypingActive;
+			const hadComposingSent = outgoingTypingComposingSent;
+			const sessionId = outgoingTypingSessionId;
+			const jid = outgoingTypingJid;
+
+			outgoingTypingActive = false;
+			outgoingTypingComposingSent = false;
+			outgoingTypingSessionId = "";
+			outgoingTypingJid = "";
+
+			if (!sessionId || !jid) return;
+			if (!hasActiveTyping && !forceSendPaused) return;
+			if (!hadComposingSent && !forceSendPaused) return;
+
+			await this.sendChatPresence(
+				"paused",
+				jid,
+				sessionId,
+				forceSendPaused,
+			);
 		},
 
 		async render() {
@@ -992,6 +1192,7 @@
 
 		async loadConversation(jid, showToastOnError = true) {
 			if (!selectedSessionId || !jid) return;
+			await this.pauseOutgoingTypingPresence();
 
 			const main = document.getElementById("chatrooms-main");
 			if (!main) return;
@@ -1066,6 +1267,8 @@
 					const text = rawText.trim();
 					if (!text || isSending) return;
 
+					await this.pauseOutgoingTypingPresence();
+
 					// Clear input immediately
 					input.value = "";
 					draftByJid.set(jid, "");
@@ -1131,6 +1334,11 @@
 			composer.value = draftByJid.get(jid) || "";
 			composer.addEventListener("input", () => {
 				draftByJid.set(jid, composer.value);
+				if (composer.value.trim()) {
+					this.scheduleOutgoingTypingPresence(jid);
+					return;
+				}
+				void this.pauseOutgoingTypingPresence();
 			});
 		},
 
@@ -1269,7 +1477,9 @@
 			this.stopPolling();
 			this.stopPresenceStream();
 			this.setReadSyncStatus();
+			void this.pauseOutgoingTypingPresence();
 			isSending = false;
+			outgoingPresenceState.clear();
 			sentMessageStatus.clear();
 			window.removeEventListener("focus", this.onWindowFocus);
 			window.removeEventListener("blur", this.onWindowBlur);

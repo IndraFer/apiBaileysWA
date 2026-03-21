@@ -413,12 +413,58 @@ dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
     const result = await session.sendMessage(jid, {
       text,
       mentions: mentions.length > 0 ? mentions : undefined,
+    }, {
+      simulateTyping: false,
     });
     return c.json({
       success: true,
       message: "Message sent",
       data: { key: result?.key, messageTimestamp: result?.messageTimestamp },
     });
+  } catch (err) {
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * POST /dashboard/api/sessions/:sessionId/chats/presence
+ * Send presence update for a chat target (typing, recording, paused, etc.).
+ */
+dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const body = await c.req.json().catch(() => ({}));
+  const type = String(body.type || "").trim();
+  const rawJid = String(body.jid || "").trim();
+
+  const allowedTypes = new Set([
+    "available",
+    "unavailable",
+    "composing",
+    "recording",
+    "paused",
+  ]);
+  if (!allowedTypes.has(type)) {
+    return c.json({ success: false, message: "Invalid presence type" }, 400);
+  }
+
+  if (["composing", "recording", "paused"].includes(type) && !rawJid) {
+    return c.json({ success: false, message: "jid is required for chat presence type" }, 400);
+  }
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    let targetJid: string | undefined;
+    if (rawJid) {
+      const { formatPhone, formatGroup } = await import("@/utils/phone");
+      targetJid = rawJid.includes("@")
+        ? rawJid
+        : body.isGroup === true
+          ? formatGroup(rawJid)
+          : formatPhone(rawJid);
+    }
+
+    await session.sendPresenceUpdate(type as any, targetJid);
+    return c.json({ success: true, message: "Presence updated" });
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
