@@ -605,9 +605,10 @@ export class BaileysConnection {
 
   private async sendToWebhook(payload: WebhookPayload) {
     const webhookUrl = this.options.webhookUrl || config.webhook.url;
-    // options.webhookSecret is stored as undefined (not "") when blank, so this
-    // fallback to the global WEBHOOK_SECRET env variable works correctly.
-    const webhookSecret = this.options.webhookSecret || config.webhook.secret;
+    // Fallback order: session secret -> WEBHOOK_SECRET -> AUTH_GLOBAL_TOKEN.
+    // This keeps old behavior while allowing environments that reuse global auth token.
+    const webhookSecret =
+      this.options.webhookSecret || config.webhook.secret || config.auth.globalToken;
     if (!webhookUrl) {
       return;
     }
@@ -666,6 +667,7 @@ export class BaileysConnection {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (webhookSecret) {
           headers["x-webhook-secret"] = webhookSecret;
+          headers.Authorization = `Bearer ${webhookSecret}`;
         }
 
         const response = await fetch(webhookUrl, {

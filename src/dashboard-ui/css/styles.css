@@ -768,6 +768,18 @@ tr:hover td {
 	white-space: nowrap;
 }
 
+#webhook-logs-container {
+	max-height: 420px;
+	overflow-y: auto;
+}
+
+#webhook-logs-container thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--bg-card);
+}
+
 #webhook-logs-container td:nth-child(4) {
 	white-space: nowrap;
 	width: 1%;

@@ -193,7 +193,8 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
   try {
     const session = connectionManager.getSession(sessionId);
     const configuredUrl = session.getOptions().webhookUrl || "";
-    const configuredSecret = session.getOptions().webhookSecret || config.webhook.secret || "";
+    const configuredSecret =
+      session.getOptions().webhookSecret || config.webhook.secret || config.auth.globalToken || "";
     const webhookUrl = String(body.webhookUrl || configuredUrl).trim();
     const webhookSecret = String(body.webhookSecret || configuredSecret).trim();
 
@@ -225,6 +226,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (webhookSecret) {
         headers["x-webhook-secret"] = webhookSecret;
+        headers.Authorization = `Bearer ${webhookSecret}`;
       }
 
       const response = await fetch(webhookUrl, {
