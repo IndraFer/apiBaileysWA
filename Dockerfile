@@ -1,9 +1,11 @@
-FROM oven/bun:1 AS base
+FROM oven/bun:latest AS base
 WORKDIR /app
 
 # Install dependencies
-COPY package.json bun.lock* ./
+COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile --production
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy source
 COPY . .
@@ -18,4 +20,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/status || exit 1
 
-CMD ["bun", "src/index.ts"]
+CMD ["bun", "run", "dev"]
+#CMD ["bun", "src/index.ts"]
