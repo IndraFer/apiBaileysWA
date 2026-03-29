@@ -457,71 +457,73 @@
 			activeSelfJid = normalizeJid(sessions[0]?.user?.id || "");
 
 			document.getElementById("page-content").innerHTML = `
-        <div class="chatrooms-page">
-          <div class="chatrooms-toolbar">
-            <div class="chatrooms-toolbar-left">
-              <div class="form-group chatrooms-session-group">
-                <label for="chatrooms-session">Session</label>
-                <select id="chatrooms-session" ${selectedSessionId ? "" : "disabled"}>
-                  ${
-						sessions.length
-							? sessions
-									.map(
-										(s) =>
-											`<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`,
-									)
-									.join("")
-							: "<option>No connected sessions</option>"
-					}
-                </select>
-              </div>
-							<div class="chatrooms-mode-toggle" id="chatrooms-mode-toggle">
-								<button class="chatrooms-mode-btn active" data-mode="personal">Personal</button>
-								<button class="chatrooms-mode-btn" data-mode="groups">Groups</button>
-							</div>
-							<div class="form-group chatrooms-search-group">
-								<label for="chatrooms-search">Search Chat</label>
-								<input type="text" id="chatrooms-search" placeholder="Search by name / JID" />
-							</div>
+			<div class="chatrooms-page">
+				<div class="chatrooms-toolbar">
+					<div class="chatrooms-toolbar-controls">
+						<div class="form-group chatrooms-session-group">
+							<label for="chatrooms-session">Session</label>
+							<select id="chatrooms-session" ${selectedSessionId ? "" : "disabled"}>
+							${
+								sessions.length
+									? sessions
+											.map(
+												(s) =>
+													`<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`,
+											)
+											.join("")
+									: "<option>No connected sessions</option>"
+							}
+							</select>
+						</div>
+						<div class="chatrooms-mode-toggle" id="chatrooms-mode-toggle">
+							<button class="chatrooms-mode-btn active" data-mode="personal">Personal</button>
+							<button class="chatrooms-mode-btn" data-mode="groups">Groups</button>
+						</div>
+						<div class="form-group chatrooms-search-group">
+							<label for="chatrooms-search">Search Chat</label>
+							<input type="text" id="chatrooms-search" placeholder="Search by name / JID" />
+						</div>
+						<div class="chatrooms-toolbar-actions">
+							<div class="chatrooms-action-buttons">
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
-              <button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
-            </div>
-          </div>
-
-					<div class="chatrooms-meta-row">
-						<div class="text-sm text-muted" id="chatrooms-status">1-on-1 chats only</div>
-						<div><span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span></div>
-          </div>
-
-					<div class="chatrooms-polling-panel-row" id="chatrooms-polling-panel-row" hidden>
-						<div class="chatrooms-polling-panel" id="chatrooms-polling-panel">
-							<div class="form-group chatrooms-polling-group">
-								<label>Polling (ms)</label>
-								<div class="chatrooms-polling-controls">
-									<input type="number" id="poll-active-ms" min="1500" max="20000" value="${pollCfg.activeMs}" title="Active tab interval" />
-									<input type="number" id="poll-idle-ms" min="5000" max="120000" value="${pollCfg.idleMs}" title="Background tab interval" />
-									<button class="btn btn-outline btn-sm" id="poll-apply-btn" type="button">Apply</button>
-								</div>
-								<p class="text-xs text-muted mt-1">Left input is for active tab interval, right input is for background interval.</p>
+							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
 							</div>
+							
+							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
 						</div>
 					</div>
+				</div>
 
-					<div class="card chatrooms-compose-card">
-						<div class="card-header"><h3>Quick Send (Dashboard)</h3></div>
-						<form id="chatrooms-compose-form" class="chatrooms-compose-form">
-							<input type="text" id="chatrooms-compose-receiver" placeholder="WA Number (62...) or Group JID" required />
-							<input type="text" id="chatrooms-compose-text" placeholder="Message text" maxlength="2000" required />
-							<button class="btn btn-primary" type="submit">Send</button>
-						</form>
-						<p class="text-xs text-muted mt-1">Use a WhatsApp number for personal chat, or a Group JID when Groups mode is selected.</p>
+				<div class="chatrooms-polling-panel-row" id="chatrooms-polling-panel-row" hidden>
+					<div class="chatrooms-polling-panel" id="chatrooms-polling-panel">
+						<div class="form-group chatrooms-polling-group">
+							<label>Polling (ms)</label>
+							<div class="chatrooms-polling-controls">
+								<div class="chatrooms-polling-inputs">
+									<input type="number" id="poll-active-ms" min="1500" max="20000" value="${pollCfg.activeMs}" title="Active tab interval" placeholder="Active" />
+									<input type="number" id="poll-idle-ms" min="5000" max="120000" value="${pollCfg.idleMs}" title="Background tab interval" placeholder="Idle" />
+								</div>
+								<button class="btn btn-outline btn-sm" id="poll-apply-btn" type="button">Apply</button>
+							</div>
+							<p class="chatrooms-polling-help">Left input is for active tab interval, right input is for background interval.</p>
+						</div>
 					</div>
+				</div>
 
-          <div class="chatrooms-layout">
-            <aside class="chatrooms-sidebar" id="chatrooms-sidebar"></aside>
-            <section class="chatrooms-main" id="chatrooms-main"></section>
-          </div>
-        </div>`;
+				<div class="card chatrooms-compose-card">
+					<form id="chatrooms-compose-form" class="chatrooms-compose-form">
+						<input type="text" id="chatrooms-compose-receiver" placeholder="WA Number (62...) or Group JID" required />
+						<input type="text" id="chatrooms-compose-text" placeholder="Message text" maxlength="2000" required />
+						<button class="btn btn-primary" type="submit">Send</button>
+					</form>
+					<p class="text-xs text-muted mt-1">Use a WhatsApp number for personal chat, or a Group JID when Groups mode is selected.</p>
+				</div>
+
+				<div class="chatrooms-layout">
+					<aside class="chatrooms-sidebar" id="chatrooms-sidebar"></aside>
+					<section class="chatrooms-main" id="chatrooms-main"></section>
+				</div>
+			</div>`;
 
 			const sessionSelect = document.getElementById("chatrooms-session");
 			const refreshBtn = document.getElementById("chatrooms-refresh");
@@ -895,8 +897,6 @@
 
 		async loadChatList(showToastOnError = true) {
 			if (!selectedSessionId) return;
-			const statusEl = document.getElementById("chatrooms-status");
-			if (statusEl) statusEl.textContent = "Loading chats...";
 			const searchInput = document.getElementById("chatrooms-search");
 			const query = (searchInput?.value || "").trim().toLowerCase();
 			const isGroupMode = selectedMode === "groups";
@@ -907,7 +907,6 @@
 			if (!result.success) {
 				if (showToastOnError)
 					Toast.error(result.message || "Failed to load chats");
-				if (statusEl) statusEl.textContent = "Failed to load chats";
 				return;
 			}
 
@@ -935,22 +934,6 @@
 			}
 
 			await this.renderChatListFromCache(query);
-
-			if (!chatCache.length) {
-				if (statusEl)
-					statusEl.textContent = isGroupMode
-						? "No groups yet"
-						: "No personal chat yet";
-				return;
-			}
-
-			const unreadTotal = chatCache.reduce(
-				(sum, chat) => sum + Number(chat.unreadCount || 0),
-				0,
-			);
-			const modeLabel = isGroupMode ? "group rooms" : "1-on-1 rooms";
-			if (statusEl)
-				statusEl.textContent = `${chatCache.length} ${modeLabel} loaded | Unread: ${unreadTotal}`;
 		},
 
 		async renderChatListFromCache(query = "") {
