@@ -33,6 +33,7 @@ class ConnectionManager {
           webhookEvents: metadata?.webhookEvents,
           includeMedia: metadata?.includeMedia,
           syncFullHistory: metadata?.syncFullHistory,
+          autoReply: metadata?.autoReply,
           isReconnect: true,
           onConnectionClose: () => {
             this.connections.delete(id);
@@ -133,6 +134,7 @@ class ConnectionManager {
     webhookUrl: string;
     webhookSecret: string;
     webhookEvents: string[];
+    autoReply: SessionMetadata["autoReply"];
   }> {
     return [...this.connections.entries()].map(([id, conn]) => ({
       sessionId: id,
@@ -141,6 +143,7 @@ class ConnectionManager {
       webhookUrl: conn.getOptions().webhookUrl || "",
       webhookSecret: conn.getOptions().webhookSecret || "",
       webhookEvents: conn.getOptions().webhookEvents || [],
+      autoReply: conn.getOptions().autoReply,
     }));
   }
 

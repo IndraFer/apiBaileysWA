@@ -90,6 +90,31 @@ sessionRoutes.get("/:sessionId/qr", (c) => {
 });
 
 /**
+ * PATCH /sessions/:sessionId/settings
+ * Update settings for an active session.
+ */
+sessionRoutes.patch("/:sessionId/settings", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const body = parsed.data;
+
+  try {
+    await connectionManager.updateSessionSettings(sessionId, {
+      clientName: body.clientName,
+      webhookUrl: body.webhookUrl || undefined,
+      webhookSecret: body.webhookSecret || undefined,
+      includeMedia: body.includeMedia,
+      syncFullHistory: body.syncFullHistory,
+      autoReply: body.autoReply,
+    });
+    return success(c, null, "Session settings updated successfully");
+  } catch (err) {
+    return error(c, `Failed to update settings: ${(err as Error).message}`);
+  }
+});
+
+/**
  * DELETE /sessions/:sessionId
  * Logout and delete a session.
  */

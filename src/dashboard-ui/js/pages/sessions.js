@@ -55,6 +55,7 @@
             <td class="text-muted">${s.user?.id || s.phone || "—"}</td>
             <td class="flex gap-1">
               ${!s.connected ? `<button class="btn btn-outline btn-sm" onclick="SessionsPage.showQR('${s.sessionId || s.id}')">QR</button>` : ""}
+							<button class="btn btn-outline btn-sm" onclick="SessionsPage.showSettingsModal('${s.sessionId || s.id}')">Settings</button>
               <button class="btn btn-danger btn-sm" onclick="SessionsPage.deleteSession('${s.sessionId || s.id}')">Delete</button>
             </td>
           </tr>`,
@@ -86,18 +87,75 @@
             <label for="session-phone">Phone Number</label>
             <input type="text" id="session-phone" placeholder="+6281234567890" />
           </div>
+
+					<div style="margin: 1.5rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--border)">
+						<h4 style="font-size: 0.9rem; margin-bottom: 1rem">Auto Reply Configuration</h4>
+						<div class="form-group">
+							<label class="checkbox-label"><input type="checkbox" id="session-autoreply-enabled" /> Enable Auto Reply for this session</label>
+						</div>
+						<div id="autoreply-settings" class="hidden" style="padding-left: 1rem; border-left: 2px solid var(--accent-soft); margin-bottom: 1rem">
+							<div class="form-group">
+								<label for="session-autoreply-type">Trigger Mode</label>
+								<select id="session-autoreply-type">
+									<option value="always">Always Reply</option>
+									<option value="time_range">Outside Working Hours</option>
+									<option value="on_webhook_fail">On Webhook Failure</option>
+								</select>
+							</div>
+							<div id="autoreply-time-group" class="hidden" style="display:flex; gap:1rem; margin-bottom:1rem">
+								<div style="flex:1">
+									<label style="font-size:0.8rem">Start Time</label>
+									<input type="time" id="session-autoreply-start" value="18:00" />
+								</div>
+								<div style="flex:1">
+									<label style="font-size:0.8rem">End Time</label>
+									<input type="time" id="session-autoreply-end" value="08:00" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label for="session-autoreply-msg">Auto Reply Message</label>
+								<textarea id="session-autoreply-msg" rows="3" placeholder="Hello, we're currently away..."></textarea>
+							</div>
+						</div>
+					</div>
+
           <button type="submit" class="btn btn-primary btn-full">Create Session</button>
         </form>
       `,
 			);
 
-			document
-				.getElementById("session-pairing")
-				.addEventListener("change", (e) => {
-					document
-						.getElementById("pairing-phone-group")
-						.classList.toggle("hidden", !e.target.checked);
-				});
+			const pairingToggle = document.getElementById("session-pairing");
+			const autoReplyToggle = document.getElementById(
+				"session-autoreply-enabled",
+			);
+			const autoReplyType = document.getElementById(
+				"session-autoreply-type",
+			);
+
+			pairingToggle.addEventListener("change", (e) => {
+				document
+					.getElementById("pairing-phone-group")
+					.classList.toggle("hidden", !e.target.checked);
+			});
+
+			autoReplyToggle.addEventListener("change", (e) => {
+				document
+					.getElementById("autoreply-settings")
+					.classList.toggle("hidden", !e.target.checked);
+			});
+
+			autoReplyType.addEventListener("change", (e) => {
+				const timeGroup = document.getElementById(
+					"autoreply-time-group",
+				);
+				if (e.target.value === "time_range") {
+					timeGroup.classList.remove("hidden");
+					timeGroup.style.display = "flex";
+				} else {
+					timeGroup.classList.add("hidden");
+					timeGroup.style.display = "none";
+				}
+			});
 
 			document
 				.getElementById("new-session-form")
@@ -106,36 +164,51 @@
 					const sessionId = document
 						.getElementById("session-id")
 						.value.trim();
-					const webhookUrl = document
-						.getElementById("session-webhook")
-						.value.trim();
-					const usePairingCode =
-						document.getElementById("session-pairing").checked;
-					const freshAuth =
-						document.getElementById("session-fresh-auth").checked;
-					const phoneNumber = document
-						.getElementById("session-phone")
-						.value.trim();
-
 					if (!sessionId)
 						return Toast.warning("Session ID is required");
 
-					const body = { webhookUrl, usePairingCode, freshAuth };
-					if (usePairingCode && phoneNumber)
-						body.phoneNumber = phoneNumber;
+					const body = {
+						webhookUrl: document
+							.getElementById("session-webhook")
+							.value.trim(),
+						usePairingCode: pairingToggle.checked,
+						freshAuth:
+							document.getElementById("session-fresh-auth")
+								.checked,
+						phoneNumber: document
+							.getElementById("session-phone")
+							.value.trim(),
+					};
+
+					if (autoReplyToggle.checked) {
+						body.autoReply = {
+							enabled: true,
+							type: autoReplyType.value,
+							message:
+								document
+									.getElementById("session-autoreply-msg")
+									.value.trim() || "Halo!",
+							timeStart: document.getElementById(
+								"session-autoreply-start",
+							).value,
+							timeEnd: document.getElementById(
+								"session-autoreply-end",
+							).value,
+						};
+					}
 
 					const result = await API.post(
 						`/sessions/${sessionId}`,
 						body,
 					);
-
 					if (result.success) {
 						Toast.success("Session created");
-						if (result.data?.pairingCode) {
+						if (result.data?.pairingCode)
 							this.showPairingCode(result.data.pairingCode);
-						} else {
-							this.showQR(sessionId, { freshAuth });
-						}
+						else
+							this.showQR(sessionId, {
+								freshAuth: body.freshAuth,
+							});
 					} else {
 						Toast.error(
 							result.message || "Failed to create session",
@@ -250,6 +323,143 @@
 			} else {
 				Toast.error(result.message || "Failed to delete");
 			}
+		},
+
+		async showSettingsModal(sessionId) {
+			const result = await API.get("/sessions");
+			const session = result.data?.find(
+				(s) => (s.sessionId || s.id) === sessionId,
+			);
+			if (!session) return Toast.error("Session data not found");
+
+			const ar = session.autoReply || {};
+
+			Modal.show(
+				`Update Settings — ${sessionId}`,
+				`
+        <form id="update-session-form">
+          <div class="form-group">
+            <label for="update-webhook">Webhook URL</label>
+            <input type="url" id="update-webhook" placeholder="https://your-server.com/webhook" value="${session.webhookUrl || ""}" />
+          </div>
+					<div class="form-group">
+						<label for="update-secret">Webhook Secret Header</label>
+						<input type="text" id="update-secret" placeholder="Optional secret key" value="${session.webhookSecret || ""}" />
+					</div>
+
+					<div style="margin: 1.5rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--border)">
+						<h4 style="font-size: 0.9rem; margin-bottom: 1rem">Auto Reply Configuration</h4>
+						<div class="form-group">
+							<label class="checkbox-label"><input type="checkbox" id="update-autoreply-enabled" ${ar.enabled ? "checked" : ""} /> Enable Auto Reply</label>
+						</div>
+						<div id="update-autoreply-settings" class="${ar.enabled ? "" : "hidden"}" style="padding-left: 1rem; border-left: 2px solid var(--accent-soft); margin-bottom: 1rem">
+							<div class="form-group">
+								<label for="update-autoreply-type">Trigger Mode</label>
+								<select id="update-autoreply-type">
+									<option value="always" ${ar.type === "always" ? "selected" : ""}>Always Reply</option>
+									<option value="time_range" ${ar.type === "time_range" ? "selected" : ""}>Outside Working Hours</option>
+									<option value="on_webhook_fail" ${ar.type === "on_webhook_fail" ? "selected" : ""}>On Webhook Failure</option>
+								</select>
+							</div>
+							<div id="update-autoreply-time-group" class="${ar.type === "time_range" ? "" : "hidden"}" style="display:${ar.type === "time_range" ? "flex" : "none"}; gap:1rem; margin-bottom:1rem">
+								<div style="flex:1">
+									<label style="font-size:0.8rem">Start Time</label>
+									<input type="time" id="update-autoreply-start" value="${ar.timeStart || "18:00"}" />
+								</div>
+								<div style="flex:1">
+									<label style="font-size:0.8rem">End Time</label>
+									<input type="time" id="update-autoreply-end" value="${ar.timeEnd || "08:00"}" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label for="update-autoreply-msg">Auto Reply Message</label>
+								<textarea id="update-autoreply-msg" rows="3" placeholder="Hello, we're currently away...">${ar.message || ""}</textarea>
+							</div>
+						</div>
+					</div>
+
+          <button type="submit" class="btn btn-primary btn-full">Save Settings</button>
+        </form>
+      `,
+			);
+
+			const autoReplyToggle = document.getElementById(
+				"update-autoreply-enabled",
+			);
+			const autoReplyType = document.getElementById(
+				"update-autoreply-type",
+			);
+
+			autoReplyToggle.addEventListener("change", (e) => {
+				document
+					.getElementById("update-autoreply-settings")
+					.classList.toggle("hidden", !e.target.checked);
+			});
+
+			autoReplyType.addEventListener("change", (e) => {
+				const timeGroup = document.getElementById(
+					"update-autoreply-time-group",
+				);
+				if (e.target.value === "time_range") {
+					timeGroup.classList.remove("hidden");
+					timeGroup.style.display = "flex";
+				} else {
+					timeGroup.classList.add("hidden");
+					timeGroup.style.display = "none";
+				}
+			});
+
+			document
+				.getElementById("update-session-form")
+				.addEventListener("submit", async (e) => {
+					e.preventDefault();
+					const body = {
+						webhookUrl: document
+							.getElementById("update-webhook")
+							.value.trim(),
+						webhookSecret: document
+							.getElementById("update-secret")
+							.value.trim(),
+					};
+
+					if (autoReplyToggle.checked) {
+						body.autoReply = {
+							enabled: true,
+							type: autoReplyType.value,
+							message:
+								document
+									.getElementById("update-autoreply-msg")
+									.value.trim() ||
+								"Hello, we're currently away...",
+							timeStart: document.getElementById(
+								"update-autoreply-start",
+							).value,
+							timeEnd: document.getElementById(
+								"update-autoreply-end",
+							).value,
+						};
+					} else {
+						body.autoReply = {
+							enabled: false,
+							message: "",
+							type: "always",
+						};
+					}
+
+					const result = await API.patch(
+						`/sessions/${sessionId}/settings`,
+						body,
+					);
+					if (result.success) {
+						Toast.success("Settings updated successfully");
+						Modal.hide();
+						this.loadSessions();
+					} else {
+						Toast.error(
+							result.message || "Failed to update settings",
+						);
+					}
+				});
 		},
 
 		destroy() {
