@@ -130,6 +130,14 @@ const config = {
     autoReadMessages: AUTO_READ_MESSAGES === "true",
     autoMarkOnline: AUTO_MARK_ONLINE !== "false",
   },
+
+  autoReply: {
+    enabled: process.env.AUTO_REPLY_ENABLED === "true",
+    message: process.env.AUTO_REPLY_MESSAGE || "Hello, we're currently away.\nWe'll reply to your message soon.",
+    type: (process.env.AUTO_REPLY_TYPE || "always") as "always" | "time_range" | "on_webhook_fail",
+    timeStart: process.env.AUTO_REPLY_TIME_START || "18:00",
+    timeEnd: process.env.AUTO_REPLY_TIME_END || "08:00",
+  },
 };
 
 export default config;

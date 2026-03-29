@@ -404,7 +404,54 @@ export class BaileysConnection {
       }
     }
 
-    this.sendToWebhook(payload);
+    const webhookResult = await this.sendToWebhook(payload);
+
+    // Auto-reply logic
+    await this.handleAutoReply(data, webhookResult === "failed");
+  }
+
+  /**
+   * Handles auto-reply logic based on session or global configuration.
+   */
+  private async handleAutoReply(data: BaileysEventMap["messages.upsert"], webhookFailed: boolean) {
+    const autoReply = this.options.autoReply ?? config.autoReply;
+    if (!autoReply.enabled) return;
+
+    // Only reply to incoming messages from others
+    const messages = data.messages.filter((m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid));
+    if (messages.length === 0) return;
+
+    let shouldReply = false;
+    if (autoReply.type === "always") {
+      shouldReply = true;
+    } else if (autoReply.type === "on_webhook_fail") {
+      shouldReply = webhookFailed;
+    } else if (autoReply.type === "time_range") {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const { timeStart, timeEnd } = autoReply;
+
+      if (timeStart && timeEnd) {
+        if (timeStart <= timeEnd) {
+          // Normal range (e.g., 08:00 - 17:00)
+          shouldReply = currentTime >= timeStart && currentTime <= timeEnd;
+        } else {
+          // Overnight range (e.g., 22:00 - 06:00)
+          shouldReply = currentTime >= timeStart || currentTime <= timeEnd;
+        }
+      }
+    }
+
+    if (shouldReply) {
+      for (const m of messages) {
+        try {
+          logger.info("[%s] Sending auto-reply to %s", this.sessionId, m.key.remoteJid);
+          await this.sendMessage(m.key.remoteJid!, { text: autoReply.message }, { quoted: m });
+        } catch (err) {
+          logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
+        }
+      }
+    }
   }
 
   private async handleMessagesUpdate(data: BaileysEventMap["messages.update"]) {

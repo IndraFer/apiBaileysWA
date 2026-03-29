@@ -112,8 +112,7 @@ export async function getRedisSavedSessionIds<T>(): Promise<
     .map((id, i) => ({
       id,
       metadata: metadata[i] ? JSON.parse(metadata[i] as unknown as string) : null,
-    }))
-    .filter((item) => item.metadata) as Array<{ id: string; metadata: T }>;
+    }));
 }
 
 /**

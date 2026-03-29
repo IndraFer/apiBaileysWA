@@ -11,6 +11,14 @@ import type {
   MessageReceiptType,
 } from "@whiskeysockets/baileys";
 
+export interface AutoReplyConfig {
+  enabled: boolean;
+  message: string;
+  type: "always" | "time_range" | "on_webhook_fail";
+  timeStart?: string; // HH:mm
+  timeEnd?: string;   // HH:mm
+}
+
 export interface SessionOptions {
   /** Display name for the client browser */
   clientName?: string;
@@ -36,6 +44,8 @@ export interface SessionOptions {
   simulateTyping?: boolean;
   /** Override: auto-read incoming messages (per-session) */
   autoReadMessages?: boolean;
+  /** Auto-reply configuration */
+  autoReply?: AutoReplyConfig;
 }
 
 export interface SessionMetadata {
@@ -45,6 +55,7 @@ export interface SessionMetadata {
   webhookEvents?: string[];
   includeMedia?: boolean;
   syncFullHistory?: boolean;
+  autoReply?: AutoReplyConfig;
 }
 
 export interface WebhookPayload {
