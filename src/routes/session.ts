@@ -14,7 +14,7 @@ sessionRoutes.use("*", authMiddleware);
  * Create a new session (QR code or pairing code).
  */
 sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
 
   // Validate session ID format
   if (!SESSION_ID_REGEX.test(sessionId)) {
@@ -73,7 +73,7 @@ sessionRoutes.get("/", (c) => {
  * Get session status.
  */
 sessionRoutes.get("/:sessionId", (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const status = connectionManager.getSessionStatus(sessionId);
   return success(c, status);
 });
@@ -83,7 +83,7 @@ sessionRoutes.get("/:sessionId", (c) => {
  * Get current QR code for a pending session.
  */
 sessionRoutes.get("/:sessionId/qr", (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const status = connectionManager.getSessionStatus(sessionId);
 
   if (!status.exists) {
@@ -106,7 +106,7 @@ sessionRoutes.get("/:sessionId/qr", (c) => {
  * Update settings for an active session.
  */
 sessionRoutes.patch("/:sessionId/settings", async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const body = parsed.data;
@@ -131,7 +131,7 @@ sessionRoutes.patch("/:sessionId/settings", async (c) => {
  * Logout and delete a session.
  */
 sessionRoutes.delete("/:sessionId", async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
 
   try {
     await connectionManager.deleteSession(sessionId);

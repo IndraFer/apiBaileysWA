@@ -25,7 +25,7 @@ groupRoutes.use("*", authMiddleware);
  * POST /groups/:sessionId/create
  */
 groupRoutes.post("/:sessionId/create", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = groupCreateSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { groupName, participants } = parsed.data;
@@ -44,7 +44,7 @@ groupRoutes.post("/:sessionId/create", sessionValidator, async (c) => {
  * GET /groups/:sessionId/list
  */
 groupRoutes.get("/:sessionId/list", sessionValidator, (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   try {
     const session = connectionManager.getSession(sessionId);
     const groups = session.getStore().getChatList(true);
@@ -59,7 +59,7 @@ groupRoutes.get("/:sessionId/list", sessionValidator, (c) => {
  * List all groups with participants (direct from WhatsApp).
  */
 groupRoutes.get("/:sessionId/list-all", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   try {
     const session = connectionManager.getSession(sessionId);
     const groups = await session.groupFetchAllParticipating();
@@ -73,8 +73,8 @@ groupRoutes.get("/:sessionId/list-all", sessionValidator, async (c) => {
  * GET /groups/:sessionId/metadata/:jid
  */
 groupRoutes.get("/:sessionId/metadata/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -91,7 +91,7 @@ groupRoutes.get("/:sessionId/metadata/:jid", sessionValidator, async (c) => {
  * Send a message to a group.
  */
 groupRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = groupSendSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { receiver, message } = parsed.data;
@@ -111,8 +111,8 @@ groupRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) 
  * Update participants (add/remove/promote/demote).
  */
 groupRoutes.post("/:sessionId/participants/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
   const parsed = groupParticipantsSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { participants, action } = parsed.data;
@@ -131,8 +131,8 @@ groupRoutes.post("/:sessionId/participants/:jid", sessionValidator, async (c) =>
  * PATCH /groups/:sessionId/subject/:jid
  */
 groupRoutes.patch("/:sessionId/subject/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
   const parsed = groupSubjectSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -149,8 +149,8 @@ groupRoutes.patch("/:sessionId/subject/:jid", sessionValidator, async (c) => {
  * PATCH /groups/:sessionId/description/:jid
  */
 groupRoutes.patch("/:sessionId/description/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
   const parsed = groupDescriptionSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -168,8 +168,8 @@ groupRoutes.patch("/:sessionId/description/:jid", sessionValidator, async (c) =>
  * Update group settings (announcement/not_announcement/locked/unlocked).
  */
 groupRoutes.patch("/:sessionId/settings/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
   const parsed = groupSettingSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -186,8 +186,8 @@ groupRoutes.patch("/:sessionId/settings/:jid", sessionValidator, async (c) => {
  * PATCH /groups/:sessionId/profile-picture/:jid
  */
 groupRoutes.patch("/:sessionId/profile-picture/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
   const parsed = groupProfilePictureSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -204,8 +204,8 @@ groupRoutes.patch("/:sessionId/profile-picture/:jid", sessionValidator, async (c
  * POST /groups/:sessionId/leave/:jid
  */
 groupRoutes.post("/:sessionId/leave/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -220,8 +220,8 @@ groupRoutes.post("/:sessionId/leave/:jid", sessionValidator, async (c) => {
  * GET /groups/:sessionId/invite-code/:jid
  */
 groupRoutes.get("/:sessionId/invite-code/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -236,7 +236,7 @@ groupRoutes.get("/:sessionId/invite-code/:jid", sessionValidator, async (c) => {
  * POST /groups/:sessionId/accept-invite
  */
 groupRoutes.post("/:sessionId/accept-invite", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = groupAcceptInviteSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -253,8 +253,8 @@ groupRoutes.post("/:sessionId/accept-invite", sessionValidator, async (c) => {
  * POST /groups/:sessionId/revoke-invite/:jid
  */
 groupRoutes.post("/:sessionId/revoke-invite/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = formatGroup(c.req.param("jid"));
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
 
   try {
     const session = connectionManager.getSession(sessionId);

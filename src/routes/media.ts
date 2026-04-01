@@ -18,7 +18,7 @@ mediaRoutes.use("*", authMiddleware);
  * Download media from a message (returns base64).
  */
 mediaRoutes.post("/:sessionId/download", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
   const { remoteJid, messageId } = body;
 
@@ -47,7 +47,7 @@ mediaRoutes.post("/:sessionId/download", sessionValidator, async (c) => {
  * Retrieve a saved media file by ID.
  */
 mediaRoutes.get("/file/:id", async (c) => {
-  const id = c.req.param("id");
+  const id = c.req.param("id") ?? "";
   const filePath = resolve(join(MEDIA_DIR, id));
 
   // Prevent path traversal

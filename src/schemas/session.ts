@@ -32,7 +32,11 @@ export const createSessionSchema = z
     autoReply: autoReplySchema,
   })
   .optional()
-  .default({});
+  .default(() => ({
+    freshAuth: false,
+    usePairingCode: false,
+    syncFullHistory: false,
+  }));
 
 /** Session ID must be alphanumeric with hyphens/underscores, 1-64 chars */
 export const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;

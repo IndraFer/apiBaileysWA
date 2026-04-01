@@ -13,21 +13,24 @@
 
 ## ✨ Features
 
-| Feature                    | Description                                                       |
-| -------------------------- | ----------------------------------------------------------------- |
-| **Dual Runtime Support**   | Run on ultra-fast Bun or standard Node.js (cPanel/VPS compatible) |
-| **Visual Dashboard**       | Built-in UI to manage sessions, webhooks, and send messages       |
-| **Multi-Session**          | Manage multiple WhatsApp accounts simultaneously                  |
-| **QR Code & Pairing Code** | Connect via QR scan or 8-digit pairing code                       |
-| **Complete Chat API**      | Send text, media, forward, delete, read messages                  |
-| **Broadcast Queue**        | Bulk message sending with anti-spam delays                        |
-| **Group & Profile**        | Full management (create, participants, status, picture)           |
-| **Media Handling**         | Download, process, retrieve, and auto-cleanup old media           |
-| **Webhook System**         | Event notifications with retry & exponential backoff              |
-| **Dual Auth State**        | Save session data to Files (dev) or Redis (production)            |
-| **API Authentication**     | Bearer token or Redis-stored API keys with roles                  |
-| **Swagger/OpenAPI**        | Built-in interactive API documentation at `/docs`                 |
-| **Docker Support**         | Ready-to-use Dockerfiles for both Bun and Node.js                 |
+| Feature                     | Description                                                       |
+| --------------------------- | ----------------------------------------------------------------- |
+| **Dual Runtime Support**    | Run on ultra-fast Bun or standard Node.js (cPanel/VPS compatible) |
+| **Visual Dashboard**        | Built-in UI to manage sessions, webhooks, and send messages       |
+| **Dashboard RBAC**          | Role-based access (`admin`, `manager`, `assistant`) + approvals   |
+| **Session Assignment ACL**  | Optional per-user assigned sessions (dashboard scope only)        |
+| **Multi-Session**           | Manage multiple WhatsApp accounts simultaneously                  |
+| **QR Code & Pairing Code**  | Connect via QR scan or 8-digit pairing code                       |
+| **Complete Chat API**       | Send text, media, forward, delete, read messages                  |
+| **Broadcast Queue**         | Bulk message sending with anti-spam delays                        |
+| **Group & Profile**         | Full management (create, participants, status, picture)           |
+| **Media Handling**          | Download, process, retrieve, and auto-cleanup old media           |
+| **Webhook System**          | Retries, exponential backoff, and signature modes                 |
+| **Dual Auth State**         | Save session data to Files (dev) or Redis (production)            |
+| **API Authentication**      | Bearer token or Redis-stored API keys with roles                  |
+| **Hardened Dashboard Auth** | JWT auth, stream token for SSE, password policy, approval flow    |
+| **Swagger/OpenAPI**         | Built-in interactive API documentation at `/docs`                 |
+| **Docker Support**          | Ready-to-use Dockerfiles for both Bun and Node.js                 |
 
 ---
 
@@ -115,8 +118,10 @@ The API includes an intuitive, modular web dashboard to manage everything visual
 
 ```env
 DASHBOARD_ENABLED=true
-DASHBOARD_REGISTRATION_ENABLED=true
+DASHBOARD_REGISTRATION_ENABLED=false
+DASHBOARD_REGISTRATION_REQUIRE_APPROVAL=true
 DASHBOARD_JWT_SECRET=super-secret-key-change-me
+DASHBOARD_PASSWORD_MIN_LENGTH=6
 ```
 
 ### Initial Setup
@@ -125,6 +130,19 @@ DASHBOARD_JWT_SECRET=super-secret-key-change-me
 2. If `data/dashboard-users.json` is empty, you will be prompted to create the very first **Admin Account**.
 3. Create your account with a secure password (hashed via `bcryptjs`).
 4. Once created, recommended to set `DASHBOARD_REGISTRATION_ENABLED=false` in `.env` to prevent public sign-ups.
+
+### Role & Access Model
+
+- `admin`: full dashboard access (users/approval/roles, session lifecycle, webhooks, all messaging).
+- `manager`: operational access for chats/outbound/groups, without admin-level account controls.
+- `assistant`: reply-focused dashboard role (no proactive outbound), for safer delegated handling.
+- Optional `assignedSessions`: per-user session scoping in dashboard APIs/UI only.
+
+### Registration & Approval Behavior
+
+- `DASHBOARD_REGISTRATION_ENABLED=false`: registration form is disabled for additional users.
+- `DASHBOARD_REGISTRATION_REQUIRE_APPROVAL=true`: newly registered users remain pending until approved by admin.
+- The first bootstrap admin (when user file is empty) is created immediately.
 
 ### Features
 
@@ -147,7 +165,12 @@ Set `AUTH_GLOBAL_TOKEN` in `.env`:
 AUTH_GLOBAL_TOKEN=your-secret-token-here
 ```
 
-Use header: `Authorization: Bearer your-secret-token-here`
+Supported headers for simple token mode:
+
+- `Authorization: Bearer <token>`
+- `x-api-key: <token>`
+- `x-access-token: <token>`
+- `token: <token>`
 
 Use in requests:
 
@@ -190,6 +213,12 @@ curl -H "x-api-key: <your-api-key>" http://localhost:3000/sessions
 ```
 
 > **Note**: In `development` mode (`NODE_ENV=development`), API authentication is skipped entirely.
+
+### Dashboard Authentication (UI)
+
+- Dashboard endpoints (`/dashboard/api/*`) use JWT-based auth.
+- SSE/Event stream endpoints use short-lived stream-scoped tokens.
+- Stream token endpoint: `GET /dashboard/api/auth/stream-token`
 
 ---
 
@@ -277,6 +306,21 @@ Set `WEBHOOK_URL` in `.env` or per-session. Events are sent as POST:
 }
 ```
 
+When signature mode is enabled, webhook requests can include:
+
+- `x-webhook-timestamp`
+- `x-webhook-signature: sha256=<hmac>`
+
+Controlled by:
+
+- `WEBHOOK_SIGNATURE_MODE=off|optional|required`
+- `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK=true|false`
+
+Fallback order for webhook auth/signing secret:
+
+1. Per-session webhook secret
+2. `AUTH_GLOBAL_TOKEN` (only when fallback is enabled)
+
 Available events:
 
 - `connection.update` — Connection state changes (QR, open, close)
@@ -362,37 +406,76 @@ baileys-wa-api/
 
 ## ⚙️ Configuration Reference (`.env`)
 
-| Variable                         | Default                  | Description                                                              |
-| -------------------------------- | ------------------------ | ------------------------------------------------------------------------ |
-| `NODE_ENV`                       | `development`            | Environment (`development` / `production`)                               |
-| `HOST`                           | `0.0.0.0`                | Server host                                                              |
-| `PORT`                           | `3000`                   | Server port                                                              |
-| `LOG_LEVEL`                      | `info`                   | Log level (`debug`, `info`, `warn`, `error`)                             |
-| `AUTH_GLOBAL_TOKEN`              | —                        | Simple auth token                                                        |
-| `REDIS_ENABLED`                  | `false`                  | Enable Redis integration                                                 |
-| `REDIS_URL`                      | `redis://localhost:6379` | Redis connection URL                                                     |
-| `REDIS_PASSWORD`                 | —                        | Redis password                                                           |
-| `BAILEYS_LOG_LEVEL`              | `warn`                   | Baileys internal log level                                               |
-| `MAX_RETRIES`                    | `5`                      | Max reconnection attempts                                                |
-| `RECONNECT_INTERVAL`             | `5000`                   | Reconnection delay (ms)                                                  |
-| `WEBHOOK_URL`                    | —                        | Default webhook URL                                                      |
-| `WEBHOOK_ALLOWED_EVENTS`         | `ALL`                    | Comma-separated event filter                                             |
-| `WEBHOOK_RETRY_MAX`              | `3`                      | Webhook delivery retry count                                             |
-| `BROADCAST_MIN_DELAY_MS`         | `1500`                   | Min delay between bulk messages                                          |
-| `BROADCAST_MAX_DELAY_MS`         | `3000`                   | Max delay between bulk messages                                          |
-| `BROADCAST_BATCH_SIZE`           | `10`                     | Messages per batch before pause                                          |
-| `BROADCAST_BATCH_PAUSE_MS`       | `5000`                   | Pause between batches                                                    |
-| `MEDIA_INCLUDE_BASE64`           | `false`                  | Include media in webhooks                                                |
-| `MEDIA_CLEANUP_ENABLED`          | `true`                   | Auto-delete old media files                                              |
-| `MEDIA_MAX_AGE_HOURS`            | `24`                     | Max age of media files                                                   |
-| `CORS_ORIGIN`                    | `*`                      | CORS allowed origins                                                     |
-| `DASHBOARD_ENABLED`              | `true`                   | Enable internal UI dashboard                                             |
-| `DASHBOARD_REGISTRATION_ENABLED` | `true`                   | Allow account creation                                                   |
-| `SIMULATE_TYPING_BEFORE_SEND`    | `true`                   | Auto-send "composing" presence before each message (default: true)       |
-| `SIMULATE_TYPING_DELAY_MIN_MS`   | `1500`                   | Typing delay range in ms (random between min-max)                        |
-| `SIMULATE_TYPING_DELAY_MAX_MS`   | `3000`                   | Typing delay range in ms (random between min-max)                        |
-| `AUTO_READ_MESSAGES`             | `false`                  | Auto-mark incoming messages as read (default: false, like WA Web toggle) |
-| `AUTO_MARK_ONLINE`               | `true`                   | Auto-set presence to "available" when sending messages (default: true)   |
+| Variable                                  | Default                          | Description                                                              |
+| ----------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
+| `NODE_ENV`                                | `development`                    | Environment (`development` / `production`)                               |
+| `HOST`                                    | `0.0.0.0`                        | Server host                                                              |
+| `PORT`                                    | `3000`                           | Server port                                                              |
+| `LOG_LEVEL`                               | `info`                           | Log level (`debug`, `info`, `warn`, `error`)                             |
+| `AUTH_GLOBAL_TOKEN`                       | —                                | Simple auth token                                                        |
+| `REDIS_ENABLED`                           | `false`                          | Enable Redis integration                                                 |
+| `REDIS_URL`                               | `redis://localhost:6379`         | Redis connection URL                                                     |
+| `REDIS_PASSWORD`                          | —                                | Redis password                                                           |
+| `BAILEYS_LOG_LEVEL`                       | `warn`                           | Baileys internal log level                                               |
+| `MAX_RETRIES`                             | `5`                              | Max reconnection attempts                                                |
+| `RECONNECT_INTERVAL`                      | `5000`                           | Reconnection delay (ms)                                                  |
+| `MAX_SESSIONS`                            | `50`                             | Maximum concurrent WhatsApp sessions                                     |
+| `WEBHOOK_URL`                             | —                                | Default webhook URL                                                      |
+| `WEBHOOK_SIGNATURE_MODE`                  | `off`                            | Webhook signature mode (`off`, `optional`, `required`)                   |
+| `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | auto by env                      | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
+| `WEBHOOK_ALLOWED_EVENTS`                  | `ALL`                            | Comma-separated event filter                                             |
+| `WEBHOOK_RETRY_MAX`                       | `3`                              | Webhook delivery retry count                                             |
+| `WEBHOOK_RETRY_INTERVAL`                  | `5000`                           | Initial webhook retry delay (ms)                                         |
+| `WEBHOOK_BACKOFF_FACTOR`                  | `3`                              | Exponential backoff multiplier                                           |
+| `BROADCAST_MIN_DELAY_MS`                  | `1500`                           | Min delay between bulk messages                                          |
+| `BROADCAST_MAX_DELAY_MS`                  | `3000`                           | Max delay between bulk messages                                          |
+| `BROADCAST_BATCH_SIZE`                    | `10`                             | Messages per batch before pause                                          |
+| `BROADCAST_BATCH_PAUSE_MS`                | `5000`                           | Pause between batches                                                    |
+| `MEDIA_INCLUDE_BASE64`                    | `false`                          | Include media in webhooks                                                |
+| `MEDIA_CLEANUP_ENABLED`                   | `true`                           | Auto-delete old media files                                              |
+| `MEDIA_CLEANUP_INTERVAL_MS`               | `3600000`                        | Media cleanup interval (ms)                                              |
+| `MEDIA_MAX_AGE_HOURS`                     | `24`                             | Max age of media files                                                   |
+| `CORS_ORIGIN`                             | `*`                              | CORS allowed origins                                                     |
+| `DASHBOARD_ENABLED`                       | `true`                           | Enable internal UI dashboard                                             |
+| `DASHBOARD_REGISTRATION_ENABLED`          | `false`                          | Allow account creation                                                   |
+| `DASHBOARD_REGISTRATION_REQUIRE_APPROVAL` | `true`                           | Require admin approval before new user can login                         |
+| `DASHBOARD_PASSWORD_MIN_LENGTH`           | `6`                              | Minimum password length for dashboard users                              |
+| `DASHBOARD_JWT_SECRET`                    | `change-this-to-a-random-secret` | JWT secret for dashboard auth                                            |
+| `SIMULATE_TYPING_BEFORE_SEND`             | `true`                           | Auto-send "composing" presence before each message (default: true)       |
+| `SIMULATE_TYPING_DELAY_MIN_MS`            | `1500`                           | Typing delay range in ms (random between min-max)                        |
+| `SIMULATE_TYPING_DELAY_MAX_MS`            | `3000`                           | Typing delay range in ms (random between min-max)                        |
+| `AUTO_READ_MESSAGES`                      | `false`                          | Auto-mark incoming messages as read (default: false, like WA Web toggle) |
+| `AUTO_MARK_ONLINE`                        | `true`                           | Auto-set presence to "available" when sending messages (default: true)   |
+
+---
+
+## 🧪 Useful Scripts
+
+Use these commands for validation and maintenance:
+
+```bash
+# Type-check only
+npm run build-check
+
+# Lint with error-level gate
+npm run lint
+
+# Full lint diagnostics
+npm run lint:all
+
+# Auto-format/fix source files
+npm run format
+```
+
+API key helper:
+
+```bash
+# Bun runtime
+bun run manage-api-keys create admin
+
+# Node runtime
+npm run manage-api-keys:node create admin
+```
 
 ---
 

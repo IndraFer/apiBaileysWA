@@ -22,7 +22,7 @@ services:
                 condition: service_healthy
 
     redis:
-        image: redis:7-alpine
+        image: redis:alpine
         container_name: baileys-wa-redis
         restart: unless-stopped
         ports:

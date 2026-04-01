@@ -14,7 +14,7 @@ profileRoutes.use("*", authMiddleware);
  * Get own profile info.
  */
 profileRoutes.get("/:sessionId", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -54,7 +54,7 @@ profileRoutes.get("/:sessionId", sessionValidator, async (c) => {
  * Update profile status text.
  */
 profileRoutes.patch("/:sessionId/status", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
 
   try {
@@ -71,7 +71,7 @@ profileRoutes.patch("/:sessionId/status", sessionValidator, async (c) => {
  * Update display name.
  */
 profileRoutes.patch("/:sessionId/name", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
 
   try {
@@ -88,7 +88,7 @@ profileRoutes.patch("/:sessionId/name", sessionValidator, async (c) => {
  * Update profile picture.
  */
 profileRoutes.patch("/:sessionId/picture", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
 
   try {
@@ -109,8 +109,8 @@ profileRoutes.patch("/:sessionId/picture", sessionValidator, async (c) => {
  * Get profile picture URL of any user or group.
  */
 profileRoutes.get("/:sessionId/picture/:jid", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = c.req.param("jid");
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = c.req.param("jid") ?? "";
   const type = (c.req.query("type") as "preview" | "image") ?? "image";
 
   try {
@@ -130,7 +130,7 @@ profileRoutes.get("/:sessionId/picture/:jid", sessionValidator, async (c) => {
  * Block or unblock a user.
  */
 profileRoutes.post("/:sessionId/block", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
   const { jid, action } = body; // action: "block" | "unblock"
 

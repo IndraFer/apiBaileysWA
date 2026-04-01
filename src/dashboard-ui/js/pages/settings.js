@@ -1,46 +1,45 @@
 /** Settings Page — account info, health check modal, OpenAPI viewer, about */
 (() => {
-	function escapeHtml(value) {
-		return String(value ?? "")
-			.replaceAll("&", "&amp;")
-			.replaceAll("<", "&lt;")
-			.replaceAll(">", "&gt;")
-			.replaceAll('"', "&quot;")
-			.replaceAll("'", "&#39;");
-	}
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
 
-	window.SettingsPage = {
-		formatAssignedSessionsSummary(assignedSessions) {
-			if (!assignedSessions || assignedSessions.length === 0) {
-				return "All sessions";
-			}
+  window.SettingsPage = {
+    formatAssignedSessionsSummary(assignedSessions) {
+      if (!assignedSessions || assignedSessions.length === 0) {
+        return "All sessions";
+      }
 
-			if (assignedSessions.length === 1) {
-				return assignedSessions[0];
-			}
+      if (assignedSessions.length === 1) {
+        return assignedSessions[0];
+      }
 
-			if (assignedSessions.length === 2) {
-				return assignedSessions.join(", ");
-			}
+      if (assignedSessions.length === 2) {
+        return assignedSessions.join(", ");
+      }
 
-			return `${assignedSessions.length} sessions selected`;
-		},
+      return `${assignedSessions.length} sessions selected`;
+    },
 
-		async render() {
-			const user = JSON.parse(
-				localStorage.getItem("wa-dashboard-user") || "{}",
-			);
-			const role = user.role || "assistant";
-			const roleSummary =
-				{
-					admin: "Full system control, user approval, session/webhook management, outbound messaging, and monitoring.",
-					manager:
-						"Operational role for handling chats and outbound communication, without system-level control.",
-					assistant:
-						"Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
-				}[role] || "Limited operational access.";
+    async render() {
+      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      const role = user.role || "assistant";
+      const roleSummary =
+        {
+          admin:
+            "Full system control, user approval, session/webhook management, outbound messaging, and monitoring.",
+          manager:
+            "Operational role for handling chats and outbound communication, without system-level control.",
+          assistant:
+            "Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
+        }[role] || "Limited operational access.";
 
-			document.getElementById("page-content").innerHTML = `
+      document.getElementById("page-content").innerHTML = `
         <div class="card mb-2">
           <div class="card-header">
             <h3>Account</h3>
@@ -106,49 +105,38 @@
           <div style="padding: 1rem;"><div class="skeleton skeleton-text" style="width: 200px; height: 16px; margin-bottom: 8px;"></div><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></div>
         </div>`;
 
-			const healthBtn = document.getElementById("btn-health-check");
-			if (healthBtn) {
-				healthBtn.addEventListener("click", () =>
-					this.showHealthCheck(),
-				);
-			}
-			document
-				.getElementById("btn-openapi")
-				.addEventListener("click", () => this.showOpenAPI());
+      const healthBtn = document.getElementById("btn-health-check");
+      if (healthBtn) {
+        healthBtn.addEventListener("click", () => this.showHealthCheck());
+      }
+      document.getElementById("btn-openapi").addEventListener("click", () => this.showOpenAPI());
 
-			// Password logic
-			document
-				.getElementById("btn-show-password-modal")
-				.addEventListener("click", () =>
-					this.showChangePasswordModal(),
-				);
+      // Password logic
+      document
+        .getElementById("btn-show-password-modal")
+        .addEventListener("click", () => this.showChangePasswordModal());
 
-			// Load simulation config & users (if admin)
-			this.loadSimulationConfig();
+      // Load simulation config & users (if admin)
+      this.loadSimulationConfig();
 
-			if (user.role === "admin") {
-				const btnUsers = document.getElementById(
-					"btn-show-users-modal",
-				);
-				if (btnUsers)
-					btnUsers.addEventListener("click", () =>
-						this.showUsersModal(),
-					);
-			}
+      if (user.role === "admin") {
+        const btnUsers = document.getElementById("btn-show-users-modal");
+        if (btnUsers) btnUsers.addEventListener("click", () => this.showUsersModal());
+      }
 
-			try {
-				const res = await fetch("/dashboard/api/about", {
-					headers: {
-						Authorization: `Bearer ${localStorage.getItem("wa-dashboard-token")}`,
-					},
-				});
-				if (!res.ok) throw new Error("Failed to fetch");
-				const json = await res.json();
-				const data = json.data;
-				const aboutCard = document.getElementById("about-card");
-				if (aboutCard) {
-					const restricted = Boolean(data.infoRestricted);
-					aboutCard.innerHTML = `
+      try {
+        const res = await fetch("/dashboard/api/about", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("wa-dashboard-token")}`,
+          },
+        });
+        if (!res.ok) throw new Error("Failed to fetch");
+        const json = await res.json();
+        const data = json.data;
+        const aboutCard = document.getElementById("about-card");
+        if (aboutCard) {
+          const restricted = Boolean(data.infoRestricted);
+          aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
 						<tr><td class="text-muted" style="width:100px">Project</td><td><strong>${data.project}</strong></td></tr>
@@ -157,11 +145,11 @@
 						${restricted ? "" : `<tr><td class="text-muted">Runtime</td><td>${data.runtime}</td></tr>`}
 					  </table>
 					`;
-				}
-			} catch (_err) {
-				const aboutCard = document.getElementById("about-card");
-				if (aboutCard) {
-					aboutCard.innerHTML = `
+        }
+      } catch (_err) {
+        const aboutCard = document.getElementById("about-card");
+        if (aboutCard) {
+          aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
 						<tr><td class="text-muted" style="width:100px">Project</td><td><strong>Baileys WA API</strong></td></tr>
@@ -170,39 +158,35 @@
 						<tr><td class="text-muted">Runtime</td><td>Bun + Hono</td></tr>
 					  </table>
 					`;
-				}
-			}
-		},
+        }
+      }
+    },
 
-		/** Health Check — fetches /status and renders visual cards */
-		async showHealthCheck() {
-			Modal.show(
-				"Health Check",
-				'<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
-			);
+    /** Health Check — fetches /status and renders visual cards */
+    async showHealthCheck() {
+      Modal.show(
+        "Health Check",
+        '<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
+      );
 
-			try {
-				const res = await fetch("/status");
-				const json = await res.json();
-				const d = json.data || json;
+      try {
+        const res = await fetch("/status");
+        const json = await res.json();
+        const d = json.data || json;
 
-				const uptimeH = Math.floor((d.uptime || 0) / 3600);
-				const uptimeM = Math.floor(((d.uptime || 0) % 3600) / 60);
-				const uptimeS = Math.floor((d.uptime || 0) % 60);
-				const uptimeStr =
-					uptimeH > 0
-						? `${uptimeH}h ${uptimeM}m ${uptimeS}s`
-						: `${uptimeM}m ${uptimeS}s`;
+        const uptimeH = Math.floor((d.uptime || 0) / 3600);
+        const uptimeM = Math.floor(((d.uptime || 0) % 3600) / 60);
+        const uptimeS = Math.floor((d.uptime || 0) % 60);
+        const uptimeStr =
+          uptimeH > 0 ? `${uptimeH}h ${uptimeM}m ${uptimeS}s` : `${uptimeM}m ${uptimeS}s`;
 
-				const statusColor =
-					json.success !== false ? "var(--success)" : "var(--danger)";
-				const statusIcon = json.success !== false ? "✓" : "✕";
-				const statusText =
-					json.success !== false ? "Healthy" : "Unhealthy";
-				const projectName = d.name || "Baileys WA API";
-				const projectVersion = d.version || "v1.0.0";
+        const statusColor = json.success !== false ? "var(--success)" : "var(--danger)";
+        const statusIcon = json.success !== false ? "✓" : "✕";
+        const statusText = json.success !== false ? "Healthy" : "Unhealthy";
+        const projectName = d.name || "Baileys WA API";
+        const projectVersion = d.version || "v1.0.0";
 
-				document.getElementById("modal-body").innerHTML = `
+        document.getElementById("modal-body").innerHTML = `
           <div style="text-align:center;margin-bottom:1.25rem">
             <div style="width:56px;height:56px;border-radius:50%;background:${statusColor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:0.5rem">${statusIcon}</div>
             <h3 style="margin:0;color:${statusColor}">${statusText}</h3>
@@ -238,54 +222,53 @@
             <tr><td class="text-muted">Description</td><td class="text-sm">${d.description || "—"}</td></tr>
           </table>
         `;
-			} catch (err) {
-				document.getElementById("modal-body").innerHTML = `
+      } catch (err) {
+        document.getElementById("modal-body").innerHTML = `
           <div style="text-align:center;padding:1.5rem">
             <div style="font-size:2rem;margin-bottom:0.5rem">⚠️</div>
             <p class="text-danger">Failed to reach health endpoint</p>
             <p class="text-muted text-sm">${err.message}</p>
           </div>`;
-			}
-		},
+      }
+    },
 
-		/** OpenAPI Spec — fetches /openapi.json and renders formatted tree view */
-		async showOpenAPI() {
-			Modal.show(
-				"OpenAPI Specification",
-				'<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
-			);
+    /** OpenAPI Spec — fetches /openapi.json and renders formatted tree view */
+    async showOpenAPI() {
+      Modal.show(
+        "OpenAPI Specification",
+        '<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
+      );
 
-			try {
-				const res = await fetch("/openapi.json");
-				const spec = await res.json();
+      try {
+        const res = await fetch("/openapi.json");
+        const spec = await res.json();
 
-				const paths = Object.keys(spec.paths || {});
-				const methods = {
-					get: "badge-info",
-					post: "badge-success",
-					put: "badge-warning",
-					delete: "badge-danger",
-					patch: "badge-warning",
-				};
+        const paths = Object.keys(spec.paths || {});
+        const methods = {
+          get: "badge-info",
+          post: "badge-success",
+          put: "badge-warning",
+          delete: "badge-danger",
+          patch: "badge-warning",
+        };
 
-				// Group paths by tag or first segment
-				const grouped = {};
-				for (const path of paths) {
-					const ops = spec.paths[path];
-					for (const [method, detail] of Object.entries(ops)) {
-						if (!methods[method]) continue;
-						const tag =
-							detail.tags?.[0] || path.split("/")[1] || "other";
-						if (!grouped[tag]) grouped[tag] = [];
-						grouped[tag].push({
-							method: method.toUpperCase(),
-							path,
-							summary: detail.summary || detail.operationId || "",
-						});
-					}
-				}
+        // Group paths by tag or first segment
+        const grouped = {};
+        for (const path of paths) {
+          const ops = spec.paths[path];
+          for (const [method, detail] of Object.entries(ops)) {
+            if (!methods[method]) continue;
+            const tag = detail.tags?.[0] || path.split("/")[1] || "other";
+            if (!grouped[tag]) grouped[tag] = [];
+            grouped[tag].push({
+              method: method.toUpperCase(),
+              path,
+              summary: detail.summary || detail.operationId || "",
+            });
+          }
+        }
 
-				let html = `
+        let html = `
           <div style="margin-bottom:1rem">
             <h4 style="margin:0">${spec.info?.title || "API"}</h4>
             <p class="text-muted text-sm">${spec.info?.description || ""} — v${spec.info?.version || "1.0.0"}</p>
@@ -293,55 +276,54 @@
           <p class="text-sm text-muted mb-1">${paths.length} endpoints found</p>
         `;
 
-				for (const [tag, endpoints] of Object.entries(grouped)) {
-					html += `<div class="mb-1"><strong style="text-transform:capitalize;font-size:0.85rem">${tag.replace(/[_-]/g, " ")}</strong></div>`;
-					html += `<div class="table-wrapper mb-2"><table>`;
-					for (const ep of endpoints) {
-						const color =
-							methods[ep.method.toLowerCase()] || "badge-info";
-						html += `<tr>
+        for (const [tag, endpoints] of Object.entries(grouped)) {
+          html += `<div class="mb-1"><strong style="text-transform:capitalize;font-size:0.85rem">${tag.replace(/[_-]/g, " ")}</strong></div>`;
+          html += `<div class="table-wrapper mb-2"><table>`;
+          for (const ep of endpoints) {
+            const color = methods[ep.method.toLowerCase()] || "badge-info";
+            html += `<tr>
               <td style="width:70px"><span class="badge ${color}">${ep.method}</span></td>
               <td class="font-mono text-xs">${ep.path}</td>
               <td class="text-muted text-sm">${ep.summary}</td>
             </tr>`;
-					}
-					html += `</table></div>`;
-				}
+          }
+          html += `</table></div>`;
+        }
 
-				html += `<div class="flex gap-1 mt-2">
+        html += `<div class="flex gap-1 mt-2">
           <a href="/docs" target="_blank" class="btn btn-primary btn-sm">Open Swagger UI</a>
           <a href="/openapi.json" target="_blank" class="btn btn-outline btn-sm">Download JSON</a>
         </div>`;
 
-				document.getElementById("modal-body").innerHTML = html;
+        document.getElementById("modal-body").innerHTML = html;
 
-				// Allow the modal to be wider for the spec
-				document.getElementById("modal").style.maxWidth = "700px";
-			} catch (err) {
-				document.getElementById("modal-body").innerHTML = `
+        // Allow the modal to be wider for the spec
+        document.getElementById("modal").style.maxWidth = "700px";
+      } catch (err) {
+        document.getElementById("modal-body").innerHTML = `
           <div style="text-align:center;padding:1.5rem">
             <div style="font-size:2rem;margin-bottom:0.5rem">⚠️</div>
             <p class="text-danger">Failed to load OpenAPI spec</p>
             <p class="text-muted text-sm">${err.message}</p>
           </div>`;
-			}
-		},
+      }
+    },
 
-		async loadSimulationConfig() {
-			const card = document.getElementById("simulation-card");
-			if (!card) return;
+    async loadSimulationConfig() {
+      const card = document.getElementById("simulation-card");
+      if (!card) return;
 
-			try {
-				const result = await window.API.get("/config/simulation");
-				if (!result.success) throw new Error(result.message);
+      try {
+        const result = await window.API.get("/config/simulation");
+        if (!result.success) throw new Error(result.message);
 
-				const d = result.data;
-				const badge = (val) =>
-					val
-						? '<span class="badge badge-success">ON</span>'
-						: '<span class="badge badge-warning">OFF</span>';
+        const d = result.data;
+        const badge = (val) =>
+          val
+            ? '<span class="badge badge-success">ON</span>'
+            : '<span class="badge badge-warning">OFF</span>';
 
-				card.innerHTML = `
+        card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <table>
 					<tr><td class="text-muted" style="width:200px">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
@@ -351,22 +333,22 @@
 				  </table>
 				  <p class="text-muted text-sm" style="padding:0.75rem 1rem 0.75rem;margin:0"><span style="font-weight:bold; color:var(--warning)">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
 				`;
-			} catch (err) {
-				card.innerHTML = `
+      } catch (err) {
+        card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <div style="padding: 1.5rem; text-align: center;">
 					<p class="text-danger" style="margin-bottom:0.5rem">Unable to load simulation config</p>
 					<p class="text-muted text-sm">${err.message}</p>
 				  </div>
 				`;
-			}
-		},
+      }
+    },
 
-		showChangePasswordModal() {
-			const minLen = Number(window.__dashboardMinPasswordLength || 6);
-			Modal.show(
-				"Change Password",
-				`
+    showChangePasswordModal() {
+      const minLen = Number(window.__dashboardMinPasswordLength || 6);
+      Modal.show(
+        "Change Password",
+        `
                 <form id="modal-form-change-password">
                     <p class="text-muted text-sm mb-2">Update your account password. Must be at least ${minLen} characters.</p>
                     <div class="form-group">
@@ -395,53 +377,47 @@
                     </div>
                 </form>
             `,
-			);
+      );
 
-			if (window.initPasswordToggles)
-				window.initPasswordToggles(
-					document.getElementById("modal-body"),
-				);
+      if (window.initPasswordToggles)
+        window.initPasswordToggles(document.getElementById("modal-body"));
 
-			document
-				.getElementById("modal-form-change-password")
-				.addEventListener("submit", (e) => {
-					e.preventDefault();
-					this.changePassword();
-				});
-		},
+      document.getElementById("modal-form-change-password").addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.changePassword();
+      });
+    },
 
-		async changePassword() {
-			const currentPassword =
-				document.getElementById("current-password").value;
-			const newPassword = document.getElementById("new-password").value;
-			const btn = document.getElementById("btn-submit-change");
+    async changePassword() {
+      const currentPassword = document.getElementById("current-password").value;
+      const newPassword = document.getElementById("new-password").value;
+      const btn = document.getElementById("btn-submit-change");
 
-			if (!currentPassword || !newPassword)
-				return Toast.error("Missing fields");
+      if (!currentPassword || !newPassword) return Toast.error("Missing fields");
 
-			btn.disabled = true;
-			btn.textContent = "Updating...";
+      btn.disabled = true;
+      btn.textContent = "Updating...";
 
-			const res = await window.API.put("/auth/password", {
-				currentPassword,
-				newPassword,
-			});
+      const res = await window.API.put("/auth/password", {
+        currentPassword,
+        newPassword,
+      });
 
-			btn.disabled = false;
-			btn.textContent = "Update Password";
+      btn.disabled = false;
+      btn.textContent = "Update Password";
 
-			if (res.success) {
-				Toast.success("Password updated successfully");
-				Modal.hide();
-			} else {
-				Toast.error(res.message);
-			}
-		},
+      if (res.success) {
+        Toast.success("Password updated successfully");
+        Modal.hide();
+      } else {
+        Toast.error(res.message);
+      }
+    },
 
-		showUsersModal() {
-			Modal.show(
-				"Users, Approvals & Roles",
-				`
+    showUsersModal() {
+      Modal.show(
+        "Users, Approvals & Roles",
+        `
                 <p class="text-muted text-sm mb-2">Manage dashboard users, approve pending registrations, assign roles, and scope session access.</p>
                 <div class="table-wrapper">
                     <table id="modal-users-table">
@@ -449,34 +425,34 @@
                     </table>
                 </div>
             `,
-			);
+      );
 
-			// Allow wider modal for table
-			document.getElementById("modal").style.maxWidth = "700px";
+      // Allow wider modal for table
+      document.getElementById("modal").style.maxWidth = "700px";
 
-			this.loadUsers();
-		},
+      this.loadUsers();
+    },
 
-		async loadUsers() {
-			const table = document.getElementById("modal-users-table");
-			if (!table) return;
+    async loadUsers() {
+      const table = document.getElementById("modal-users-table");
+      if (!table) return;
 
-			const [usersRes, sessionsRes] = await Promise.all([
-				window.API.get("/auth/users"),
-				window.API.get("/sessions"),
-			]);
+      const [usersRes, sessionsRes] = await Promise.all([
+        window.API.get("/auth/users"),
+        window.API.get("/sessions"),
+      ]);
 
-			if (!usersRes.success) {
-				table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${usersRes.message}</td></tr>`;
-				return;
-			}
+      if (!usersRes.success) {
+        table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${usersRes.message}</td></tr>`;
+        return;
+      }
 
-			const sessionIds = (sessionsRes.success ? sessionsRes.data : [])
-				.map((session) => String(session.sessionId || ""))
-				.filter(Boolean)
-				.sort((left, right) => left.localeCompare(right));
+      const sessionIds = (sessionsRes.success ? sessionsRes.data : [])
+        .map((session) => String(session.sessionId || ""))
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right));
 
-			let html = `
+      let html = `
                 <tr>
                     <th>Username</th>
 					<th>Status</th>
@@ -487,35 +463,26 @@
                 </tr>
             `;
 
-			usersRes.data.forEach((u) => {
-				const isCurrentUser =
-					JSON.parse(
-						localStorage.getItem("wa-dashboard-user") || "{}",
-					).id === u.id;
-				const date = new Date(u.createdAt).toLocaleDateString();
-				const assignedSessions = Array.isArray(u.assignedSessions)
-					? u.assignedSessions
-					: [];
-				const assignedSummary =
-					this.formatAssignedSessionsSummary(assignedSessions);
-				const sessionSelector = sessionIds.length
-					? sessionIds
-							.map((sessionId) => {
-								const checked = assignedSessions.includes(
-									sessionId,
-								)
-									? "checked"
-									: "";
-								return `
+      usersRes.data.forEach((u) => {
+        const isCurrentUser =
+          JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}").id === u.id;
+        const date = new Date(u.createdAt).toLocaleDateString();
+        const assignedSessions = Array.isArray(u.assignedSessions) ? u.assignedSessions : [];
+        const assignedSummary = this.formatAssignedSessionsSummary(assignedSessions);
+        const sessionSelector = sessionIds.length
+          ? sessionIds
+              .map((sessionId) => {
+                const checked = assignedSessions.includes(sessionId) ? "checked" : "";
+                return `
 									<label style="display:flex;align-items:center;gap:0.45rem;padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
 										<input type="checkbox" class="user-session-option" data-user-id="${u.id}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
 										<span class="text-sm" style="word-break:break-all">${escapeHtml(sessionId)}</span>
 									</label>`;
-							})
-							.join("")
-					: '<div class="text-muted text-xs" style="padding:0.35rem 0">No sessions yet. Empty assignment means future sessions remain visible.</div>';
+              })
+              .join("")
+          : '<div class="text-muted text-xs" style="padding:0.35rem 0">No sessions yet. Empty assignment means future sessions remain visible.</div>';
 
-				html += `
+        html += `
                 <tr>
                     <td><strong>${u.username}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}</td>
 					<td>
@@ -549,142 +516,115 @@
 						${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user" data-id="${u.id}" data-username="${u.username}" style="padding:0.2rem 0.6rem">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
                     </td>
                 </tr>`;
-			});
+      });
 
-			table.innerHTML = html;
+      table.innerHTML = html;
 
-			table.querySelectorAll(".user-role-select").forEach((sel) => {
-				sel.addEventListener("change", async (e) => {
-					const id = e.target.dataset.id;
-					const role = e.target.value;
-					const res = await window.API.put(`/auth/users/${id}/role`, {
-						role,
-					});
-					if (res.success) {
-						Toast.success(`Role updated to ${role.toUpperCase()}`);
+      table.querySelectorAll(".user-role-select").forEach((sel) => {
+        sel.addEventListener("change", async (e) => {
+          const id = e.target.dataset.id;
+          const role = e.target.value;
+          const res = await window.API.put(`/auth/users/${id}/role`, {
+            role,
+          });
+          if (res.success) {
+            Toast.success(`Role updated to ${role.toUpperCase()}`);
 
-						// If they changed their own role somehow, reload the app (though UI disables it)
-						const currentUserId = JSON.parse(
-							localStorage.getItem("wa-dashboard-user") || "{}",
-						).id;
-						if (currentUserId === id) {
-							setTimeout(() => window.location.reload(), 1500);
-						}
-					} else {
-						Toast.error(res.message);
-						this.loadUsers(); // Revert on failure
-					}
-				});
-			});
+            // If they changed their own role somehow, reload the app (though UI disables it)
+            const currentUserId = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}").id;
+            if (currentUserId === id) {
+              setTimeout(() => window.location.reload(), 1500);
+            }
+          } else {
+            Toast.error(res.message);
+            this.loadUsers(); // Revert on failure
+          }
+        });
+      });
 
-			table.querySelectorAll(".btn-delete-user").forEach((btn) => {
-				btn.addEventListener("click", async (e) => {
-					const id = e.target.dataset.id;
-					const username = e.target.dataset.username;
+      table.querySelectorAll(".btn-delete-user").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const id = e.target.dataset.id;
+          const username = e.target.dataset.username;
 
-					if (
-						confirm(
-							`Are you sure you want to delete user @${username}?`,
-						)
-					) {
-						const res = await window.API.del(`/auth/users/${id}`);
-						if (res.success) {
-							Toast.success(`User @${username} deleted`);
-							this.loadUsers();
-						} else {
-							Toast.error(res.message);
-						}
-					}
-				});
-			});
+          if (confirm(`Are you sure you want to delete user @${username}?`)) {
+            const res = await window.API.del(`/auth/users/${id}`);
+            if (res.success) {
+              Toast.success(`User @${username} deleted`);
+              this.loadUsers();
+            } else {
+              Toast.error(res.message);
+            }
+          }
+        });
+      });
 
-			table.querySelectorAll(".btn-approve-user").forEach((btn) => {
-				btn.addEventListener("click", async (e) => {
-					const id = e.target.dataset.id;
-					const username = e.target.dataset.username;
-					const res = await window.API.put(
-						`/auth/users/${id}/approve`,
-						{},
-					);
-					if (res.success) {
-						Toast.success(`User @${username} approved`);
-						this.loadUsers();
-					} else {
-						Toast.error(res.message);
-					}
-				});
-			});
+      table.querySelectorAll(".btn-approve-user").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const id = e.target.dataset.id;
+          const username = e.target.dataset.username;
+          const res = await window.API.put(`/auth/users/${id}/approve`, {});
+          if (res.success) {
+            Toast.success(`User @${username} approved`);
+            this.loadUsers();
+          } else {
+            Toast.error(res.message);
+          }
+        });
+      });
 
-			table
-				.querySelectorAll(".user-sessions-picker")
-				.forEach((picker) => {
-					const summary = picker.querySelector(
-						".user-sessions-summary",
-					);
-					const saveButton = picker.querySelector(
-						".btn-user-sessions-save",
-					);
-					const allButton = picker.querySelector(
-						".btn-user-sessions-all",
-					);
-					const summaryElement = picker.querySelector("summary");
+      table.querySelectorAll(".user-sessions-picker").forEach((picker) => {
+        const summary = picker.querySelector(".user-sessions-summary");
+        const saveButton = picker.querySelector(".btn-user-sessions-save");
+        const allButton = picker.querySelector(".btn-user-sessions-all");
+        const summaryElement = picker.querySelector("summary");
 
-					const collectAssignedSessions = () =>
-						Array.from(
-							picker.querySelectorAll(
-								".user-session-option:checked",
-							),
-						).map((input) => input.value);
+        const collectAssignedSessions = () =>
+          Array.from(picker.querySelectorAll(".user-session-option:checked")).map(
+            (input) => input.value,
+          );
 
-					if (!saveButton && summaryElement) {
-						summaryElement.addEventListener("click", (event) => {
-							event.preventDefault();
-						});
-					}
+        if (!saveButton && summaryElement) {
+          summaryElement.addEventListener("click", (event) => {
+            event.preventDefault();
+          });
+        }
 
-					if (saveButton) {
-						saveButton.addEventListener("click", async () => {
-							const id = saveButton.dataset.id;
-							const assignedSessions = collectAssignedSessions();
-							saveButton.disabled = true;
-							saveButton.textContent = "Saving...";
+        if (saveButton) {
+          saveButton.addEventListener("click", async () => {
+            const id = saveButton.dataset.id;
+            const assignedSessions = collectAssignedSessions();
+            saveButton.disabled = true;
+            saveButton.textContent = "Saving...";
 
-							const res = await window.API.put(
-								`/auth/users/${id}/sessions`,
-								{
-									assignedSessions,
-								},
-							);
+            const res = await window.API.put(`/auth/users/${id}/sessions`, {
+              assignedSessions,
+            });
 
-							saveButton.disabled = false;
-							saveButton.textContent = "Save";
+            saveButton.disabled = false;
+            saveButton.textContent = "Save";
 
-							if (res.success) {
-								if (summary) {
-									summary.textContent =
-										this.formatAssignedSessionsSummary(
-											assignedSessions,
-										);
-								}
-								picker.open = false;
-								Toast.success("Assigned sessions updated");
-							} else {
-								Toast.error(res.message);
-								this.loadUsers();
-							}
-						});
-					}
+            if (res.success) {
+              if (summary) {
+                summary.textContent = this.formatAssignedSessionsSummary(assignedSessions);
+              }
+              picker.open = false;
+              Toast.success("Assigned sessions updated");
+            } else {
+              Toast.error(res.message);
+              this.loadUsers();
+            }
+          });
+        }
 
-					if (allButton) {
-						allButton.addEventListener("click", () => {
-							picker
-								.querySelectorAll(".user-session-option")
-								.forEach((input) => {
-									input.checked = false;
-								});
-						});
-					}
-				});
-		},
-	};
+        if (allButton) {
+          allButton.addEventListener("click", () => {
+            picker.querySelectorAll(".user-session-option").forEach((input) => {
+              input.checked = false;
+            });
+          });
+        }
+      });
+    },
+  };
 })();

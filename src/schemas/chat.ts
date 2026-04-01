@@ -6,7 +6,7 @@ import { z } from "zod";
 export const sendMessageSchema = z.object({
   receiver: z.string().min(1, "Receiver is required"),
   message: z
-    .record(z.unknown())
+    .record(z.string(), z.unknown())
     .refine((obj) => Object.keys(obj).length > 0, "Message content is required"),
   isGroup: z.boolean().optional().default(false),
   quoted: z.any().optional(),
@@ -21,7 +21,7 @@ export const sendBulkSchema = z.object({
     .array(
       z.object({
         receiver: z.string().min(1, "Receiver is required"),
-        message: z.record(z.unknown()),
+        message: z.record(z.string(), z.unknown()),
         delay: z.number().positive().optional(),
       }),
     )
@@ -56,7 +56,7 @@ export const editMessageSchema = z.object({
     id: z.string().min(1),
     participant: z.string().optional(),
   }),
-  messageContent: z.record(z.unknown()),
+  messageContent: z.record(z.string(), z.unknown()),
 });
 
 export const readMessagesSchema = z.object({
@@ -85,7 +85,7 @@ export const onWhatsAppSchema = z.object({
 });
 
 export const chatModifySchema = z.object({
-  mod: z.record(z.unknown()),
+  mod: z.record(z.string(), z.unknown()),
   jid: z.string().min(1, "JID is required"),
 });
 

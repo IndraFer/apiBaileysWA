@@ -103,7 +103,7 @@ chatRoutes.post("/send", sendRateLimit, async (c) => {
  * Send a message (text, image, video, audio, document, sticker, location, contact, poll).
  */
 chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = sendMessageSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { receiver, message, isGroup, quoted } = parsed.data;
@@ -133,7 +133,7 @@ chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) =
  * Returns a broadcast job ID for tracking progress.
  */
 chatRoutes.post("/:sessionId/send-bulk", sessionValidator, bulkRateLimit, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = sendBulkSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { messages } = parsed.data;
@@ -159,7 +159,7 @@ chatRoutes.post("/:sessionId/send-bulk", sessionValidator, bulkRateLimit, async 
  * Get broadcast job status.
  */
 chatRoutes.get("/:sessionId/broadcast/:jobId", sessionValidator, (c) => {
-  const jobId = c.req.param("jobId");
+  const jobId = c.req.param("jobId") ?? "";
   const job = getBroadcastJob(jobId);
   if (!job) return error(c, "Broadcast job not found", 404);
   return success(c, job);
@@ -170,7 +170,7 @@ chatRoutes.get("/:sessionId/broadcast/:jobId", sessionValidator, (c) => {
  * Cancel a running broadcast job.
  */
 chatRoutes.delete("/:sessionId/broadcast/:jobId", sessionValidator, (c) => {
-  const jobId = c.req.param("jobId");
+  const jobId = c.req.param("jobId") ?? "";
   const cancelled = cancelBroadcastJob(jobId);
   if (!cancelled) return error(c, "Job not found or not running", 404);
   return success(c, null, "Broadcast job cancelled");
@@ -181,7 +181,7 @@ chatRoutes.delete("/:sessionId/broadcast/:jobId", sessionValidator, (c) => {
  * List all broadcast jobs for a session.
  */
 chatRoutes.get("/:sessionId/broadcast", sessionValidator, (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const jobs = listBroadcastJobs(sessionId);
   return success(c, jobs);
 });
@@ -191,7 +191,7 @@ chatRoutes.get("/:sessionId/broadcast", sessionValidator, (c) => {
  * Forward a message.
  */
 chatRoutes.post("/:sessionId/forward", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = forwardMessageSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { receiver, isGroup, forward } = parsed.data;
@@ -220,7 +220,7 @@ chatRoutes.post("/:sessionId/forward", sessionValidator, async (c) => {
  * Delete a message for everyone.
  */
 chatRoutes.delete("/:sessionId/message", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = deleteMessageSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { jid, key } = parsed.data;
@@ -239,7 +239,7 @@ chatRoutes.delete("/:sessionId/message", sessionValidator, async (c) => {
  * Edit a previously sent message.
  */
 chatRoutes.patch("/:sessionId/message", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = editMessageSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { jid, key, messageContent } = parsed.data;
@@ -269,7 +269,7 @@ chatRoutes.patch("/:sessionId/message", sessionValidator, async (c) => {
  * Mark messages as read.
  */
 chatRoutes.post("/:sessionId/read", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = readMessagesSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -287,7 +287,7 @@ chatRoutes.post("/:sessionId/read", sessionValidator, async (c) => {
  * Send presence update (typing, recording, etc.).
  */
 chatRoutes.post("/:sessionId/presence", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = presenceSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { type, jid } = parsed.data;
@@ -306,7 +306,7 @@ chatRoutes.post("/:sessionId/presence", sessionValidator, async (c) => {
  * Check if phone numbers are registered on WhatsApp.
  */
 chatRoutes.post("/:sessionId/on-whatsapp", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = onWhatsAppSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { jids } = parsed.data;
@@ -325,7 +325,7 @@ chatRoutes.post("/:sessionId/on-whatsapp", sessionValidator, async (c) => {
  * Chat modification (mark read/unread, archive, etc.).
  */
 chatRoutes.post("/:sessionId/chat-modify", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = chatModifySchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -343,7 +343,7 @@ chatRoutes.post("/:sessionId/chat-modify", sessionValidator, async (c) => {
  * Fetch message history.
  */
 chatRoutes.post("/:sessionId/fetch-history", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = fetchHistorySchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -365,7 +365,7 @@ chatRoutes.post("/:sessionId/fetch-history", sessionValidator, async (c) => {
  * Send message receipts.
  */
 chatRoutes.post("/:sessionId/send-receipts", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = sendReceiptsSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
 
@@ -386,7 +386,7 @@ chatRoutes.post("/:sessionId/send-receipts", sessionValidator, async (c) => {
  * Get chat list from in-memory store.
  */
 chatRoutes.get("/:sessionId/list", sessionValidator, (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const isGroup = c.req.query("isGroup") === "true";
 
   try {
@@ -403,8 +403,8 @@ chatRoutes.get("/:sessionId/list", sessionValidator, (c) => {
  * Get messages from a specific chat conversation.
  */
 chatRoutes.get("/:sessionId/conversation/:jid", sessionValidator, (c) => {
-  const sessionId = c.req.param("sessionId");
-  const jid = c.req.param("jid");
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = c.req.param("jid") ?? "";
   const limit = Math.min(Math.max(Number(c.req.query("limit") || "25"), 1), 500);
 
   try {
@@ -421,7 +421,7 @@ chatRoutes.get("/:sessionId/conversation/:jid", sessionValidator, (c) => {
  * Download media from a stored message.
  */
 chatRoutes.post("/:sessionId/download-media", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const parsed = downloadMediaSchema.safeParse(await c.req.json());
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const { remoteJid, messageId } = parsed.data;

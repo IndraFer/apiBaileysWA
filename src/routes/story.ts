@@ -14,7 +14,7 @@ storyRoutes.use("*", authMiddleware);
  * Share a story/status (text, image, video) to contacts.
  */
 storyRoutes.post("/:sessionId/share", sessionValidator, async (c) => {
-  const sessionId = c.req.param("sessionId");
+  const sessionId = c.req.param("sessionId") ?? "";
   const body = await c.req.json();
   const { receiver, message } = body;
 
