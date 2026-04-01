@@ -341,10 +341,15 @@ Available events:
 
 ```
 baileys-wa-api/
+├── data/                           # Dashboard users and internal dashboard data (JSON)
+├── media/                          # Downloaded media files
+├── sessions/                       # Auth/session state per WhatsApp session
+├── scripts/
+│   └── manage-api-keys.ts          # API key management CLI
 ├── src/
-│   ├── index.ts                    # Conditional entry point (loads Bun or Node server).
-│   ├── app.ts                      # Hono app + Swagger + routes
-│   ├── config.ts                   # Centralized .env config
+│   ├── index.ts                    # Runtime entry point (Bun/Node)
+│   ├── app.ts                      # Hono app bootstrap + routes + docs
+│   ├── config.ts                   # Centralized environment config
 │   ├── baileys/
 │   │   ├── connection.ts           # BaileysConnection class
 │   │   ├── connectionManager.ts    # Multi-session manager
@@ -358,12 +363,32 @@ baileys-wa-api/
 │   │   └── helpers/
 │   │       ├── downloadMedia.ts    # Media download utilities
 │   │       └── shouldIgnoreJid.ts  # JID filtering
+│   ├── dashboard/
+│   │   ├── api.ts                  # Dashboard backend APIs (stats/events/webhooks)
+│   │   ├── auth.ts                 # Dashboard auth + users/roles/approval
+│   │   ├── eventBus.ts             # In-process event bus for SSE
+│   │   └── loader.ts               # Dashboard route/static loader
+│   ├── dashboard-ui/
+│   │   ├── index.html              # Dashboard SPA shell
+│   │   ├── css/
+│   │   │   └── styles.css
+│   │   └── js/
+│   │       ├── api.js
+│   │       ├── app.js
+│   │       ├── auth.js
+│   │       ├── theme.js
+│   │       ├── components/
+│   │       │   ├── modal.js
+│   │       │   └── toast.js
+│   │       └── pages/              # overview/sessions/chatrooms/groups/webhooks/events/settings
 │   ├── lib/
-│   │   ├── runtime.ts              # The magic abstraction layer that enables dual-runtime compatibility for file reading & bcrypt hashing.
-│   ├── dashboard/                  # Modular backend APIs for the visual UI.
-│   ├── dashboard-ui/               # Modular Frontend SPA for the visual UI.
+│   │   ├── logger.ts               # Pino logger
+│   │   ├── redis.ts                # Redis client helpers
+│   │   ├── response.ts             # API response helpers
+│   │   └── runtime.ts              # Bun/Node runtime abstraction
 │   ├── middleware/
 │   │   ├── auth.ts                 # API authentication
+│   │   ├── rateLimit.ts            # API rate limiting
 │   │   └── sessionValidator.ts     # Session existence check
 │   ├── routes/
 │   │   ├── session.ts              # Session CRUD
@@ -380,25 +405,19 @@ baileys-wa-api/
 │   ├── services/
 │   │   ├── broadcastQueue.ts       # Broadcast queue with delays
 │   │   └── mediaCleanup.ts         # Media file cleanup
-│   ├── lib/
-│   │   ├── redis.ts                # Redis client
-│   │   ├── logger.ts               # Pino logger
-│   │   └── response.ts             # API response helpers
+│   │   └── webhookLog.ts           # Webhook delivery log storage
 │   └── utils/
 │       ├── asyncSleep.ts           # Async sleep utilities
 │       ├── phone.ts                # Phone/JID formatting
 │       └── validation.ts           # Validation utilities
-├── data/                           # JSON storage for Dashboard Users and Webhooks.
-├── media/                          # Auto-downloaded media files from chats.
-├── scripts/
-│   └── manage-api-keys.ts          # API key management CLI
-├── sessions/                       # Auto-generated auth state & JSON stores per session.
 ├── .env.example
-├── Dockerfile
+├── biome.jsonc
 ├── docker-compose.yml
+├── docker-compose.node.yml
+├── Dockerfile
+├── Dockerfile.node
 ├── package.json
 ├── tsconfig.json
-├── biome.jsonc
 └── README.md
 ```
 
@@ -422,7 +441,7 @@ baileys-wa-api/
 | `MAX_SESSIONS`                            | `50`                             | Maximum concurrent WhatsApp sessions                                     |
 | `WEBHOOK_URL`                             | —                                | Default webhook URL                                                      |
 | `WEBHOOK_SIGNATURE_MODE`                  | `off`                            | Webhook signature mode (`off`, `optional`, `required`)                   |
-| `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | auto by env                      | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
+| `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | `true`                           | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
 | `WEBHOOK_ALLOWED_EVENTS`                  | `ALL`                            | Comma-separated event filter                                             |
 | `WEBHOOK_RETRY_MAX`                       | `3`                              | Webhook delivery retry count                                             |
 | `WEBHOOK_RETRY_INTERVAL`                  | `5000`                           | Initial webhook retry delay (ms)                                         |
