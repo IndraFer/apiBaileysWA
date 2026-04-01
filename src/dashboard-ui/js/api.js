@@ -1,5 +1,5 @@
 /** API Client — wraps fetch with auth token */
-(function () {
+(() => {
 	const BASE = "/dashboard/api";
 
 	window.API = {
@@ -19,7 +19,7 @@
 				"Content-Type": "application/json",
 				...(options.headers || {}),
 			};
-			if (token) headers["Authorization"] = `Bearer ${token}`;
+			if (token) headers.Authorization = `Bearer ${token}`;
 
 			const res = await fetch(`${BASE}${path}`, { ...options, headers });
 			const data = await res
@@ -52,6 +52,16 @@
 				method: "PUT",
 				body: JSON.stringify(body),
 			});
+		},
+		patch(path, body) {
+			return this.request(path, {
+				method: "PATCH",
+				body: JSON.stringify(body),
+			});
+		},
+		async getStreamToken() {
+			const result = await this.get("/auth/stream-token");
+			return result.success ? result.data?.token || null : null;
 		},
 		del(path) {
 			return this.request(path, { method: "DELETE" });

@@ -8,14 +8,14 @@
  *
  * If absent or disabled, logs an info message. Never throws.
  */
-import { existsSync } from "fs";
-import { join, extname, resolve } from "path";
+import { existsSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
 import type { Hono } from "hono";
 import config from "@/config";
+import dashboardApi from "@/dashboard/api";
+import dashboardAuth from "@/dashboard/auth";
 import logger from "@/lib/logger";
 import { fileExists, serveFile } from "@/lib/runtime";
-import dashboardAuth from "@/dashboard/auth";
-import dashboardApi from "@/dashboard/api";
 
 const DASHBOARD_UI_DIR = join(process.cwd(), "src", "dashboard-ui");
 

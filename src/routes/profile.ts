@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
+import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionValidator } from "@/middleware/sessionValidator";
-import { formatPhone } from "@/utils/phone";
-import { extractPhone } from "@/utils/phone";
-import { success, error } from "@/lib/response";
+import { extractPhone, formatPhone } from "@/utils/phone";
 
 const profileRoutes = new Hono();
 
@@ -28,11 +27,15 @@ profileRoutes.get("/:sessionId", sessionValidator, async (c) => {
 
     try {
       image = await session.profilePictureUrl(user.id, "image");
-    } catch { /* no image */ }
+    } catch {
+      /* no image */
+    }
 
     try {
       status = await session.fetchStatus(`${phone}@s.whatsapp.net`);
-    } catch { /* no status */ }
+    } catch {
+      /* no status */
+    }
 
     return success(c, {
       id: user.id,

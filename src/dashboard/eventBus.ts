@@ -1,7 +1,7 @@
 /**
  * Global event bus for forwarding Baileys events to dashboard SSE clients.
  */
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 
 export interface DashboardEvent {
   sessionId: string;

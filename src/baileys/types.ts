@@ -1,22 +1,11 @@
-import type {
-  AnyMessageContent,
-  BaileysEventMap,
-  ConnectionState,
-  ParticipantAction,
-  WAMessage,
-  WAPresence,
-  WAConnectionState,
-  proto,
-  ChatModification,
-  MessageReceiptType,
-} from "@whiskeysockets/baileys";
+import type { AnyMessageContent } from "@whiskeysockets/baileys";
 
 export interface AutoReplyConfig {
   enabled: boolean;
   message: string;
   type: "always" | "time_range" | "on_webhook_fail";
   timeStart?: string; // HH:mm
-  timeEnd?: string;   // HH:mm
+  timeEnd?: string; // HH:mm
 }
 
 export interface SessionOptions {

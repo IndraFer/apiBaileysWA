@@ -44,7 +44,7 @@ export function getRedis(): RedisClientType | null {
 }
 
 export function isRedisAvailable(): boolean {
-  return redis !== null && redis.isOpen;
+  return Boolean(redis?.isOpen);
 }
 
 export default { initializeRedis, getRedis, isRedisAvailable };

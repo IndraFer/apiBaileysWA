@@ -20,11 +20,12 @@ const {
   IGNORE_BOT_MESSAGES,
   IGNORE_META_AI_MESSAGES,
   WEBHOOK_URL,
-  WEBHOOK_SECRET,
   WEBHOOK_ALLOWED_EVENTS,
   WEBHOOK_RETRY_MAX,
   WEBHOOK_RETRY_INTERVAL,
   WEBHOOK_BACKOFF_FACTOR,
+  WEBHOOK_SIGNATURE_MODE,
+  WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK,
   BROADCAST_MIN_DELAY_MS,
   BROADCAST_MAX_DELAY_MS,
   BROADCAST_BATCH_SIZE,
@@ -36,7 +37,9 @@ const {
   CORS_ORIGIN,
   DASHBOARD_ENABLED,
   DASHBOARD_REGISTRATION_ENABLED,
+  DASHBOARD_REGISTRATION_REQUIRE_APPROVAL,
   DASHBOARD_JWT_SECRET,
+  DASHBOARD_PASSWORD_MIN_LENGTH,
   SIMULATE_TYPING_BEFORE_SEND,
   SIMULATE_TYPING_DELAY_MIN_MS,
   SIMULATE_TYPING_DELAY_MAX_MS,
@@ -80,12 +83,14 @@ const config = {
 
   webhook: {
     url: WEBHOOK_URL || "",
-    secret: WEBHOOK_SECRET || "",
     allowedEvents: new Set(
-      WEBHOOK_ALLOWED_EVENTS
-        ? WEBHOOK_ALLOWED_EVENTS.split(",").map((e) => e.trim())
-        : ["ALL"]
+      WEBHOOK_ALLOWED_EVENTS ? WEBHOOK_ALLOWED_EVENTS.split(",").map((e) => e.trim()) : ["ALL"],
     ),
+    signatureMode: (WEBHOOK_SIGNATURE_MODE || "optional") as "off" | "optional" | "required",
+    allowGlobalTokenFallback:
+      WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK !== undefined
+        ? WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK === "true"
+        : (NODE_ENV || "development") !== "production",
     retryPolicy: {
       maxRetries: WEBHOOK_RETRY_MAX ? Number(WEBHOOK_RETRY_MAX) : 3,
       retryInterval: WEBHOOK_RETRY_INTERVAL ? Number(WEBHOOK_RETRY_INTERVAL) : 5000,
@@ -110,7 +115,10 @@ const config = {
   corsOrigin: (() => {
     const raw = CORS_ORIGIN || "*";
     if (raw === "*") return "*";
-    const origins = raw.split(",").map((o) => o.trim()).filter(Boolean);
+    const origins = raw
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
     return origins.length === 1 ? origins[0] : origins;
   })(),
 
@@ -120,7 +128,9 @@ const config = {
   dashboard: {
     enabled: DASHBOARD_ENABLED ? DASHBOARD_ENABLED === "true" : true,
     registrationEnabled: DASHBOARD_REGISTRATION_ENABLED === "true",
+    registrationRequireApproval: DASHBOARD_REGISTRATION_REQUIRE_APPROVAL === "true",
     jwtSecret: DASHBOARD_JWT_SECRET || "baileys-wa-api-dashboard-secret-change-me",
+    passwordMinLength: DASHBOARD_PASSWORD_MIN_LENGTH ? Number(DASHBOARD_PASSWORD_MIN_LENGTH) : 6,
   },
 
   simulation: {
@@ -133,7 +143,9 @@ const config = {
 
   autoReply: {
     enabled: process.env.AUTO_REPLY_ENABLED === "true",
-    message: process.env.AUTO_REPLY_MESSAGE || "Hello, we're currently away.\nWe'll reply to your message soon.",
+    message:
+      process.env.AUTO_REPLY_MESSAGE ||
+      "Hello, we're currently away.\nWe'll reply to your message soon.",
     type: (process.env.AUTO_REPLY_TYPE || "always") as "always" | "time_range" | "on_webhook_fail",
     timeStart: process.env.AUTO_REPLY_TIME_START || "18:00",
     timeEnd: process.env.AUTO_REPLY_TIME_END || "08:00",

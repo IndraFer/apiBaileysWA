@@ -1,8 +1,11 @@
 # === Custom Project Files ===
+AUDIT*.md
+AGENT.md
 AGENTS.md
-SKILLS.MD
-PRD.MD
-CONCEPT.txt
+SKILL.md
+SKILLS.md
+PRD.md
+CONCEPT.md
 REFERENCES/
 data/
 media/

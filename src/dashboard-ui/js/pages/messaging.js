@@ -1,16 +1,13 @@
 /** Messaging Page — send text, image, file, bulk messages */
-(function () {
-	window.MessagingPage = {
-		async render() {
-			const sessions = await this.getSessions();
-			const opts = sessions
-				.map(
-					(s) =>
-						`<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`,
-				)
-				.join("");
+(() => {
+  window.MessagingPage = {
+    async render() {
+      const sessions = await this.getSessions();
+      const opts = sessions
+        .map((s) => `<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`)
+        .join("");
 
-			document.getElementById("page-content").innerHTML = `
+      document.getElementById("page-content").innerHTML = `
         <div class="card mb-2">
           <div class="card-header"><h3>Send Message</h3></div>
           <form id="send-msg-form">
@@ -75,123 +72,89 @@
           <div id="bulk-result" class="mt-2"></div>
         </div>`;
 
-			// Type switching
-			document
-				.getElementById("msg-type")
-				.addEventListener("change", (e) => {
-					const v = e.target.value;
-					document
-						.getElementById("msg-text-group")
-						.classList.toggle("hidden", v !== "text");
-					document
-						.getElementById("msg-url-group")
-						.classList.toggle(
-							"hidden",
-							!["image", "document"].includes(v),
-						);
-					document
-						.getElementById("msg-caption-group")
-						.classList.toggle("hidden", v !== "image");
-					document
-						.getElementById("msg-location-group")
-						.classList.toggle("hidden", v !== "location");
-				});
+      // Type switching
+      document.getElementById("msg-type").addEventListener("change", (e) => {
+        const v = e.target.value;
+        document.getElementById("msg-text-group").classList.toggle("hidden", v !== "text");
+        document
+          .getElementById("msg-url-group")
+          .classList.toggle("hidden", !["image", "document"].includes(v));
+        document.getElementById("msg-caption-group").classList.toggle("hidden", v !== "image");
+        document.getElementById("msg-location-group").classList.toggle("hidden", v !== "location");
+      });
 
-			// Send single
-			document
-				.getElementById("send-msg-form")
-				.addEventListener("submit", async (e) => {
-					e.preventDefault();
-					const session =
-						document.getElementById("msg-session").value;
-					const receiver = document
-						.getElementById("msg-receiver")
-						.value.trim();
-					const isGroup =
-						document.getElementById("msg-is-group").checked;
-					const type = document.getElementById("msg-type").value;
-					let message = {};
+      // Send single
+      document.getElementById("send-msg-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const session = document.getElementById("msg-session").value;
+        const receiver = document.getElementById("msg-receiver").value.trim();
+        const isGroup = document.getElementById("msg-is-group").checked;
+        const type = document.getElementById("msg-type").value;
+        let message = {};
 
-					if (type === "text")
-						message = {
-							text: document.getElementById("msg-text").value,
-						};
-					else if (type === "image")
-						message = {
-							image: {
-								url: document.getElementById("msg-url").value,
-							},
-							caption:
-								document.getElementById("msg-caption").value ||
-								undefined,
-						};
-					else if (type === "document")
-						message = {
-							document: {
-								url: document.getElementById("msg-url").value,
-							},
-							fileName: "file",
-						};
-					else if (type === "location")
-						message = {
-							location: {
-								degreesLatitude: parseFloat(
-									document.getElementById("msg-lat").value,
-								),
-								degreesLongitude: parseFloat(
-									document.getElementById("msg-lng").value,
-								),
-							},
-						};
+        if (type === "text")
+          message = {
+            text: document.getElementById("msg-text").value,
+          };
+        else if (type === "image")
+          message = {
+            image: {
+              url: document.getElementById("msg-url").value,
+            },
+            caption: document.getElementById("msg-caption").value || undefined,
+          };
+        else if (type === "document")
+          message = {
+            document: {
+              url: document.getElementById("msg-url").value,
+            },
+            fileName: "file",
+          };
+        else if (type === "location")
+          message = {
+            location: {
+              degreesLatitude: parseFloat(document.getElementById("msg-lat").value),
+              degreesLongitude: parseFloat(document.getElementById("msg-lng").value),
+            },
+          };
 
-					const result = await API.post(`/sessions/${session}/send`, {
-						receiver,
-						message,
-						isGroup,
-					});
-					result.success
-						? Toast.success("Message sent!")
-						: Toast.error(result.message);
-				});
+        const result = await API.post(`/sessions/${session}/send`, {
+          receiver,
+          message,
+          isGroup,
+        });
+        result.success ? Toast.success("Message sent!") : Toast.error(result.message);
+      });
 
-			// Bulk send
-			document
-				.getElementById("bulk-msg-form")
-				.addEventListener("submit", async (e) => {
-					e.preventDefault();
-					const session =
-						document.getElementById("bulk-session").value;
-					const lines = document
-						.getElementById("bulk-data")
-						.value.trim()
-						.split("\n")
-						.filter(Boolean);
-					const messages = lines.map((l) => {
-						const [receiver, ...rest] = l.split(",");
-						return {
-							receiver: receiver.trim(),
-							message: { text: rest.join(",").trim() },
-						};
-					});
+      // Bulk send
+      document.getElementById("bulk-msg-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const session = document.getElementById("bulk-session").value;
+        const lines = document.getElementById("bulk-data").value.trim().split("\n").filter(Boolean);
+        const messages = lines.map((l) => {
+          const [receiver, ...rest] = l.split(",");
+          return {
+            receiver: receiver.trim(),
+            message: { text: rest.join(",").trim() },
+          };
+        });
 
-					const result = await API.post(`/sessions/${session}/send`, {
-						messages,
-					});
-					if (result.success) {
-						Toast.success(
-							`Bulk job created: ${result.data?.jobId || "queued"}`,
-						);
-						document.getElementById("bulk-result").innerHTML =
-							`<p class="text-sm text-accent">Job: ${result.data?.jobId} | Total: ${messages.length}</p>`;
-					} else {
-						Toast.error(result.message);
-					}
-				});
-		},
+        const result = await API.post(`/sessions/${session}/send`, {
+          messages,
+        });
+        if (result.success) {
+          Toast.success(`Bulk job created: ${result.data?.jobId || "queued"}`);
+          document.getElementById("bulk-result").innerHTML =
+            `<p class="text-sm text-accent">Job: ${result.data?.jobId} | Total: ${messages.length}</p>`;
+        } else {
+          Toast.error(result.message);
+        }
+      });
+    },
 
-		async getSessions() {
-			const result = await API.get("/sessions");
-			return result.success ? result.data || [] : [];
-		},
-	};
+    async getSessions() {
+      const result = await API.get("/sessions");
+      return result.success ? result.data || [] : [];
+    },
+  };
 })();

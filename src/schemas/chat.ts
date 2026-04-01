@@ -5,10 +5,9 @@ import { z } from "zod";
 
 export const sendMessageSchema = z.object({
   receiver: z.string().min(1, "Receiver is required"),
-  message: z.record(z.unknown()).refine(
-    (obj) => Object.keys(obj).length > 0,
-    "Message content is required"
-  ),
+  message: z
+    .record(z.unknown())
+    .refine((obj) => Object.keys(obj).length > 0, "Message content is required"),
   isGroup: z.boolean().optional().default(false),
   quoted: z.any().optional(),
 });
@@ -24,7 +23,7 @@ export const sendBulkSchema = z.object({
         receiver: z.string().min(1, "Receiver is required"),
         message: z.record(z.unknown()),
         delay: z.number().positive().optional(),
-      })
+      }),
     )
     .min(1, "At least one message is required")
     .max(1000, "Maximum 1000 messages per broadcast"),
@@ -61,14 +60,16 @@ export const editMessageSchema = z.object({
 });
 
 export const readMessagesSchema = z.object({
-  keys: z.array(
-    z.object({
-      remoteJid: z.string().optional(),
-      fromMe: z.boolean().optional(),
-      id: z.string().min(1),
-      participant: z.string().optional(),
-    })
-  ).min(1, "At least one message key is required"),
+  keys: z
+    .array(
+      z.object({
+        remoteJid: z.string().optional(),
+        fromMe: z.boolean().optional(),
+        id: z.string().min(1),
+        participant: z.string().optional(),
+      }),
+    )
+    .min(1, "At least one message key is required"),
 });
 
 export const presenceSchema = z.object({
@@ -77,7 +78,10 @@ export const presenceSchema = z.object({
 });
 
 export const onWhatsAppSchema = z.object({
-  jids: z.array(z.string().min(1)).min(1, "At least one JID is required").max(500, "Maximum 500 JIDs per check"),
+  jids: z
+    .array(z.string().min(1))
+    .min(1, "At least one JID is required")
+    .max(500, "Maximum 500 JIDs per check"),
 });
 
 export const chatModifySchema = z.object({
@@ -96,13 +100,15 @@ export const fetchHistorySchema = z.object({
 });
 
 export const sendReceiptsSchema = z.object({
-  keys: z.array(
-    z.object({
-      remoteJid: z.string().optional(),
-      fromMe: z.boolean().optional(),
-      id: z.string().min(1),
-    })
-  ).min(1),
+  keys: z
+    .array(
+      z.object({
+        remoteJid: z.string().optional(),
+        fromMe: z.boolean().optional(),
+        id: z.string().min(1),
+      }),
+    )
+    .min(1),
   type: z.string().optional().default("read"),
 });
 

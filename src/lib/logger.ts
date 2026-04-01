@@ -34,10 +34,7 @@ export const baileysLogger = pino({
 /**
  * Deep sanitize an object by omitting sensitive keys.
  */
-export function deepSanitizeObject(
-  obj: unknown,
-  options: { omitKeys?: string[] } = {}
-): unknown {
+export function deepSanitizeObject(obj: unknown, options: { omitKeys?: string[] } = {}): unknown {
   const { omitKeys = [] } = options;
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== "object") return obj;

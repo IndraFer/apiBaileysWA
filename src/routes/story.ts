@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
+import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionValidator } from "@/middleware/sessionValidator";
 import { formatPhone } from "@/utils/phone";
-import { extractPhone } from "@/utils/phone";
-import { success, error } from "@/lib/response";
 
 const storyRoutes = new Hono();
 
@@ -17,7 +16,7 @@ storyRoutes.use("*", authMiddleware);
 storyRoutes.post("/:sessionId/share", sessionValidator, async (c) => {
   const sessionId = c.req.param("sessionId");
   const body = await c.req.json();
-  const { receiver, message, options = {} } = body;
+  const { receiver, message } = body;
 
   try {
     const session = connectionManager.getSession(sessionId);
@@ -46,13 +45,6 @@ storyRoutes.post("/:sessionId/share", sessionValidator, async (c) => {
     } else if (typeof receiver === "string") {
       finalReceivers.push(formatPhone(receiver));
     }
-
-    const broadcastOptions = {
-      backgroundColor: options.backgroundColor || "#103529",
-      font: options.font || 12,
-      broadcast: true,
-      statusJidList: finalReceivers,
-    };
 
     await session.sendMessage(statusJid, message, {} as never);
 

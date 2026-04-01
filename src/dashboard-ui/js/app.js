@@ -1,165 +1,221 @@
 /** Main App — SPA Router & Initialization */
-(function () {
-	const pages = {
-		overview: { title: "Overview", render: () => OverviewPage.render() },
-		sessions: {
-			title: "Sessions",
-			render: () => SessionsPage.render(),
-			destroy: () => SessionsPage.destroy?.(),
-		},
-		messaging: { title: "Messaging", render: () => MessagingPage.render() },
-		chatrooms: {
-			title: "Chat Rooms",
-			render: () => ChatRoomsPage.render(),
-			destroy: () => ChatRoomsPage.destroy?.(),
-		},
-		groups: { title: "Groups", render: () => GroupsPage.render() },
-		webhooks: { title: "Webhooks", render: () => WebhooksPage.render() },
-		events: {
-			title: "Event Monitor",
-			render: () => EventsPage.render(),
-			destroy: () => EventsPage.destroy?.(),
-		},
-		settings: { title: "Settings", render: () => SettingsPage.render() },
-	};
+(() => {
+  const roleCapabilities = {
+    admin: new Set([
+      "viewSessions",
+      "manageSessions",
+      "viewChats",
+      "sendOutbound",
+      "replyIncoming",
+      "manageGroups",
+      "manageWebhooks",
+      "manageEvents",
+    ]),
+    manager: new Set([
+      "viewSessions",
+      "viewChats",
+      "sendOutbound",
+      "replyIncoming",
+      "manageGroups",
+    ]),
+    assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
+  };
 
-	let currentPage = null;
+  const pages = {
+    overview: { title: "Overview", render: () => OverviewPage.render() },
+    sessions: {
+      title: "Sessions",
+      requires: "viewSessions",
+      render: () => SessionsPage.render(),
+      destroy: () => SessionsPage.destroy?.(),
+    },
+    messaging: {
+      title: "Messaging",
+      requires: "sendOutbound",
+      render: () => MessagingPage.render(),
+    },
+    chatrooms: {
+      title: "Chat Rooms",
+      requires: "viewChats",
+      render: () => ChatRoomsPage.render(),
+      destroy: () => ChatRoomsPage.destroy?.(),
+    },
+    groups: {
+      title: "Groups",
+      requires: "manageGroups",
+      render: () => GroupsPage.render(),
+    },
+    webhooks: {
+      title: "Webhooks",
+      requires: "manageWebhooks",
+      render: () => WebhooksPage.render(),
+    },
+    events: {
+      title: "Event Monitor",
+      requires: "viewChats",
+      render: () => EventsPage.render(),
+      destroy: () => EventsPage.destroy?.(),
+    },
+    settings: { title: "Settings", render: () => SettingsPage.render() },
+  };
 
-	window.App = {
-		async init() {
-			Modal.init();
+  let currentPage = null;
 
-			// Theme toggle
-			document
-				.getElementById("theme-toggle")
-				.addEventListener("click", () => ThemeManager.toggle());
+  window.App = {
+    async init() {
+      Modal.init();
 
-			// Sidebar navigation
-			document.querySelectorAll(".nav-item").forEach((item) => {
-				item.addEventListener("click", (e) => {
-					e.preventDefault();
-					const page = item.dataset.page;
-					this.navigate(page);
-					// Close mobile sidebar
-					document.getElementById("sidebar").classList.remove("open");
-				});
-			});
+      // Theme toggle
+      document
+        .getElementById("theme-toggle")
+        .addEventListener("click", () => ThemeManager.toggle());
 
-			// Mobile hamburger
-			document
-				.getElementById("hamburger")
-				.addEventListener("click", () => {
-					document.getElementById("sidebar").classList.toggle("open");
-				});
-			document
-				.getElementById("sidebar-close")
-				.addEventListener("click", () => {
-					document.getElementById("sidebar").classList.remove("open");
-				});
+      // Sidebar navigation
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          const page = item.dataset.page;
+          this.navigate(page);
+          // Close mobile sidebar
+          document.getElementById("sidebar").classList.remove("open");
+        });
+      });
 
-			// Logout
-			document
-				.getElementById("btn-logout")
-				.addEventListener("click", () => {
-					API.clearToken();
-					localStorage.removeItem("wa-dashboard-user");
-					this.showAuth();
-					Toast.info("Logged out");
-				});
+      // Mobile hamburger
+      document.getElementById("hamburger").addEventListener("click", () => {
+        document.getElementById("sidebar").classList.toggle("open");
+      });
+      document.getElementById("sidebar-close").addEventListener("click", () => {
+        document.getElementById("sidebar").classList.remove("open");
+      });
 
-			// Check auth
-			const token = API.getToken();
-			if (token) {
-				const result = await API.get("/auth/me");
-				if (result.success) {
-					this.showDashboard(result.data);
-					return;
-				}
-			}
-			this.showAuth();
-		},
+      // Logout
+      document.getElementById("btn-logout").addEventListener("click", () => {
+        API.clearToken();
+        localStorage.removeItem("wa-dashboard-user");
+        this.showAuth();
+        Toast.info("Logged out");
+      });
 
-		showAuth() {
-			document.getElementById("auth-screen").classList.remove("hidden");
-			document.getElementById("dashboard").classList.add("hidden");
-			AuthUI.init();
-		},
+      // Check auth
+      const token = API.getToken();
+      if (token) {
+        const result = await API.get("/auth/me");
+        if (result.success) {
+          this.showDashboard(result.data);
+          return;
+        }
+      }
+      this.showAuth();
+    },
 
-		showDashboard(user) {
-			document.getElementById("auth-screen").classList.add("hidden");
-			document.getElementById("dashboard").classList.remove("hidden");
-			this.renderUserBadge(user?.username || "User");
+    showAuth() {
+      document.getElementById("auth-screen").classList.remove("hidden");
+      document.getElementById("dashboard").classList.add("hidden");
+      AuthUI.init();
+    },
 
-			// Navigate to hash or default
-			const hash = window.location.hash.replace("#", "") || "overview";
-			this.navigate(hash);
-		},
+    showDashboard(user) {
+      localStorage.setItem("wa-dashboard-user", JSON.stringify(user || {}));
+      document.getElementById("auth-screen").classList.add("hidden");
+      document.getElementById("dashboard").classList.remove("hidden");
+      this.renderUserBadge(user?.username || "User");
+      this.applyRoleAccess(user || {});
 
-		/** Get initials from username: "admin" → "A", "admin_dashboard" → "AD", "john_doe_smith" → "JD" */
-		getInitials(username) {
-			const parts = username.split(/[_\-.\s]+/).filter(Boolean);
-			if (parts.length >= 2)
-				return (parts[0][0] + parts[1][0]).toUpperCase();
-			return username.substring(0, 1).toUpperCase();
-		},
+      // Navigate to hash or default
+      const hash = window.location.hash.replace("#", "") || "overview";
+      this.navigate(hash);
+    },
 
-		/** Deterministic color from username hash */
-		getAvatarColor(username) {
-			let hash = 0;
-			for (let i = 0; i < username.length; i++) {
-				hash = username.charCodeAt(i) + ((hash << 5) - hash);
-			}
-			const hue = Math.abs(hash) % 360;
-			return `hsl(${hue}, 65%, 50%)`;
-		},
+    getUserCapabilities(user) {
+      const role = user?.role || "assistant";
+      return roleCapabilities[role] || roleCapabilities.assistant;
+    },
 
-		/** Convert username to Title Case: "admin_dashboard" → "Admin Dashboard" */
-		toTitleCase(username) {
-			return username
-				.split(/[_\-.\s]+/)
-				.filter(Boolean)
-				.map(
-					(w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-				)
-				.join(" ");
-		},
+    hasCapability(user, capability) {
+      if (!capability) return true;
+      return this.getUserCapabilities(user).has(capability);
+    },
 
-		renderUserBadge(username) {
-			const initials = this.getInitials(username);
-			const color = this.getAvatarColor(username);
-			const displayName = this.toTitleCase(username);
-			const el = document.getElementById("user-badge");
-			el.innerHTML = `<div class="user-avatar" style="background:${color}">${initials}</div><span class="user-name">${displayName}</span>`;
-		},
+    applyRoleAccess(user) {
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        const pageName = item.dataset.page;
+        const page = pages[pageName];
+        const allowed = this.hasCapability(user, page?.requires);
+        item.style.display = allowed ? "" : "none";
+      });
+    },
 
-		navigate(pageName) {
-			// Destroy previous page if has cleanup
-			if (currentPage && pages[currentPage]?.destroy) {
-				pages[currentPage].destroy();
-			}
+    /** Get initials from username: "admin" → "A", "admin_dashboard" → "AD", "john_doe_smith" → "JD" */
+    getInitials(username) {
+      const parts = username.split(/[_\-.\s]+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return username.substring(0, 1).toUpperCase();
+    },
 
-			const page = pages[pageName];
-			if (!page) {
-				this.navigate("overview");
-				return;
-			}
+    /** Deterministic color from username hash */
+    getAvatarColor(username) {
+      let hash = 0;
+      for (let i = 0; i < username.length; i++) {
+        hash = username.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const hue = Math.abs(hash) % 360;
+      return `hsl(${hue}, 65%, 50%)`;
+    },
 
-			currentPage = pageName;
-			window.location.hash = pageName;
+    /** Convert username to Title Case: "admin_dashboard" → "Admin Dashboard" */
+    toTitleCase(username) {
+      return username
+        .split(/[_\-.\s]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    },
 
-			// Update nav active state
-			document.querySelectorAll(".nav-item").forEach((item) => {
-				item.classList.toggle("active", item.dataset.page === pageName);
-			});
+    renderUserBadge(username) {
+      const initials = this.getInitials(username);
+      const color = this.getAvatarColor(username);
+      const displayName = this.toTitleCase(username);
+      const el = document.getElementById("user-badge");
+      el.innerHTML = `<div class="user-avatar" style="background:${color}">${initials}</div><span class="user-name">${displayName}</span>`;
+    },
 
-			// Update title
-			document.getElementById("page-title").textContent = page.title;
+    navigate(pageName) {
+      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      // Destroy previous page if has cleanup
+      if (currentPage && pages[currentPage]?.destroy) {
+        pages[currentPage].destroy();
+      }
 
-			// Render page
-			page.render();
-		},
-	};
+      const page = pages[pageName];
+      if (!page) {
+        this.navigate("overview");
+        return;
+      }
 
-	// Init when DOM ready
-	document.addEventListener("DOMContentLoaded", () => App.init());
+      if (!this.hasCapability(user, page.requires)) {
+        Toast.warning("Your role does not have access to this page");
+        pageName = "settings";
+      }
+
+      const finalPage = pages[pageName];
+
+      currentPage = pageName;
+      window.location.hash = pageName;
+
+      // Update nav active state
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.classList.toggle("active", item.dataset.page === pageName);
+      });
+
+      // Update title
+      document.getElementById("page-title").textContent = finalPage.title;
+
+      // Render page
+      finalPage.render();
+    },
+  };
+
+  // Init when DOM ready
+  document.addEventListener("DOMContentLoaded", () => App.init());
 })();

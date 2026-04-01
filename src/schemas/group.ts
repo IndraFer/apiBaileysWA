@@ -15,10 +15,9 @@ export const groupParticipantsSchema = z.object({
 
 export const groupSendSchema = z.object({
   receiver: z.string().min(1, "Group JID is required"),
-  message: z.record(z.unknown()).refine(
-    (obj) => Object.keys(obj).length > 0,
-    "Message content is required"
-  ),
+  message: z
+    .record(z.unknown())
+    .refine((obj) => Object.keys(obj).length > 0, "Message content is required"),
 });
 
 export const groupSubjectSchema = z.object({

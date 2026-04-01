@@ -6,14 +6,14 @@ import {
   proto,
   type SignalDataTypeMap,
 } from "@whiskeysockets/baileys";
-import { getRedis } from "@/lib/redis";
 import logger from "@/lib/logger";
+import { getRedis } from "@/lib/redis";
 
 const REDIS_KEY_PREFIX = "@baileys-wa-api:connections";
 
 export async function useRedisAuthState(
   sessionId: string,
-  metadata?: unknown
+  metadata?: unknown,
 ): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
@@ -31,8 +31,7 @@ export async function useRedisAuthState(
     return data ? JSON.parse(data, BufferJSON.reviver) : null;
   };
 
-  const creds: AuthenticationCreds =
-    (await readData("authState", "creds")) || initAuthCreds();
+  const creds: AuthenticationCreds = (await readData("authState", "creds")) || initAuthCreds();
 
   // Store metadata (webhook URL, options, etc.)
   if (metadata) {
@@ -52,7 +51,7 @@ export async function useRedisAuthState(
                 type === "app-state-sync-key" && value
                   ? proto.Message.AppStateSyncKeyData.fromObject(value)
                   : value;
-            })
+            }),
           );
           return data;
         },
@@ -67,7 +66,7 @@ export async function useRedisAuthState(
                 multi.hSet(
                   createKey("authState"),
                   field,
-                  JSON.stringify(value, BufferJSON.replacer)
+                  JSON.stringify(value, BufferJSON.replacer),
                 );
               } else {
                 multi.hDel(createKey("authState"), field);
@@ -91,9 +90,7 @@ export async function useRedisAuthState(
 /**
  * Get all saved session IDs from Redis with their metadata.
  */
-export async function getRedisSavedSessionIds<T>(): Promise<
-  Array<{ id: string; metadata: T }>
-> {
+export async function getRedisSavedSessionIds<T>(): Promise<Array<{ id: string; metadata: T }>> {
   const redis = getRedis();
   if (!redis) return [];
 
@@ -108,11 +105,10 @@ export async function getRedisSavedSessionIds<T>(): Promise<
   }
   const metadata = await multi.execAsPipeline();
 
-  return ids
-    .map((id, i) => ({
-      id,
-      metadata: metadata[i] ? JSON.parse(metadata[i] as unknown as string) : null,
-    }));
+  return ids.map((id, i) => ({
+    id,
+    metadata: metadata[i] ? JSON.parse(metadata[i] as unknown as string) : null,
+  }));
 }
 
 /**
@@ -124,8 +120,15 @@ export async function deleteRedisAuthState(sessionId: string): Promise<void> {
   await redis.del(`${REDIS_KEY_PREFIX}:${sessionId}:authState`);
 }
 
-export async function updateRedisSessionMetadata(sessionId: string, metadata: unknown): Promise<void> {
+export async function updateRedisSessionMetadata(
+  sessionId: string,
+  metadata: unknown,
+): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
-  await redis.hSet(`${REDIS_KEY_PREFIX}:${sessionId}:authState`, "metadata", JSON.stringify(metadata));
+  await redis.hSet(
+    `${REDIS_KEY_PREFIX}:${sessionId}:authState`,
+    "metadata",
+    JSON.stringify(metadata),
+  );
 }

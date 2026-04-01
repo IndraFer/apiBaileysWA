@@ -1,8 +1,19 @@
 import type { AuthenticationState } from "@whiskeysockets/baileys";
-import { isRedisAvailable } from "@/lib/redis";
-import { useRedisAuthState, getRedisSavedSessionIds, deleteRedisAuthState, updateRedisSessionMetadata } from "./redis";
-import { useFileAuthState, getFileSavedSessionIds, deleteFileAuthState, getFileSavedSessionsWithMetadata, saveFileSessionMetadata } from "./file";
 import logger from "@/lib/logger";
+import { isRedisAvailable } from "@/lib/redis";
+import {
+  deleteFileAuthState,
+  getFileSavedSessionIds,
+  getFileSavedSessionsWithMetadata,
+  saveFileSessionMetadata,
+  useFileAuthState,
+} from "./file";
+import {
+  deleteRedisAuthState,
+  getRedisSavedSessionIds,
+  updateRedisSessionMetadata,
+  useRedisAuthState,
+} from "./redis";
 
 export interface AuthStateResult {
   state: AuthenticationState;
@@ -15,7 +26,7 @@ export interface AuthStateResult {
  */
 export async function useAuthState(
   sessionId: string,
-  metadata?: unknown
+  metadata?: unknown,
 ): Promise<AuthStateResult> {
   if (isRedisAvailable()) {
     logger.info("[AuthState] Using Redis auth state for session: %s", sessionId);

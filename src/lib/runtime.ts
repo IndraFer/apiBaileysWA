@@ -8,7 +8,8 @@
  * On Bun: zero overhead, delegates to native APIs where faster
  * On Node.js: uses npm packages as fallback
  */
-import { existsSync, readFileSync } from "fs";
+
+import { existsSync, readFileSync } from "node:fs";
 import bcrypt from "bcryptjs";
 
 /** true when running under Bun runtime */
@@ -41,7 +42,11 @@ export async function fileExists(path: string): Promise<boolean> {
 /**
  * Serve a file as a Response object.
  */
-export async function serveFile(path: string, contentType: string, cacheControl = "no-cache"): Promise<Response> {
+export async function serveFile(
+  path: string,
+  contentType: string,
+  cacheControl = "no-cache",
+): Promise<Response> {
   if (isBun) {
     return new Response(Bun.file(path), {
       headers: { "Content-Type": contentType, "Cache-Control": cacheControl },

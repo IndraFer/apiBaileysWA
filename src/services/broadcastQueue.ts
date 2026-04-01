@@ -2,9 +2,9 @@ import type { AnyMessageContent } from "@whiskeysockets/baileys";
 import connectionManager from "@/baileys/connectionManager";
 import type { BroadcastJob, BroadcastMessage } from "@/baileys/types";
 import config from "@/config";
+import logger from "@/lib/logger";
 import { asyncSleep, randomDelay } from "@/utils/asyncSleep";
 import { formatPhone } from "@/utils/phone";
-import logger from "@/lib/logger";
 import { errorToString } from "@/utils/validation";
 
 const jobs = new Map<string, BroadcastJob>();
@@ -25,7 +25,7 @@ function generateJobId(): string {
  */
 export async function createBroadcastJob(
   sessionId: string,
-  messages: BroadcastMessage[]
+  messages: BroadcastMessage[],
 ): Promise<BroadcastJob> {
   // Enforce max per-job limit
   if (messages.length > 1000) {
@@ -99,7 +99,13 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
 
         // Batch pause
         if ((i + 1) % batchSize === 0) {
-          logger.info("[Broadcast:%s] Batch pause at %d/%d (%dms)", job.id, i + 1, job.total, batchPauseMs);
+          logger.info(
+            "[Broadcast:%s] Batch pause at %d/%d (%dms)",
+            job.id,
+            i + 1,
+            job.total,
+            batchPauseMs,
+          );
           await asyncSleep(batchPauseMs);
         }
       }
@@ -110,7 +116,12 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
         error: errorToString(error),
       });
       job.progress = i + 1;
-      logger.error("[Broadcast:%s] Error sending to %s: %s", job.id, receiver, errorToString(error));
+      logger.error(
+        "[Broadcast:%s] Error sending to %s: %s",
+        job.id,
+        receiver,
+        errorToString(error),
+      );
     }
   }
 
@@ -119,8 +130,13 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
   // Clear message references to free memory after completion
   job.messages = [];
 
-  logger.info("[Broadcast:%s] Completed (%d/%d sent, %d errors)",
-    job.id, job.total - job.errors.length, job.total, job.errors.length);
+  logger.info(
+    "[Broadcast:%s] Completed (%d/%d sent, %d errors)",
+    job.id,
+    job.total - job.errors.length,
+    job.total,
+    job.errors.length,
+  );
 }
 
 /**

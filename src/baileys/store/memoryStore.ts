@@ -1,8 +1,8 @@
-import { jidNormalizedUser, toNumber } from "@whiskeysockets/baileys";
+import { EventEmitter } from "node:events";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { BaileysEventEmitter, WAMessage } from "@whiskeysockets/baileys";
-import { EventEmitter } from "events";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
-import { join } from "path";
+import { jidNormalizedUser, toNumber } from "@whiskeysockets/baileys";
 import logger from "@/lib/logger";
 
 interface StoreConfig {
@@ -58,7 +58,7 @@ export class MemoryStore extends EventEmitter {
           if (type === "notify" && !this.chats.has(jid)) {
             this.chats.set(jid, {
               id: jid,
-              conversationTimestamp: toNumber(msg.messageTimestamp!),
+              conversationTimestamp: toNumber(msg.messageTimestamp || 0),
               unreadCount: 1,
             });
           }
@@ -105,7 +105,8 @@ export class MemoryStore extends EventEmitter {
 
     ev.on("chats.update", (updates) => {
       for (const update of updates) {
-        const existing = this.chats.get(update.id!);
+        if (!update.id) continue;
+        const existing = this.chats.get(update.id);
         if (existing) {
           Object.assign(existing, update);
         }
@@ -146,14 +147,14 @@ export class MemoryStore extends EventEmitter {
       this.messages.set(jid, new Map());
     }
 
-    const chatMessages = this.messages.get(jid)!;
-    chatMessages.set(msg.key.id!, msg);
+    const chatMessages = this.messages.get(jid);
+    if (!chatMessages || !msg.key.id) return;
+    chatMessages.set(msg.key.id, msg);
 
     // Evict oldest if over limit
     if (chatMessages.size > this.maxMessagesPerChat) {
       const sorted = Array.from(chatMessages.entries()).sort(
-        ([, a], [, b]) =>
-          Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0)
+        ([, a], [, b]) => Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0),
       );
       const toDelete = sorted.slice(0, chatMessages.size - this.maxMessagesPerChat);
       for (const [id] of toDelete) {
@@ -176,9 +177,7 @@ export class MemoryStore extends EventEmitter {
 
   getChatList(isGroup = false): Record<string, unknown>[] {
     const filter = isGroup ? "@g.us" : "@s.whatsapp.net";
-    return [...this.chats.values()].filter((chat) =>
-      (chat.id as string)?.endsWith(filter)
-    );
+    return [...this.chats.values()].filter((chat) => (chat.id as string)?.endsWith(filter));
   }
 
   getContactList(): string[] {
@@ -192,7 +191,7 @@ export class MemoryStore extends EventEmitter {
         timestamp: Date.now(),
         chats: [...this.chats.entries()],
         messages: Object.fromEntries(
-          [...this.messages.entries()].map(([jid, msgs]) => [jid, [...msgs.entries()]])
+          [...this.messages.entries()].map(([jid, msgs]) => [jid, [...msgs.entries()]]),
         ),
         contacts: [...this.contacts.entries()],
         groupMetadata: [...this.groupMetadata.entries()],
@@ -242,8 +241,12 @@ export class MemoryStore extends EventEmitter {
         }
       }
 
-      logger.info("[Store:%s] Loaded %d chats, %d contacts",
-        this.sessionId, this.chats.size, this.contacts.size);
+      logger.info(
+        "[Store:%s] Loaded %d chats, %d contacts",
+        this.sessionId,
+        this.chats.size,
+        this.contacts.size,
+      );
     } catch (error) {
       logger.error("[Store:%s] Read error: %s", this.sessionId, (error as Error).message);
     }

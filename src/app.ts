@@ -1,29 +1,36 @@
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { bodyLimit } from "hono/body-limit";
-import { logger as honoLogger } from "hono/logger";
-import { swaggerUI } from "@hono/swagger-ui";
-
-import config from "@/config";
-import appLogger from "@/lib/logger";
-import sessionRoutes from "@/routes/session";
-import chatRoutes from "@/routes/chat";
-import groupRoutes from "@/routes/group";
-import profileRoutes from "@/routes/profile";
-import mediaRoutes from "@/routes/media";
-import storyRoutes from "@/routes/story";
-import statusRoutes from "@/routes/status";
-import { authMiddleware } from "@/middleware/auth";
-import { generalRateLimit } from "@/middleware/rateLimit";
-import { success } from "@/lib/response";
-import { loadDashboard } from "@/dashboard/loader";
 import fs from "node:fs";
 import path from "node:path";
+import { swaggerUI } from "@hono/swagger-ui";
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
+import { logger as honoLogger } from "hono/logger";
+import config from "@/config";
+import { loadDashboard } from "@/dashboard/loader";
+import appLogger from "@/lib/logger";
+import { success } from "@/lib/response";
+import { authMiddleware } from "@/middleware/auth";
+import { generalRateLimit } from "@/middleware/rateLimit";
+import chatRoutes from "@/routes/chat";
+import groupRoutes from "@/routes/group";
+import mediaRoutes from "@/routes/media";
+import profileRoutes from "@/routes/profile";
+import sessionRoutes from "@/routes/session";
+import statusRoutes from "@/routes/status";
+import storyRoutes from "@/routes/story";
 
 const app = new Hono();
 
 // ── Global Middleware ───────────────────────────────
 app.use("*", cors({ origin: config.corsOrigin }));
+
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "no-referrer");
+  c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+});
 
 // Body size limit: 10MB max to prevent DoS
 app.use("*", bodyLimit({ maxSize: 10 * 1024 * 1024 }));
@@ -57,7 +64,7 @@ try {
 
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 
-app.get("/openapi.json", (c) => {
+app.get("/openapi.json", (_c) => {
   const pkg = cachedPkg;
   const spec = {
     openapi: "3.1.0",
@@ -127,20 +134,53 @@ app.get("/openapi.json", (c) => {
           type: "object",
           properties: {
             clientName: { type: "string", description: "Client browser name", example: "Chrome" },
-            webhookUrl: { type: "string", format: "uri", description: "Webhook URL for events", example: "http://localhost:3001/webhook" },
-            webhookSecret: { type: "string", description: "Optional webhook secret sent in x-webhook-secret header", example: "my-webhook-secret" },
-            freshAuth: { type: "boolean", description: "Delete old auth state before creating session", default: false },
-            usePairingCode: { type: "boolean", description: "Use pairing code instead of QR", default: false },
-            phoneNumber: { type: "string", description: "Phone number for pairing code (with country code)", example: "+6281234567890" },
-            includeMedia: { type: "boolean", description: "Include media as base64 in webhooks", default: false },
-            syncFullHistory: { type: "boolean", description: "Sync full message history", default: false },
+            webhookUrl: {
+              type: "string",
+              format: "uri",
+              description: "Webhook URL for events",
+              example: "http://localhost:3001/webhook",
+            },
+            webhookSecret: {
+              type: "string",
+              description: "Optional webhook secret sent in x-webhook-secret header",
+              example: "my-webhook-secret",
+            },
+            freshAuth: {
+              type: "boolean",
+              description: "Delete old auth state before creating session",
+              default: false,
+            },
+            usePairingCode: {
+              type: "boolean",
+              description: "Use pairing code instead of QR",
+              default: false,
+            },
+            phoneNumber: {
+              type: "string",
+              description: "Phone number for pairing code (with country code)",
+              example: "+6281234567890",
+            },
+            includeMedia: {
+              type: "boolean",
+              description: "Include media as base64 in webhooks",
+              default: false,
+            },
+            syncFullHistory: {
+              type: "boolean",
+              description: "Sync full message history",
+              default: false,
+            },
           },
         },
         SendMessage: {
           type: "object",
           required: ["receiver", "message"],
           properties: {
-            receiver: { type: "string", description: "Receiver phone number or group JID", example: "6281234567890" },
+            receiver: {
+              type: "string",
+              description: "Receiver phone number or group JID",
+              example: "6281234567890",
+            },
             message: {
               type: "object",
               description: "Message content (Baileys AnyMessageContent format)",
@@ -183,7 +223,11 @@ app.get("/openapi.json", (c) => {
           required: ["participants", "action"],
           properties: {
             participants: { type: "array", items: { type: "string" }, example: ["6281234567890"] },
-            action: { type: "string", enum: ["add", "remove", "promote", "demote"], example: "add" },
+            action: {
+              type: "string",
+              enum: ["add", "remove", "promote", "demote"],
+              example: "add",
+            },
           },
         },
         BroadcastJob: {
@@ -191,7 +235,10 @@ app.get("/openapi.json", (c) => {
           properties: {
             id: { type: "string" },
             sessionId: { type: "string" },
-            status: { type: "string", enum: ["pending", "running", "completed", "cancelled", "failed"] },
+            status: {
+              type: "string",
+              enum: ["pending", "running", "completed", "cancelled", "failed"],
+            },
             progress: { type: "number" },
             total: { type: "number" },
             errors: { type: "array", items: { type: "object" } },
@@ -220,8 +267,14 @@ app.get("/openapi.json", (c) => {
           tags: ["Sessions"],
           summary: "Create a new session",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/SessionCreate" } } } },
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/SessionCreate" } },
+            },
+          },
           responses: {
             200: { description: "Session created — returns QR code or pairing code" },
           },
@@ -230,14 +283,18 @@ app.get("/openapi.json", (c) => {
           tags: ["Sessions"],
           summary: "Get session status",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
           responses: { 200: { description: "Session status" } },
         },
         delete: {
           tags: ["Sessions"],
           summary: "Delete/logout a session",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
           responses: { 200: { description: "Session deleted" } },
         },
       },
@@ -246,7 +303,9 @@ app.get("/openapi.json", (c) => {
           tags: ["Sessions"],
           summary: "Get QR code for pending session",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
           responses: { 200: { description: "QR code data URL" } },
         },
       },
@@ -255,8 +314,14 @@ app.get("/openapi.json", (c) => {
           tags: ["Chats"],
           summary: "Send a message",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/SendMessage" } } } },
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/SendMessage" } },
+            },
+          },
           responses: { 200: { description: "Message sent" } },
         },
       },
@@ -264,7 +329,8 @@ app.get("/openapi.json", (c) => {
         post: {
           tags: ["Chats"],
           summary: "Send a message (static endpoint)",
-          description: "Third-party friendly endpoint. Pass sessionId in request body instead of URL path.",
+          description:
+            "Third-party friendly endpoint. Pass sessionId in request body instead of URL path.",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
           requestBody: {
             content: {
@@ -291,10 +357,15 @@ app.get("/openapi.json", (c) => {
         post: {
           tags: ["Chats"],
           summary: "Send bulk messages with anti-spam delay",
-          description: "Creates a broadcast job that sends messages with randomized delays. Returns a job ID for tracking progress.",
+          description:
+            "Creates a broadcast job that sends messages with randomized delays. Returns a job ID for tracking progress.",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
-          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/SendBulk" } } } },
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: { "application/json": { schema: { $ref: "#/components/schemas/SendBulk" } } },
+          },
           responses: { 200: { description: "Broadcast job created" } },
         },
       },
@@ -307,7 +378,14 @@ app.get("/openapi.json", (c) => {
             { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
             { name: "jobId", in: "path", required: true, schema: { type: "string" } },
           ],
-          responses: { 200: { description: "Broadcast job status", content: { "application/json": { schema: { $ref: "#/components/schemas/BroadcastJob" } } } } },
+          responses: {
+            200: {
+              description: "Broadcast job status",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/BroadcastJob" } },
+              },
+            },
+          },
         },
         delete: {
           tags: ["Chats"],
@@ -321,62 +399,244 @@ app.get("/openapi.json", (c) => {
         },
       },
       "/chats/{sessionId}/forward": {
-        post: { tags: ["Chats"], summary: "Forward a message", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Message forwarded" } } },
+        post: {
+          tags: ["Chats"],
+          summary: "Forward a message",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Message forwarded" } },
+        },
       },
       "/chats/{sessionId}/message": {
-        delete: { tags: ["Chats"], summary: "Delete a message for everyone", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Message deleted" } } },
-        patch: { tags: ["Chats"], summary: "Edit a previously sent message", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Message edited" } } },
+        delete: {
+          tags: ["Chats"],
+          summary: "Delete a message for everyone",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Message deleted" } },
+        },
+        patch: {
+          tags: ["Chats"],
+          summary: "Edit a previously sent message",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Message edited" } },
+        },
       },
       "/chats/{sessionId}/read": {
-        post: { tags: ["Chats"], summary: "Mark messages as read", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Messages read" } } },
+        post: {
+          tags: ["Chats"],
+          summary: "Mark messages as read",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Messages read" } },
+        },
       },
       "/chats/{sessionId}/presence": {
-        post: { tags: ["Chats"], summary: "Send presence update (typing, recording)", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Presence updated" } } },
+        post: {
+          tags: ["Chats"],
+          summary: "Send presence update (typing, recording)",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Presence updated" } },
+        },
       },
       "/chats/{sessionId}/on-whatsapp": {
-        post: { tags: ["Chats"], summary: "Check if phone numbers are on WhatsApp", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Check results" } } },
+        post: {
+          tags: ["Chats"],
+          summary: "Check if phone numbers are on WhatsApp",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Check results" } },
+        },
       },
       "/chats/{sessionId}/list": {
-        get: { tags: ["Chats"], summary: "Get chat list from store", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Chat list" } } },
+        get: {
+          tags: ["Chats"],
+          summary: "Get chat list from store",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Chat list" } },
+        },
       },
       "/groups/{sessionId}/create": {
-        post: { tags: ["Groups"], summary: "Create a new group", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/GroupCreate" } } } }, responses: { 200: { description: "Group created" } } },
+        post: {
+          tags: ["Groups"],
+          summary: "Create a new group",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/GroupCreate" } },
+            },
+          },
+          responses: { 200: { description: "Group created" } },
+        },
       },
       "/groups/{sessionId}/list": {
-        get: { tags: ["Groups"], summary: "List groups from store", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Group list" } } },
+        get: {
+          tags: ["Groups"],
+          summary: "List groups from store",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Group list" } },
+        },
       },
       "/groups/{sessionId}/metadata/{jid}": {
-        get: { tags: ["Groups"], summary: "Get group metadata", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }, { name: "jid", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Group metadata" } } },
+        get: {
+          tags: ["Groups"],
+          summary: "Get group metadata",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+            { name: "jid", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Group metadata" } },
+        },
       },
       "/groups/{sessionId}/participants/{jid}": {
-        post: { tags: ["Groups"], summary: "Update group participants", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }, { name: "jid", in: "path", required: true, schema: { type: "string" } }], requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/ParticipantsUpdate" } } } }, responses: { 200: { description: "Participants updated" } } },
+        post: {
+          tags: ["Groups"],
+          summary: "Update group participants",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+            { name: "jid", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/ParticipantsUpdate" } },
+            },
+          },
+          responses: { 200: { description: "Participants updated" } },
+        },
       },
       "/profile/{sessionId}": {
-        get: { tags: ["Profile"], summary: "Get own profile info", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Profile info" } } },
+        get: {
+          tags: ["Profile"],
+          summary: "Get own profile info",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Profile info" } },
+        },
       },
       "/profile/{sessionId}/status": {
-        patch: { tags: ["Profile"], summary: "Update profile status text", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Status updated" } } },
+        patch: {
+          tags: ["Profile"],
+          summary: "Update profile status text",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Status updated" } },
+        },
       },
       "/profile/{sessionId}/block": {
-        post: { tags: ["Profile"], summary: "Block or unblock a user", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "User blocked/unblocked" } } },
+        post: {
+          tags: ["Profile"],
+          summary: "Block or unblock a user",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "User blocked/unblocked" } },
+        },
       },
       "/media/{sessionId}/download": {
-        post: { tags: ["Media"], summary: "Download media from a message", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Media content (base64)" } } },
+        post: {
+          tags: ["Media"],
+          summary: "Download media from a message",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Media content (base64)" } },
+        },
       },
       "/media/file/{id}": {
-        get: { tags: ["Media"], summary: "Retrieve a saved media file", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Media file" } } },
+        get: {
+          tags: ["Media"],
+          summary: "Retrieve a saved media file",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { 200: { description: "Media file" } },
+        },
       },
       "/chats/{sessionId}/conversation/{jid}": {
-        get: { tags: ["Chats"], summary: "Get conversation messages from a chat", description: "Load stored messages from a specific chat. Use ?limit=N to control count (default 25).", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }, { name: "jid", in: "path", required: true, schema: { type: "string" } }, { name: "limit", in: "query", schema: { type: "integer", default: 25 } }], responses: { 200: { description: "List of messages" } } },
+        get: {
+          tags: ["Chats"],
+          summary: "Get conversation messages from a chat",
+          description:
+            "Load stored messages from a specific chat. Use ?limit=N to control count (default 25).",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+            { name: "jid", in: "path", required: true, schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer", default: 25 } },
+          ],
+          responses: { 200: { description: "List of messages" } },
+        },
       },
       "/chats/{sessionId}/download-media": {
-        post: { tags: ["Chats"], summary: "Download media from a stored message", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], requestBody: { content: { "application/json": { schema: { type: "object", required: ["remoteJid", "messageId"], properties: { remoteJid: { type: "string" }, messageId: { type: "string" } } } } } }, responses: { 200: { description: "Media content (base64)" } } },
+        post: {
+          tags: ["Chats"],
+          summary: "Download media from a stored message",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["remoteJid", "messageId"],
+                  properties: { remoteJid: { type: "string" }, messageId: { type: "string" } },
+                },
+              },
+            },
+          },
+          responses: { 200: { description: "Media content (base64)" } },
+        },
       },
       "/story/{sessionId}/share": {
-        post: { tags: ["Story"], summary: "Share a story/status to contacts", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }], responses: { 200: { description: "Story shared" } } },
+        post: {
+          tags: ["Story"],
+          summary: "Share a story/status to contacts",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          parameters: [
+            { name: "sessionId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { 200: { description: "Story shared" } },
+        },
       },
       "/config/simulation": {
-        get: { tags: ["Config"], summary: "Get WA Web behavior simulation settings", description: "Returns current simulation config (read-only, set via .env)", security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }], responses: { 200: { description: "Simulation config" } } },
+        get: {
+          tags: ["Config"],
+          summary: "Get WA Web behavior simulation settings",
+          description: "Returns current simulation config (read-only, set via .env)",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          responses: { 200: { description: "Simulation config" } },
+        },
       },
     },
   };

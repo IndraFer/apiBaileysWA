@@ -1,5 +1,5 @@
 /** Auth UI — login/register with auto-detect setup mode */
-(function () {
+(() => {
 	let isRegister = false;
 	let registrationEnabled = false;
 
@@ -14,6 +14,18 @@
 			const status = await API.request("/auth/status", { method: "GET" });
 			if (status.success) {
 				registrationEnabled = status.data.registrationEnabled;
+				if (typeof status.data.passwordMinLength === "number") {
+					window.__dashboardMinPasswordLength =
+						status.data.passwordMinLength;
+				}
+				if (
+					status.data.registrationEnabled &&
+					status.data.registrationRequireApproval
+				) {
+					Toast.info(
+						"Registration requires admin approval before first login",
+					);
+				}
 				if (!status.data.hasUsers) {
 					isRegister = true;
 					subtitle.textContent =
@@ -51,6 +63,17 @@
 				});
 
 				if (result.success) {
+					if (!result.data?.token) {
+						Toast.info(
+							result.message ||
+								"Registration submitted. Please wait for admin approval.",
+						);
+						isRegister = false;
+						this.updateToggle(toggleText, subtitle, submitBtn);
+						submitBtn.disabled = false;
+						return;
+					}
+
 					API.setToken(result.data.token);
 					localStorage.setItem(
 						"wa-dashboard-user",
@@ -93,7 +116,7 @@
 	};
 
 	/** Global password toggle — works on any .password-toggle with data-target */
-	window.initPasswordToggles = function (container) {
+	window.initPasswordToggles = (container) => {
 		const root = container || document;
 		root.querySelectorAll(".password-toggle").forEach((btn) => {
 			if (btn._toggleBound) return;

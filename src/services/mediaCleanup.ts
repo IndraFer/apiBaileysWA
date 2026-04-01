@@ -1,5 +1,5 @@
-import { readdirSync, statSync, unlinkSync } from "fs";
-import { join } from "path";
+import { readdirSync, statSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import config from "@/config";
 import logger from "@/lib/logger";
 
@@ -16,8 +16,11 @@ export class MediaCleanupService {
   }
 
   start() {
-    logger.info("Media cleanup service started (interval: %dms, maxAge: %dh)",
-      this.intervalMs, this.maxAgeHours);
+    logger.info(
+      "Media cleanup service started (interval: %dms, maxAge: %dh)",
+      this.intervalMs,
+      this.maxAgeHours,
+    );
     this.timer = setInterval(() => this.cleanup(), this.intervalMs);
   }
 

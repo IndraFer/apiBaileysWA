@@ -128,7 +128,7 @@ a:active {
 }
 
 .hidden {
-	display: none !important;
+	display: none;
 }
 
 /* ── Auth Screen ──────────────────────────────────── */
@@ -970,7 +970,7 @@ tr:hover td {
 	width: fit-content;
 }
 
-.qr-container .skeleton {
+.qr-container :where(.skeleton) {
 	margin-bottom: 0.85rem;
 }
 
@@ -1174,7 +1174,6 @@ tr:hover td {
 	justify-content: space-between;
 	gap: 1rem;
 	flex-wrap: wrap;
-	align-items: flex-end;
 }
 
 /* Left controls group */
@@ -1898,4 +1897,9 @@ tr:hover td {
 }
 .w-full {
 	width: 100%;
+}
+
+/* Keep this at the end so utility hide is not overridden by component display rules. */
+.hidden {
+	display: none;
 }

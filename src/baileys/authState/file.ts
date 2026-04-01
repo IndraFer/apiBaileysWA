@@ -1,6 +1,6 @@
-import { useMultiFileAuthState, type AuthenticationState } from "@whiskeysockets/baileys";
-import { join } from "path";
-import { rmSync, readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { type AuthenticationState, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import logger from "@/lib/logger";
 
 const SESSIONS_DIR = join(process.cwd(), "sessions");
@@ -21,7 +21,7 @@ function getMetadataFile(sessionId: string): string {
 
 export async function useFileAuthState(
   sessionId: string,
-  metadata?: unknown
+  metadata?: unknown,
 ): Promise<{
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
@@ -43,9 +43,7 @@ export function getFileSavedSessionIds(): string[] {
   ensureSessionsDir();
   try {
     const files = readdirSync(SESSIONS_DIR);
-    return files
-      .filter((f) => f.startsWith("md_"))
-      .map((f) => f.replace("md_", ""));
+    return files.filter((f) => f.startsWith("md_")).map((f) => f.replace("md_", ""));
   } catch {
     return [];
   }

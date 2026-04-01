@@ -1,5 +1,4 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.3.0/schema.json",
     "formatter": {
         "enabled": true,
         "indentStyle": "space",
@@ -14,14 +13,5 @@
                 "noExplicitAny": "warn"
             }
         }
-    },
-    "files": {
-        "ignore": [
-            "node_modules",
-            "dist",
-            "media",
-            "sessions",
-            "logs"
-        ]
     }
 }

@@ -1,5 +1,5 @@
 /** Events Page — real-time event monitor via SSE */
-(function () {
+(() => {
 	let eventSource = null;
 	let paused = false;
 	let eventCount = 0;
@@ -36,16 +36,26 @@
 			if (recent.success && recent.data?.length > 0) {
 				const feed = document.getElementById("events-feed");
 				feed.innerHTML = "";
-				recent.data.reverse().forEach((ev) => this.addEvent(ev, false));
+				recent.data.reverse().forEach((ev) => {
+					this.addEvent(ev, false);
+				});
 			}
 
 			this.startSSE();
 		},
 
-		startSSE() {
+		async startSSE() {
 			if (eventSource) eventSource.close();
-			const token = API.getToken();
-			// SSE with auth via query param (since EventSource doesn't support headers natively)
+			const token = await API.getStreamToken();
+			if (!token) {
+				const status = document.getElementById("sse-status");
+				if (status) {
+					status.className = "badge badge-danger";
+					status.innerHTML = "AUTH REQUIRED";
+				}
+				return;
+			}
+			// EventSource cannot send custom headers, so use a short-lived stream-scoped token.
 			eventSource = new EventSource(
 				`/dashboard/api/events/stream?token=${token}`,
 			);

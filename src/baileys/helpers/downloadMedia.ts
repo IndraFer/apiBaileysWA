@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   downloadContentFromMessage,
   downloadMediaMessage,
@@ -5,10 +7,7 @@ import {
   type proto,
   type WAMessage,
 } from "@whiskeysockets/baileys";
-import { baileysLogger } from "@/lib/logger";
-import { join } from "path";
-import { mkdirSync, existsSync, writeFileSync } from "fs";
-import logger from "@/lib/logger";
+import logger, { baileysLogger } from "@/lib/logger";
 import { errorToString } from "@/utils/validation";
 
 type MediaMessage =
@@ -73,7 +72,7 @@ async function streamToBuffer(stream: AsyncIterable<Buffer>): Promise<Buffer> {
  */
 export async function downloadMediaFromMessages(
   messages: WAMessage[],
-  options?: { includeBase64?: boolean }
+  options?: { includeBase64?: boolean },
 ): Promise<Record<string, string> | null> {
   const downloadedMedia: Record<string, string> = {};
   ensureMediaDir();
@@ -108,7 +107,7 @@ export async function downloadMediaFromMessages(
  */
 export async function getMessageMedia(
   message: WAMessage,
-  reuploadRequest?: (msg: WAMessage) => Promise<WAMessage>
+  reuploadRequest?: (msg: WAMessage) => Promise<WAMessage>,
 ): Promise<{
   messageType: string;
   fileName: string;
@@ -127,12 +126,12 @@ export async function getMessageMedia(
   if (!mediaMessage) return null;
 
   try {
-    const buffer = await downloadMediaMessage(
-      message,
-      "buffer",
-      {},
-      { logger: baileysLogger as any, reuploadRequest: reuploadRequest as any }
-    );
+    const mediaDownloadOptions = {
+      logger: baileysLogger,
+      reuploadRequest: reuploadRequest ?? (async (msg: WAMessage) => msg),
+    };
+
+    const buffer = await downloadMediaMessage(message, "buffer", {}, mediaDownloadOptions);
 
     return {
       messageType,

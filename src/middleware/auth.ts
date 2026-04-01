@@ -1,13 +1,34 @@
+import { timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
-import { timingSafeEqual } from "crypto";
 import config from "@/config";
-import { getRedis, isRedisAvailable } from "@/lib/redis";
 import logger from "@/lib/logger";
+import { getRedis, isRedisAvailable } from "@/lib/redis";
 
 const REDIS_API_KEY_PREFIX = "@baileys-wa-api:api-keys";
 
 export interface AuthData {
   role: "user" | "admin";
+}
+
+function normalizeToken(value?: string): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^Bearer\s+/i.test(trimmed)) {
+    return trimmed.replace(/^Bearer\s+/i, "").trim() || null;
+  }
+  return trimmed;
+}
+
+function collectAuthCandidates(c: Context): string[] {
+  const candidates = [
+    normalizeToken(c.req.header("Authorization")),
+    normalizeToken(c.req.header("x-api-key")),
+    normalizeToken(c.req.header("x-access-token")),
+    normalizeToken(c.req.header("token")),
+  ].filter((v): v is string => Boolean(v));
+
+  return [...new Set(candidates)];
 }
 
 /**
@@ -26,8 +47,9 @@ function safeCompare(a: string, b: string): boolean {
 /**
  * Authentication middleware.
  * - Development: skips auth
- * - Simple mode (AUTH_GLOBAL_TOKEN): checks `Authorization: Bearer <token>` header
- * - Redis mode: checks `x-api-key` header against Redis-stored keys
+ * - Simple mode (AUTH_GLOBAL_TOKEN): checks standard token headers
+ *   (`Authorization`, `x-api-key`, `x-access-token`, `token`)
+ * - Redis mode: checks the same header candidates against Redis-stored API keys
  */
 export async function authMiddleware(c: Context, next: Next) {
   // Skip auth in development
@@ -35,22 +57,23 @@ export async function authMiddleware(c: Context, next: Next) {
     return next();
   }
 
+  const authCandidates = collectAuthCandidates(c);
+
   // Try simple token auth first (timing-safe comparison)
   if (config.auth.globalToken) {
-    const authHeader = c.req.header("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (token && safeCompare(token, config.auth.globalToken)) {
-      return next();
+    for (const token of authCandidates) {
+      if (safeCompare(token, config.auth.globalToken)) {
+        return next();
+      }
     }
   }
 
   // Try Redis API key auth
   if (isRedisAvailable()) {
-    const apiKey = c.req.header("x-api-key");
-    if (apiKey) {
+    for (const apiKey of authCandidates) {
       try {
-        const redis = getRedis()!;
+        const redis = getRedis();
+        if (!redis) continue;
         const raw = await redis.get(`${REDIS_API_KEY_PREFIX}:${apiKey}`);
 
         if (raw) {

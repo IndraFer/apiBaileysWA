@@ -1,19 +1,91 @@
 /**
  * Dashboard-specific API routes — SSE events, webhook config, stats.
  */
-import { Hono } from "hono";
+
+import { createHmac } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import type { proto, WAPresence } from "@whiskeysockets/baileys";
+import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import connectionManager from "@/baileys/connectionManager";
-import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
-import { dashboardAuthMiddleware } from "@/dashboard/auth";
 import { updateSessionMetadata } from "@/baileys/authState";
+import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
+import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
+import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import { isBun } from "@/lib/runtime";
 import { addWebhookLog, clearWebhookLogs, getWebhookLogs } from "@/services/webhookLog";
-import fs from "fs";
-import path from "path";
 
 const dashboardApi = new Hono();
+
+type DashboardRole = "admin" | "manager" | "assistant";
+type DashboardUserPayload = {
+  sub: string;
+  username: string;
+  role: DashboardRole;
+  exp: number;
+  scope?: "stream";
+};
+type DashboardCapability =
+  | "manageSessions"
+  | "manageWebhooks"
+  | "viewSessions"
+  | "viewChats"
+  | "sendOutbound"
+  | "replyIncoming"
+  | "manageGroups"
+  | "manageEvents";
+
+const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
+  admin: new Set([
+    "manageSessions",
+    "manageWebhooks",
+    "viewSessions",
+    "viewChats",
+    "sendOutbound",
+    "replyIncoming",
+    "manageGroups",
+    "manageEvents",
+  ]),
+  manager: new Set(["viewSessions", "viewChats", "sendOutbound", "replyIncoming", "manageGroups"]),
+  assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
+};
+
+function getDashboardRole(c: Context): DashboardRole {
+  const userPayload = c.get("dashboardUser") as DashboardUserPayload;
+  const role = userPayload?.role;
+  if (role === "admin" || role === "manager" || role === "assistant") return role;
+  return "assistant";
+}
+
+function isAdminUser(c: Context): boolean {
+  return getDashboardRole(c) === "admin";
+}
+
+function requireCapability(c: Context, capability: DashboardCapability) {
+  const role = getDashboardRole(c);
+  if (ROLE_CAPABILITIES[role].has(capability)) return null;
+  return c.json({ success: false, message: "Forbidden: insufficient permissions" }, 403);
+}
+
+function hasSessionAccess(c: Context, sessionId: string): boolean {
+  const role = getDashboardRole(c);
+  if (role === "admin") return true;
+
+  const userPayload = c.get("dashboardUser") as DashboardUserPayload;
+  const user = findDashboardUserById(String(userPayload?.sub || ""));
+  const assignedSessions = user?.assignedSessions || [];
+  if (assignedSessions.length === 0) return true;
+  return assignedSessions.includes(sessionId);
+}
+
+function requireSessionAccess(c: Context, sessionId: string) {
+  if (hasSessionAccess(c, sessionId)) return null;
+  return c.json(
+    { success: false, message: "Forbidden: session is not assigned to your account" },
+    403,
+  );
+}
 
 // Cache package.json at module load
 const pkgPath = path.join(process.cwd(), "package.json");
@@ -31,6 +103,7 @@ dashboardApi.use("*", dashboardAuthMiddleware);
  * Project metadata context.
  */
 dashboardApi.get("/about", (c) => {
+  const isAdmin = isAdminUser(c);
   try {
     const pkg = cachedPkg;
     return c.json({
@@ -38,12 +111,25 @@ dashboardApi.get("/about", (c) => {
       data: {
         project: `${pkg.name || "Baileys WA API"}`,
         version: `v${pkg.version || "1.0.0"}`,
-        author: `${pkg.author || "KoiN CoDeveloper"}`,
-        engine: `Baileys ${(pkg as any).dependencies?.["@whiskeysockets/baileys"]?.replace(/[\^~]/, "") || ""}`,
-        runtime: isBun ? "Bun + Hono" : "Node.js + Hono",
-      }
+        ...(isAdmin
+          ? {
+              author: `${pkg.author || "KoiN CoDeveloper"}`,
+              engine: `Baileys ${
+                typeof pkg.dependencies === "object" && pkg.dependencies !== null
+                  ? String(
+                      (pkg.dependencies as Record<string, unknown>)["@whiskeysockets/baileys"] ||
+                        "",
+                    ).replace(/[\^~]/, "")
+                  : ""
+              }`,
+              runtime: isBun ? "Bun + Hono" : "Node.js + Hono",
+            }
+          : {
+              infoRestricted: true,
+            }),
+      },
     });
-  } catch (err) {
+  } catch (_err) {
     return c.json({
       success: false,
       data: {
@@ -51,8 +137,8 @@ dashboardApi.get("/about", (c) => {
         version: "Unknown",
         author: "KoiN CoDeveloper",
         engine: "Baileys",
-        runtime: isBun ? "Bun" : "Node.js"
-      }
+        runtime: isBun ? "Bun" : "Node.js",
+      },
     });
   }
 });
@@ -62,6 +148,7 @@ dashboardApi.get("/about", (c) => {
  * Overview statistics.
  */
 dashboardApi.get("/stats", (c) => {
+  const isAdmin = isAdminUser(c);
   const pkg = cachedPkg;
   const sessions = connectionManager.listSessions();
   return c.json({
@@ -70,11 +157,17 @@ dashboardApi.get("/stats", (c) => {
       totalSessions: sessions.length,
       connectedSessions: sessions.filter((s) => s.connected).length,
       disconnectedSessions: sessions.filter((s) => !s.connected).length,
-      uptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      environment: config.env,
-      redisEnabled: config.redis.enabled,
       version: `v${pkg.version || "1.0.0"}`,
+      ...(isAdmin
+        ? {
+            uptime: process.uptime(),
+            memoryUsage: process.memoryUsage(),
+            environment: config.env,
+            redisEnabled: config.redis.enabled,
+          }
+        : {
+            infoRestricted: true,
+          }),
     },
   });
 });
@@ -84,7 +177,11 @@ dashboardApi.get("/stats", (c) => {
  * List all sessions with detailed status.
  */
 dashboardApi.get("/sessions", (c) => {
-  const sessions = connectionManager.listSessions();
+  const denied = requireCapability(c, "viewSessions");
+  if (denied) return denied;
+  const sessions = connectionManager
+    .listSessions()
+    .filter((session) => hasSessionAccess(c, String(session.sessionId || "")));
   return c.json({ success: true, data: sessions });
 });
 
@@ -93,7 +190,11 @@ dashboardApi.get("/sessions", (c) => {
  * Create a new session.
  */
 dashboardApi.post("/sessions/:sessionId", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json().catch(() => ({}));
 
   try {
@@ -110,13 +211,12 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       phoneNumber: body.phoneNumber,
       includeMedia: body.includeMedia,
       syncFullHistory: body.syncFullHistory ?? false,
+      autoReply: body.autoReply,
     });
 
     return c.json({
       success: true,
-      message: result.pairingCode
-        ? "Pairing code generated"
-        : "Session created — scan QR code",
+      message: result.pairingCode ? "Pairing code generated" : "Session created — scan QR code",
       data: result,
     });
   } catch (err) {
@@ -129,7 +229,11 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
  * Get session status.
  */
 dashboardApi.get("/sessions/:sessionId", (c) => {
+  const denied = requireCapability(c, "viewSessions");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const status = connectionManager.getSessionStatus(sessionId);
   return c.json({ success: true, data: status });
 });
@@ -139,7 +243,11 @@ dashboardApi.get("/sessions/:sessionId", (c) => {
  * Delete a session.
  */
 dashboardApi.delete("/sessions/:sessionId", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   try {
     await connectionManager.deleteSession(sessionId);
     return c.json({ success: true, message: "Session deleted" });
@@ -153,15 +261,19 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
  * Update webhook config for a session.
  */
 dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json().catch(() => ({}));
   const webhookUrl = String(body.webhookUrl || "").trim();
   // Use undefined (not empty string) when secret is blank so sendToWebhook
-  // correctly falls back to the global WEBHOOK_SECRET env variable.
+  // falls back to AUTH_GLOBAL_TOKEN.
   const rawSecret = String(body.webhookSecret ?? "").trim();
   const webhookSecret = rawSecret || undefined;
   const events = Array.isArray(body.events)
-    ? body.events.map((e) => String(e).trim()).filter(Boolean)
+    ? body.events.map((e: unknown) => String(e).trim()).filter(Boolean)
     : [];
 
   try {
@@ -187,14 +299,17 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
  * Send a test ping to target webhook URL.
  */
 dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json().catch(() => ({}));
 
   try {
     const session = connectionManager.getSession(sessionId);
     const configuredUrl = session.getOptions().webhookUrl || "";
-    const configuredSecret =
-      session.getOptions().webhookSecret || config.webhook.secret || config.auth.globalToken || "";
+    const configuredSecret = session.getOptions().webhookSecret || config.auth.globalToken || "";
     const webhookUrl = String(body.webhookUrl || configuredUrl).trim();
     const webhookSecret = String(body.webhookSecret || configuredSecret).trim();
 
@@ -206,10 +321,13 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
     try {
       parsedUrl = new URL(webhookUrl);
     } catch {
-      return c.json({
-        success: false,
-        message: "Webhook URL is invalid. Use a full URL such as http://127.0.0.1:3001/webhook",
-      }, 400);
+      return c.json(
+        {
+          success: false,
+          message: "Webhook URL is invalid. Use a full URL such as http://127.0.0.1:3001/webhook",
+        },
+        400,
+      );
     }
 
     const payload = {
@@ -224,15 +342,38 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
     const startedAt = Date.now();
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const rawBody = JSON.stringify(payload);
       if (webhookSecret) {
         headers["x-webhook-secret"] = webhookSecret;
         headers.Authorization = `Bearer ${webhookSecret}`;
       }
 
+      if (config.webhook.signatureMode !== "off") {
+        if (!webhookSecret && config.webhook.signatureMode === "required") {
+          return c.json(
+            {
+              success: false,
+              message:
+                "Webhook signature mode is required, but no secret is available (session secret or AUTH_GLOBAL_TOKEN)",
+            },
+            400,
+          );
+        }
+
+        if (webhookSecret) {
+          const timestamp = String(Date.now());
+          const signature = createHmac("sha256", webhookSecret)
+            .update(`${timestamp}.${rawBody}`)
+            .digest("hex");
+          headers["x-webhook-timestamp"] = timestamp;
+          headers["x-webhook-signature"] = `sha256=${signature}`;
+        }
+      }
+
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: rawBody,
       });
 
       if (!response.ok) {
@@ -247,10 +388,13 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
           latencyMs,
           error: `HTTP ${response.status}`,
         });
-        return c.json({
-          success: false,
-          message: `Webhook test failed: HTTP ${response.status} from ${parsedUrl.origin}${parsedUrl.pathname}`,
-        }, 502);
+        return c.json(
+          {
+            success: false,
+            message: `Webhook test failed: HTTP ${response.status} from ${parsedUrl.origin}${parsedUrl.pathname}`,
+          },
+          502,
+        );
       }
 
       const latencyMs = Date.now() - startedAt;
@@ -264,21 +408,35 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
         latencyMs,
       });
 
-      return c.json({ success: true, message: "Webhook test succeeded", data: { status: response.status } });
+      return c.json({
+        success: true,
+        message: "Webhook test succeeded",
+        data: { status: response.status },
+      });
     } catch (err) {
       const errMessage = (err as Error).message;
       const looksLikeTlsCertIssue = /certificate|tls|ssl/i.test(errMessage);
-      const looksLikeSocketClosed = /socket connection was closed unexpectedly|socket.*closed/i.test(errMessage);
+      const looksLikeSocketClosed =
+        /socket connection was closed unexpectedly|socket.*closed/i.test(errMessage);
 
       const hints: string[] = [];
       if (looksLikeTlsCertIssue) {
-        hints.push("TLS certificate issue detected. Use a valid certificate chain or HTTP on trusted local network.");
+        hints.push(
+          "TLS certificate issue detected. Use a valid certificate chain or HTTP on trusted local network.",
+        );
       }
       if (looksLikeSocketClosed) {
-        hints.push("Target endpoint closed the connection. Check protocol mismatch (http vs https), server listener, and reverse-proxy upstream settings.");
+        hints.push(
+          "Target endpoint closed the connection. Check protocol mismatch (http vs https), server listener, and reverse-proxy upstream settings.",
+        );
       }
-      if (parsedUrl.protocol === "https:" && (parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "localhost")) {
-        hints.push("For local testing, verify your local server actually serves HTTPS. If not, switch URL to http://...");
+      if (
+        parsedUrl.protocol === "https:" &&
+        (parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "localhost")
+      ) {
+        hints.push(
+          "For local testing, verify your local server actually serves HTTPS. If not, switch URL to http://...",
+        );
       }
 
       const latencyMs = Date.now() - startedAt;
@@ -293,10 +451,14 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
         latencyMs,
         error: errMessage,
       });
-      return c.json({
-        success: false,
-        message: `Webhook test failed: ${errMessage}. Target: ${parsedUrl.origin}${parsedUrl.pathname}.${hintText}`.trim(),
-      }, 502);
+      return c.json(
+        {
+          success: false,
+          message:
+            `Webhook test failed: ${errMessage}. Target: ${parsedUrl.origin}${parsedUrl.pathname}.${hintText}`.trim(),
+        },
+        502,
+      );
     }
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
@@ -308,9 +470,28 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
  * Read webhook delivery logs.
  */
 dashboardApi.get("/webhooks/logs", (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
   const limit = Number(c.req.query("limit") || "100");
   const sessionId = c.req.query("sessionId") || undefined;
   return c.json({ success: true, data: getWebhookLogs(limit, sessionId) });
+});
+
+/**
+ * GET /dashboard/api/webhooks/meta
+ * Read-only webhook delivery metadata for admin UI.
+ */
+dashboardApi.get("/webhooks/meta", (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
+
+  return c.json({
+    success: true,
+    data: {
+      signatureMode: config.webhook.signatureMode,
+      authFallback: ["session webhook secret", "AUTH_GLOBAL_TOKEN"],
+    },
+  });
 });
 
 /**
@@ -318,6 +499,8 @@ dashboardApi.get("/webhooks/logs", (c) => {
  * Clear webhook delivery logs.
  */
 dashboardApi.post("/webhooks/logs/clear", (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
   clearWebhookLogs();
   return c.json({ success: true, message: "Webhook logs cleared" });
 });
@@ -327,7 +510,11 @@ dashboardApi.post("/webhooks/logs/clear", (c) => {
  * Send a message from dashboard.
  */
 dashboardApi.post("/sessions/:sessionId/send", async (c) => {
+  const denied = requireCapability(c, "sendOutbound");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json();
   const { receiver, message, isGroup } = body;
 
@@ -351,7 +538,11 @@ dashboardApi.post("/sessions/:sessionId/send", async (c) => {
  * Get chat list from store (default: 1-on-1 only).
  */
 dashboardApi.get("/sessions/:sessionId/chats", (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const isGroup = c.req.query("isGroup") === "true";
 
   try {
@@ -368,7 +559,11 @@ dashboardApi.get("/sessions/:sessionId/chats", (c) => {
  * Get messages from specific chat conversation.
  */
 dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const encodedJid = c.req.param("jid");
   const jid = decodeURIComponent(encodedJid);
   const limit = Math.min(Math.max(Number(c.req.query("limit") || "50"), 1), 500);
@@ -387,12 +582,19 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
  * Send a text message to 1-on-1 chat.
  */
 dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
+  const denied = requireCapability(c, "replyIncoming");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+  const role = getDashboardRole(c);
   const body = await c.req.json().catch(() => ({}));
   const receiver = String(body.receiver || "").trim();
   const text = String(body.text || "").trim();
   const isGroup = body.isGroup === true;
-  const mentions = Array.isArray(body.mentions) ? body.mentions.filter((m) => typeof m === "string") : [];
+  const mentions = Array.isArray(body.mentions)
+    ? body.mentions.filter((m: unknown) => typeof m === "string")
+    : [];
 
   if (!receiver) {
     return c.json({ success: false, message: "Receiver is required" }, 400);
@@ -410,12 +612,40 @@ dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
         ? formatGroup(receiver)
         : formatPhone(receiver);
 
-    const result = await session.sendMessage(jid, {
-      text,
-      mentions: mentions.length > 0 ? mentions : undefined,
-    }, {
-      simulateTyping: false,
-    });
+    if (role === "assistant") {
+      if (isGroup) {
+        return c.json(
+          {
+            success: false,
+            message: "Forbidden: assistant role is limited to reply-only 1-on-1 chats",
+          },
+          403,
+        );
+      }
+
+      const recentMessages = session.getStore().loadMessages(jid, 50);
+      const hasInboundContext = recentMessages.some((message) => !message.key.fromMe);
+      if (!hasInboundContext) {
+        return c.json(
+          {
+            success: false,
+            message: "Forbidden: assistant role may only reply to an existing inbound conversation",
+          },
+          403,
+        );
+      }
+    }
+
+    const result = await session.sendMessage(
+      jid,
+      {
+        text,
+        mentions: mentions.length > 0 ? mentions : undefined,
+      },
+      {
+        simulateTyping: false,
+      },
+    );
     return c.json({
       success: true,
       message: "Message sent",
@@ -431,18 +661,16 @@ dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
  * Send presence update for a chat target (typing, recording, paused, etc.).
  */
 dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
+  const denied = requireCapability(c, "replyIncoming");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json().catch(() => ({}));
   const type = String(body.type || "").trim();
   const rawJid = String(body.jid || "").trim();
 
-  const allowedTypes = new Set([
-    "available",
-    "unavailable",
-    "composing",
-    "recording",
-    "paused",
-  ]);
+  const allowedTypes = new Set(["available", "unavailable", "composing", "recording", "paused"]);
   if (!allowedTypes.has(type)) {
     return c.json({ success: false, message: "Invalid presence type" }, 400);
   }
@@ -463,7 +691,7 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
           : formatPhone(rawJid);
     }
 
-    await session.sendPresenceUpdate(type as any, targetJid);
+    await session.sendPresenceUpdate(type as WAPresence, targetJid);
     return c.json({ success: true, message: "Presence updated" });
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
@@ -475,7 +703,11 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
  * Mark unread messages in the chat as read (dashboard safety helper).
  */
 dashboardApi.post("/sessions/:sessionId/chats/:jid/read", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const jid = decodeURIComponent(c.req.param("jid"));
   const limit = Math.min(Math.max(Number(c.req.query("limit") || "120"), 1), 500);
 
@@ -492,7 +724,7 @@ dashboardApi.post("/sessions/:sessionId/chats/:jid/read", async (c) => {
       }));
 
     if (unreadKeys.length > 0) {
-      await session.readMessages(unreadKeys as any);
+      await session.readMessages(unreadKeys as proto.IMessageKey[]);
     }
 
     return c.json({
@@ -510,7 +742,11 @@ dashboardApi.post("/sessions/:sessionId/chats/:jid/read", async (c) => {
  * Get basic group members metadata.
  */
 dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const jid = decodeURIComponent(c.req.param("jid"));
 
   try {
@@ -538,17 +774,24 @@ dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
  * List groups for dashboard Groups page.
  */
 dashboardApi.get("/groups/:sessionId/list", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
 
   try {
     const session = connectionManager.getSession(sessionId);
     const groups = await session.groupFetchAllParticipating();
-    const groupList = Object.values(groups || {}).map((g: any) => ({
-      id: g.id,
-      subject: g.subject,
-      participants: g.participants || [],
-      size: Array.isArray(g.participants) ? g.participants.length : undefined,
-    }));
+    const groupList = Object.values(groups || {}).map((group) => {
+      const g = group as { id?: string; subject?: string; participants?: unknown[] };
+      return {
+        id: g.id,
+        subject: g.subject,
+        participants: g.participants || [],
+        size: Array.isArray(g.participants) ? g.participants.length : undefined,
+      };
+    });
 
     return c.json({ success: true, data: groupList });
   } catch (err) {
@@ -561,11 +804,15 @@ dashboardApi.get("/groups/:sessionId/list", async (c) => {
  * Create a group for dashboard Groups page.
  */
 dashboardApi.post("/groups/:sessionId/create", async (c) => {
+  const denied = requireCapability(c, "manageGroups");
+  if (denied) return denied;
   const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
   const body = await c.req.json().catch(() => ({}));
   const groupName = String(body.groupName || "").trim();
   const participants = Array.isArray(body.participants)
-    ? body.participants.map((p) => String(p).trim()).filter(Boolean)
+    ? body.participants.map((p: unknown) => String(p).trim()).filter(Boolean)
     : [];
 
   if (!groupName) {
@@ -578,7 +825,7 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
   try {
     const session = connectionManager.getSession(sessionId);
     const { formatPhone } = await import("@/utils/phone");
-    const normalizedParticipants = participants.map((p) => formatPhone(p));
+    const normalizedParticipants = participants.map((p: string) => formatPhone(p));
     const result = await session.groupCreate(groupName, normalizedParticipants);
 
     return c.json({
@@ -600,6 +847,8 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
  * SSE endpoint for real-time event monitoring.
  */
 dashboardApi.get("/events/stream", (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   return streamSSE(c, async (stream) => {
     const sessionFilter = c.req.query("session");
     const eventFilter = c.req.query("event");
@@ -638,6 +887,8 @@ dashboardApi.get("/events/stream", (c) => {
  * Get recent events (non-SSE).
  */
 dashboardApi.get("/events/recent", (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
   const limit = Number(c.req.query("limit") || 50);
   const events = eventBus.getRecentEvents(limit);
   return c.json({ success: true, data: events });
@@ -648,6 +899,8 @@ dashboardApi.get("/events/recent", (c) => {
  * Clear event buffer.
  */
 dashboardApi.post("/events/clear", (c) => {
+  const denied = requireCapability(c, "manageEvents");
+  if (denied) return denied;
   eventBus.clearEvents();
   return c.json({ success: true, message: "Events cleared" });
 });
@@ -657,6 +910,9 @@ dashboardApi.post("/events/clear", (c) => {
  * Get WA Web behavior simulation settings (read-only).
  */
 dashboardApi.get("/config/simulation", (c) => {
+  if (!isAdminUser(c)) {
+    return c.json({ success: false, message: "Forbidden: admin access required" }, 403);
+  }
   return c.json({
     success: true,
     data: {

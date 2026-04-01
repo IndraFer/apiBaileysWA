@@ -1,20 +1,21 @@
+import type { AnyMessageContent } from "@whiskeysockets/baileys";
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
+import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
-import { sessionValidator } from "@/middleware/sessionValidator";
 import { sendRateLimit } from "@/middleware/rateLimit";
-import { formatPhone, formatGroup } from "@/utils/phone";
-import { success, error } from "@/lib/response";
+import { sessionValidator } from "@/middleware/sessionValidator";
 import {
-  groupCreateSchema,
-  groupParticipantsSchema,
-  groupSendSchema,
-  groupSubjectSchema,
-  groupDescriptionSchema,
-  groupSettingSchema,
-  groupProfilePictureSchema,
   groupAcceptInviteSchema,
+  groupCreateSchema,
+  groupDescriptionSchema,
+  groupParticipantsSchema,
+  groupProfilePictureSchema,
+  groupSendSchema,
+  groupSettingSchema,
+  groupSubjectSchema,
 } from "@/schemas/group";
+import { formatGroup, formatPhone } from "@/utils/phone";
 
 const groupRoutes = new Hono();
 
@@ -98,7 +99,7 @@ groupRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) 
   try {
     const session = connectionManager.getSession(sessionId);
     const jid = formatGroup(receiver);
-    await session.sendMessage(jid, message as any);
+    await session.sendMessage(jid, message as AnyMessageContent);
     return success(c, null, "Message sent to group");
   } catch (err) {
     return error(c, `Failed to send group message: ${(err as Error).message}`);

@@ -1,41 +1,49 @@
+import { createHmac } from "node:crypto";
 import type { Boom } from "@hapi/boom";
 import makeWASocket, {
   type AnyMessageContent,
   type BaileysEventMap,
   Browsers,
+  type ChatModification,
   type ConnectionState,
   DisconnectReason,
+  delay,
+  fetchLatestBaileysVersion,
+  type MessageReceiptType,
   makeCacheableSignalKeyStore,
   type ParticipantAction,
   type proto,
   type WAMessage,
-  type WAPresence,
-  type WAConnectionState,
-  type ChatModification,
-  type MessageReceiptType,
   WAMessageStatus,
-  delay,
-  fetchLatestBaileysVersion,
-  getAggregateVotesInPollMessage,
+  type WAPresence,
 } from "@whiskeysockets/baileys";
-import { toDataURL } from "qrcode";
 import NodeCache from "node-cache";
-import { LRUCache } from "lru-cache";
-import { useAuthState, type AuthStateResult } from "@/baileys/authState";
-import { shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
+import { toDataURL } from "qrcode";
+import { type AuthStateResult, useAuthState } from "@/baileys/authState";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
-import type { SessionOptions, SessionMetadata, WebhookPayload } from "@/baileys/types";
+import { shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
 import { MemoryStore } from "@/baileys/store/memoryStore";
+import type { SessionMetadata, SessionOptions, WebhookPayload } from "@/baileys/types";
 import config from "@/config";
+import eventBus from "@/dashboard/eventBus";
+import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
+import { addWebhookLog } from "@/services/webhookLog";
 import { asyncSleep } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
-import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
-import eventBus from "@/dashboard/eventBus";
-import { addWebhookLog } from "@/services/webhookLog";
 
 const msgRetryCounterCache = new NodeCache({
   stdTTL: 3600,
   checkperiod: 600,
+});
+
+const autoReplyCooldownCache = new NodeCache({
+  stdTTL: 300,
+  checkperiod: 60,
+});
+
+const autoReplyBurstCache = new NodeCache({
+  stdTTL: 30,
+  checkperiod: 30,
 });
 
 export class BaileysNotConnectedError extends Error {
@@ -45,9 +53,19 @@ export class BaileysNotConnectedError extends Error {
 }
 
 const LOGGER_OMIT_KEYS = [
-  "qr", "qrDataUrl", "fileSha256", "jpegThumbnail", "fileEncSha256",
-  "scansSidecar", "midQualityFileSha256", "mediaKey", "senderKeyHash",
-  "recipientKeyHash", "messageSecret", "thumbnailSha256", "thumbnailEncSha256",
+  "qr",
+  "qrDataUrl",
+  "fileSha256",
+  "jpegThumbnail",
+  "fileEncSha256",
+  "scansSidecar",
+  "midQualityFileSha256",
+  "mediaKey",
+  "senderKeyHash",
+  "recipientKeyHash",
+  "messageSecret",
+  "thumbnailSha256",
+  "thumbnailEncSha256",
   "appStateSyncKeyShare",
 ];
 
@@ -101,6 +119,7 @@ export class BaileysConnection {
       webhookEvents: this.options.webhookEvents,
       includeMedia: this.options.includeMedia,
       syncFullHistory: this.options.syncFullHistory,
+      autoReply: this.options.autoReply,
     };
   }
 
@@ -123,9 +142,18 @@ export class BaileysConnection {
     try {
       const result = await fetchLatestBaileysVersion();
       version = result.version;
-      logger.info("[%s] Using WA v%s (isLatest: %s)", this.sessionId, version.join("."), result.isLatest);
+      logger.info(
+        "[%s] Using WA v%s (isLatest: %s)",
+        this.sessionId,
+        version.join("."),
+        result.isLatest,
+      );
     } catch (error) {
-      logger.warn("[%s] Failed to fetch WA version, using default: %s", this.sessionId, errorToString(error));
+      logger.warn(
+        "[%s] Failed to fetch WA version, using default: %s",
+        this.sessionId,
+        errorToString(error),
+      );
     }
 
     // Load store from file
@@ -146,7 +174,8 @@ export class BaileysConnection {
         syncFullHistory: this.options.syncFullHistory ?? false,
         shouldIgnoreJid: (jid: string) => shouldIgnoreJid(jid),
         getMessage: async (key) => {
-          const msg = this.store.getMessage(key.remoteJid!, key.id!);
+          if (!key.remoteJid || !key.id) return undefined;
+          const msg = this.store.getMessage(key.remoteJid, key.id);
           return msg?.message || undefined;
         },
       });
@@ -164,7 +193,7 @@ export class BaileysConnection {
       if (!state.creds.account) {
         // Wait for the first QR to be generated before requesting pairing code
         await new Promise<void>((resolve) => {
-          this.socket!.ev.on("connection.update", (update) => {
+          this.socket?.ev.on("connection.update", (update) => {
             if (update.qr) resolve();
           });
         });
@@ -244,7 +273,11 @@ export class BaileysConnection {
     });
 
     this.socket.ev.on("group-participants.update", (g) => {
-      this.sendToWebhook({ sessionId: this.sessionId, event: "group-participants.update", data: g });
+      this.sendToWebhook({
+        sessionId: this.sessionId,
+        event: "group-participants.update",
+        data: g,
+      });
     });
 
     // Presence & labels
@@ -256,7 +289,7 @@ export class BaileysConnection {
     const presenceState = new Map();
     this.socket.ev.on("presence.update", (p) => {
       // p: { id: chatJid, presences: { [userJid]: { lastKnownPresence: "composing"|... } } }
-      if (!p || !p.id || !p.presences) return;
+      if (!p?.id || !p.presences) return;
       const chatJid = p.id;
       let chatMap = presenceState.get(chatJid);
       if (!chatMap) {
@@ -273,8 +306,6 @@ export class BaileysConnection {
             shouldEmit = true;
             chatMap.set(userJid, curr);
           } else {
-            // Anomali: abaikan, jangan emit/jangan update state
-            continue;
           }
         } else {
           // Always update state and emit for composing/recording/available/unavailable
@@ -336,17 +367,29 @@ export class BaileysConnection {
 
       if (shouldReconnect) {
         this.reconnectCount++;
-        logger.info("[%s] Reconnecting (attempt %d/%d)...", this.sessionId, this.reconnectCount, config.baileys.maxRetries);
+        logger.info(
+          "[%s] Reconnecting (attempt %d/%d)...",
+          this.sessionId,
+          this.reconnectCount,
+          config.baileys.maxRetries,
+        );
         this.socket = null;
-        setTimeout(() => {
-          this.connect().catch((err) => {
-            logger.error("[%s] Reconnection failed: %s", this.sessionId, errorToString(err));
-          });
-        }, statusCode === DisconnectReason.restartRequired ? 0 : config.baileys.reconnectInterval);
+        setTimeout(
+          () => {
+            this.connect().catch((err) => {
+              logger.error("[%s] Reconnection failed: %s", this.sessionId, errorToString(err));
+            });
+          },
+          statusCode === DisconnectReason.restartRequired ? 0 : config.baileys.reconnectInterval,
+        );
         return;
       }
 
-      logger.info("[%s] Connection closed permanently (statusCode: %d)", this.sessionId, statusCode);
+      logger.info(
+        "[%s] Connection closed permanently (statusCode: %d)",
+        this.sessionId,
+        statusCode,
+      );
       await this.close();
       return;
     }
@@ -378,7 +421,11 @@ export class BaileysConnection {
       if (incomingKeys.length > 0) {
         try {
           await this.readMessages(incomingKeys);
-          logger.debug("[%s] Auto-read %d incoming message(s)", this.sessionId, incomingKeys.length);
+          logger.debug(
+            "[%s] Auto-read %d incoming message(s)",
+            this.sessionId,
+            incomingKeys.length,
+          );
         } catch (err) {
           logger.error("[%s] Auto-read failed: %s", this.sessionId, errorToString(err));
         }
@@ -418,7 +465,9 @@ export class BaileysConnection {
     if (!autoReply.enabled) return;
 
     // Only reply to incoming messages from others
-    const messages = data.messages.filter((m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid));
+    const messages = data.messages.filter(
+      (m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid),
+    );
     if (messages.length === 0) return;
 
     let shouldReply = false;
@@ -445,8 +494,25 @@ export class BaileysConnection {
     if (shouldReply) {
       for (const m of messages) {
         try {
-          logger.info("[%s] Sending auto-reply to %s", this.sessionId, m.key.remoteJid);
-          await this.sendMessage(m.key.remoteJid!, { text: autoReply.message }, { quoted: m });
+          const remoteJid = m.key.remoteJid;
+          if (!remoteJid) continue;
+
+          const cooldownKey = `${this.sessionId}:cooldown:${remoteJid}`;
+          const burstKey = `${this.sessionId}:burst:${remoteJid}:${m.key.id || "unknown"}`;
+          if (autoReplyCooldownCache.has(cooldownKey) || autoReplyBurstCache.has(burstKey)) {
+            logger.debug(
+              "[%s] Skipping auto-reply to %s due to cooldown/dedupe",
+              this.sessionId,
+              remoteJid,
+            );
+            continue;
+          }
+
+          autoReplyBurstCache.set(burstKey, true);
+          autoReplyCooldownCache.set(cooldownKey, true);
+
+          logger.info("[%s] Sending auto-reply to %s", this.sessionId, remoteJid);
+          await this.sendMessage(remoteJid, { text: autoReply.message }, { quoted: m });
         } catch (err) {
           logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
         }
@@ -506,8 +572,9 @@ export class BaileysConnection {
 
         // Random human-like typing delay
         const delayMs = Math.floor(
-          Math.random() * (config.simulation.typingDelayMaxMs - config.simulation.typingDelayMinMs)
-          + config.simulation.typingDelayMinMs
+          Math.random() *
+            (config.simulation.typingDelayMaxMs - config.simulation.typingDelayMinMs) +
+            config.simulation.typingDelayMinMs,
         );
         logger.debug("[%s] Simulating typing for %dms to %s", this.sessionId, delayMs, receiver);
         await delay(delayMs);
@@ -515,7 +582,11 @@ export class BaileysConnection {
         // Clear composing indicator
         await this.sendPresenceUpdate("paused", receiver);
       } catch (err) {
-        logger.warn("[%s] Typing simulation error (non-fatal): %s", this.sessionId, errorToString(err));
+        logger.warn(
+          "[%s] Typing simulation error (non-fatal): %s",
+          this.sessionId,
+          errorToString(err),
+        );
       }
     }
 
@@ -553,14 +624,21 @@ export class BaileysConnection {
   }
 
   async editMessage(jid: string, key: proto.IMessageKey, messageContent: AnyMessageContent) {
-    return this.safeSocket().sendMessage(jid, { ...messageContent, edit: key } as AnyMessageContent);
+    return this.safeSocket().sendMessage(jid, {
+      ...messageContent,
+      edit: key,
+    } as AnyMessageContent);
   }
 
   async chatModify(mod: ChatModification, jid: string) {
     return this.safeSocket().chatModify(mod, jid);
   }
 
-  async fetchMessageHistory(count: number, oldestMsgKey: proto.IMessageKey, oldestMsgTimestamp: number) {
+  async fetchMessageHistory(
+    count: number,
+    oldestMsgKey: proto.IMessageKey,
+    oldestMsgTimestamp: number,
+  ) {
     return this.safeSocket().fetchMessageHistory(count, oldestMsgKey, oldestMsgTimestamp);
   }
 
@@ -630,7 +708,10 @@ export class BaileysConnection {
     return this.safeSocket().groupUpdateDescription(jid, description);
   }
 
-  async groupSettingUpdate(jid: string, setting: "announcement" | "not_announcement" | "locked" | "unlocked") {
+  async groupSettingUpdate(
+    jid: string,
+    setting: "announcement" | "not_announcement" | "locked" | "unlocked",
+  ) {
     return this.safeSocket().groupSettingUpdate(jid, setting);
   }
 
@@ -690,14 +771,16 @@ export class BaileysConnection {
   // Webhook
   // ──────────────────────────────────────
 
-  private async sendToWebhook(payload: WebhookPayload) {
+  private async sendToWebhook(
+    payload: WebhookPayload,
+  ): Promise<"success" | "failed" | "skipped" | "disabled"> {
     const webhookUrl = this.options.webhookUrl || config.webhook.url;
-    // Fallback order: session secret -> WEBHOOK_SECRET -> AUTH_GLOBAL_TOKEN.
-    // This keeps old behavior while allowing environments that reuse global auth token.
+    // Fallback order: per-session secret -> AUTH_GLOBAL_TOKEN (if enabled by env toggle).
     const webhookSecret =
-      this.options.webhookSecret || config.webhook.secret || config.auth.globalToken;
+      this.options.webhookSecret ||
+      (config.webhook.allowGlobalTokenFallback ? config.auth.globalToken : "");
     if (!webhookUrl) {
-      return;
+      return "disabled";
     }
 
     // Check allowed events
@@ -711,7 +794,7 @@ export class BaileysConnection {
         attempt: 0,
         error: `Event filtered by WEBHOOK_ALLOWED_EVENTS: ${eventName}`,
       });
-      return;
+      return "skipped";
     }
 
     // Optional session-level filtering configured from dashboard.
@@ -726,7 +809,7 @@ export class BaileysConnection {
           attempt: 0,
           error: `Event filtered by session webhook events: ${payload.event}`,
         });
-        return;
+        return "skipped";
       }
     }
 
@@ -752,15 +835,41 @@ export class BaileysConnection {
       const currentAttempt = attempt + 1;
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
+        const rawBody = JSON.stringify(payload);
         if (webhookSecret) {
           headers["x-webhook-secret"] = webhookSecret;
           headers.Authorization = `Bearer ${webhookSecret}`;
         }
 
+        if (config.webhook.signatureMode !== "off") {
+          if (!webhookSecret && config.webhook.signatureMode === "required") {
+            const reason = "Missing secret for required webhook signature mode";
+            addWebhookLog({
+              sessionId: this.sessionId,
+              event: payload.event,
+              webhookUrl,
+              status: "network-error",
+              attempt: currentAttempt,
+              latencyMs: Date.now() - startedAt,
+              error: reason,
+            });
+            throw new Error(reason);
+          }
+
+          if (webhookSecret) {
+            const timestamp = String(Date.now());
+            const signature = createHmac("sha256", webhookSecret)
+              .update(`${timestamp}.${rawBody}`)
+              .digest("hex");
+            headers["x-webhook-timestamp"] = timestamp;
+            headers["x-webhook-signature"] = `sha256=${signature}`;
+          }
+        }
+
         const response = await fetch(webhookUrl, {
           method: "POST",
           headers,
-          body: JSON.stringify(payload),
+          body: rawBody,
         });
 
         if (response.ok) {
@@ -774,7 +883,7 @@ export class BaileysConnection {
             httpStatus: response.status,
             latencyMs: Date.now() - startedAt,
           });
-          return;
+          return "success";
         }
 
         addWebhookLog({
@@ -790,8 +899,13 @@ export class BaileysConnection {
 
         lastFailureReason = `HTTP ${response.status}`;
         if (currentAttempt < maxAttempts) {
-          logger.warn("[%s] Webhook failed (HTTP %d), attempt %d/%d",
-            this.sessionId, response.status, currentAttempt, maxAttempts);
+          logger.warn(
+            "[%s] Webhook failed (HTTP %d), attempt %d/%d",
+            this.sessionId,
+            response.status,
+            currentAttempt,
+            maxAttempts,
+          );
         }
       } catch (error) {
         const reason = errorToString(error);
@@ -806,8 +920,13 @@ export class BaileysConnection {
         });
         lastFailureReason = reason;
         if (currentAttempt < maxAttempts) {
-          logger.warn("[%s] Webhook error: %s, attempt %d/%d",
-            this.sessionId, reason, currentAttempt, maxAttempts);
+          logger.warn(
+            "[%s] Webhook error: %s, attempt %d/%d",
+            this.sessionId,
+            reason,
+            currentAttempt,
+            maxAttempts,
+          );
         }
       }
 
@@ -819,6 +938,12 @@ export class BaileysConnection {
       }
     }
 
-    logger.error("[%s] Webhook failed after %d attempts (last error: %s)", this.sessionId, maxAttempts, lastFailureReason || "unknown");
+    logger.error(
+      "[%s] Webhook failed after %d attempts (last error: %s)",
+      this.sessionId,
+      maxAttempts,
+      lastFailureReason || "unknown",
+    );
+    return "failed";
   }
 }

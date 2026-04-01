@@ -1,5 +1,5 @@
 /** Groups Page */
-(function () {
+(() => {
 	window.GroupsPage = {
 		async render() {
 			const sessions = await this.getSessions();
@@ -99,11 +99,13 @@
 							}),
 						},
 					);
-					result.success
-						? (Toast.success("Group created"),
-							Modal.hide(),
-							this.loadGroups())
-						: Toast.error(result.message);
+					if (result.success) {
+						Toast.success("Group created");
+						Modal.hide();
+						this.loadGroups();
+					} else {
+						Toast.error(result.message);
+					}
 				});
 		},
 

@@ -1,9 +1,9 @@
 /** Overview Page */
-(function () {
-	window.OverviewPage = {
-		async render() {
-			const container = document.getElementById("page-content");
-			container.innerHTML = `
+(() => {
+  window.OverviewPage = {
+    async render() {
+      const container = document.getElementById("page-content");
+      container.innerHTML = `
         <div class="stats-grid" id="stats-grid">
           <div class="stat-card"><div class="skeleton skeleton-card w-full"></div></div>
           <div class="stat-card"><div class="skeleton skeleton-card w-full"></div></div>
@@ -15,11 +15,12 @@
           <div id="server-info"><div class="skeleton skeleton-text"></div></div>
         </div>`;
 
-			const result = await API.get("/stats");
-			if (!result.success) return;
-			const d = result.data;
+      const result = await API.get("/stats");
+      if (!result.success) return;
+      const d = result.data;
+      const isRestricted = Boolean(d.infoRestricted);
 
-			document.getElementById("stats-grid").innerHTML = `
+      document.getElementById("stats-grid").innerHTML = `
         <div class="stat-card">
           <div class="stat-icon green"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/></svg></div>
           <div class="stat-info"><h4>Total Sessions</h4><div class="stat-value">${d.totalSessions}</div></div>
@@ -37,22 +38,22 @@
           <div class="stat-info"><h4>Uptime</h4><div class="stat-value">${this.formatUptime(d.uptime)}</div></div>
         </div>`;
 
-			const mem = d.memoryUsage;
-			document.getElementById("server-info").innerHTML = `
+      const mem = d.memoryUsage;
+      document.getElementById("server-info").innerHTML = `
         <table>
-          <tr><td class="text-muted">Environment</td><td><span class="badge badge-info">${d.environment}</span></td></tr>
-          <tr><td class="text-muted">Redis</td><td><span class="badge ${d.redisEnabled ? "badge-success" : "badge-warning"}">${d.redisEnabled ? "CONNECTED" : "DISABLED"}</span></td></tr>
-          <tr><td class="text-muted">Memory (RSS)</td><td>${(mem.rss / 1024 / 1024).toFixed(1)} MB</td></tr>
-          <tr><td class="text-muted">Memory (Heap)</td><td>${(mem.heapUsed / 1024 / 1024).toFixed(1)} / ${(mem.heapTotal / 1024 / 1024).toFixed(1)} MB</td></tr>
+          ${isRestricted ? `<tr><td class="text-muted">System Info</td><td><span class="badge badge-warning">ADMIN ONLY</span></td></tr>` : `<tr><td class="text-muted">Environment</td><td><span class="badge badge-info">${d.environment}</span></td></tr>`}
+          ${isRestricted ? "" : `<tr><td class="text-muted">Redis</td><td><span class="badge ${d.redisEnabled ? "badge-success" : "badge-warning"}">${d.redisEnabled ? "CONNECTED" : "DISABLED"}</span></td></tr>`}
+          ${isRestricted ? "" : `<tr><td class="text-muted">Memory (RSS)</td><td>${(mem.rss / 1024 / 1024).toFixed(1)} MB</td></tr>`}
+          ${isRestricted ? "" : `<tr><td class="text-muted">Memory (Heap)</td><td>${(mem.heapUsed / 1024 / 1024).toFixed(1)} / ${(mem.heapTotal / 1024 / 1024).toFixed(1)} MB</td></tr>`}
           <tr><td class="text-muted">Version</td><td>${d.version}</td></tr>
         </table>`;
-		},
+    },
 
-		formatUptime(seconds) {
-			const h = Math.floor(seconds / 3600);
-			const m = Math.floor((seconds % 3600) / 60);
-			if (h > 0) return `${h}h ${m}m`;
-			return `${m}m`;
-		},
-	};
+    formatUptime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    },
+  };
 })();

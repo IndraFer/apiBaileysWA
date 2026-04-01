@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
+import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
 import { sessionRateLimit } from "@/middleware/rateLimit";
-import { success, error } from "@/lib/response";
 import { createSessionSchema, SESSION_ID_REGEX } from "@/schemas/session";
 
 const sessionRoutes = new Hono();
@@ -18,7 +18,11 @@ sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
 
   // Validate session ID format
   if (!SESSION_ID_REGEX.test(sessionId)) {
-    return error(c, "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)", 400);
+    return error(
+      c,
+      "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)",
+      400,
+    );
   }
 
   const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
@@ -42,7 +46,11 @@ sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
     });
 
     if (result.pairingCode) {
-      return success(c, { pairingCode: result.pairingCode }, "Pairing code generated. Enter it on your phone.");
+      return success(
+        c,
+        { pairingCode: result.pairingCode },
+        "Pairing code generated. Enter it on your phone.",
+      );
     }
 
     return success(c, { qrCode: result.qrCode }, "Session created. Scan the QR code to connect.");
@@ -86,7 +94,11 @@ sessionRoutes.get("/:sessionId/qr", (c) => {
     return success(c, { connected: true }, "Session is already connected");
   }
 
-  return success(c, { qrCode: status.qrCode }, status.qrCode ? "QR code available" : "QR code not yet generated");
+  return success(
+    c,
+    { qrCode: status.qrCode },
+    status.qrCode ? "QR code available" : "QR code not yet generated",
+  );
 });
 
 /**

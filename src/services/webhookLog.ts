@@ -14,7 +14,9 @@ export interface WebhookDeliveryLog {
 const MAX_LOGS = 500;
 const logs: WebhookDeliveryLog[] = [];
 
-export function addWebhookLog(entry: Omit<WebhookDeliveryLog, "id" | "timestamp">): WebhookDeliveryLog {
+export function addWebhookLog(
+  entry: Omit<WebhookDeliveryLog, "id" | "timestamp">,
+): WebhookDeliveryLog {
   const item: WebhookDeliveryLog = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: Date.now(),

@@ -1,29 +1,41 @@
-import type { AnyMessageContent } from "@whiskeysockets/baileys";
+import type {
+  AnyMessageContent,
+  ChatModification,
+  MessageReceiptType,
+  proto,
+  WAMessage,
+} from "@whiskeysockets/baileys";
 import { Hono } from "hono";
-import connectionManager from "@/baileys/connectionManager";
 import { BaileysNotConnectedError } from "@/baileys/connection";
-import { authMiddleware } from "@/middleware/auth";
-import { sessionValidator } from "@/middleware/sessionValidator";
-import { sendRateLimit, bulkRateLimit } from "@/middleware/rateLimit";
-import { createBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastJobs } from "@/services/broadcastQueue";
+import connectionManager from "@/baileys/connectionManager";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
-import { formatPhone, formatGroup } from "@/utils/phone";
-import { success, error } from "@/lib/response";
+import type { BroadcastMessage } from "@/baileys/types";
+import { error, success } from "@/lib/response";
+import { authMiddleware } from "@/middleware/auth";
+import { bulkRateLimit, sendRateLimit } from "@/middleware/rateLimit";
+import { sessionValidator } from "@/middleware/sessionValidator";
 import {
+  chatModifySchema,
+  deleteMessageSchema,
+  downloadMediaSchema,
+  editMessageSchema,
+  fetchHistorySchema,
+  forwardMessageSchema,
+  onWhatsAppSchema,
+  presenceSchema,
+  readMessagesSchema,
+  sendBulkSchema,
   sendMessageSchema,
   sendMessageStaticSchema,
-  sendBulkSchema,
-  forwardMessageSchema,
-  deleteMessageSchema,
-  editMessageSchema,
-  readMessagesSchema,
-  presenceSchema,
-  onWhatsAppSchema,
-  chatModifySchema,
-  fetchHistorySchema,
   sendReceiptsSchema,
-  downloadMediaSchema,
 } from "@/schemas/chat";
+import {
+  cancelBroadcastJob,
+  createBroadcastJob,
+  getBroadcastJob,
+  listBroadcastJobs,
+} from "@/services/broadcastQueue";
+import { formatGroup, formatPhone } from "@/utils/phone";
 
 const chatRoutes = new Hono();
 
@@ -36,7 +48,7 @@ async function sendMessageHandler(
     message: Record<string, unknown>;
     isGroup?: boolean;
     quoted?: unknown;
-  }
+  },
 ) {
   const session = connectionManager.getSession(sessionId);
   const jid = payload.isGroup ? formatGroup(payload.receiver) : formatPhone(payload.receiver);
@@ -49,7 +61,9 @@ async function sendMessageHandler(
     }
   }
 
-  return session.sendMessage(jid, payload.message as AnyMessageContent, { quoted: payload.quoted as any });
+  return session.sendMessage(jid, payload.message as AnyMessageContent, {
+    quoted: payload.quoted as WAMessage,
+  });
 }
 
 /**
@@ -64,10 +78,14 @@ chatRoutes.post("/send", sendRateLimit, async (c) => {
 
   try {
     const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
-    return success(c, {
-      key: result?.key,
-      messageTimestamp: result?.messageTimestamp,
-    }, "Message sent successfully");
+    return success(
+      c,
+      {
+        key: result?.key,
+        messageTimestamp: result?.messageTimestamp,
+      },
+      "Message sent successfully",
+    );
   } catch (err) {
     if (err instanceof BaileysNotConnectedError) {
       return error(c, err.message, 404);
@@ -93,10 +111,14 @@ chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) =
   try {
     const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
 
-    return success(c, {
-      key: result?.key,
-      messageTimestamp: result?.messageTimestamp,
-    }, "Message sent successfully");
+    return success(
+      c,
+      {
+        key: result?.key,
+        messageTimestamp: result?.messageTimestamp,
+      },
+      "Message sent successfully",
+    );
   } catch (err) {
     if (err instanceof BaileysNotConnectedError) {
       return error(c, err.message, 404);
@@ -117,12 +139,16 @@ chatRoutes.post("/:sessionId/send-bulk", sessionValidator, bulkRateLimit, async 
   const { messages } = parsed.data;
 
   try {
-    const job = await createBroadcastJob(sessionId, messages as any);
-    return success(c, {
-      jobId: job.id,
-      total: job.total,
-      status: job.status,
-    }, "Broadcast job created");
+    const job = await createBroadcastJob(sessionId, messages as BroadcastMessage[]);
+    return success(
+      c,
+      {
+        jobId: job.id,
+        total: job.total,
+        status: job.status,
+      },
+      "Broadcast job created",
+    );
   } catch (err) {
     return error(c, `Failed to create broadcast job: ${(err as Error).message}`);
   }
@@ -201,7 +227,7 @@ chatRoutes.delete("/:sessionId/message", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.deleteMessage(jid, key as any);
+    await session.deleteMessage(jid, key as proto.IMessageKey & { id: string });
     return success(c, null, "Message deleted successfully");
   } catch (err) {
     return error(c, `Failed to delete message: ${(err as Error).message}`);
@@ -220,11 +246,19 @@ chatRoutes.patch("/:sessionId/message", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const result = await session.editMessage(jid, key as any, messageContent as any);
-    return success(c, {
-      key: result?.key,
-      messageTimestamp: result?.messageTimestamp,
-    }, "Message edited successfully");
+    const result = await session.editMessage(
+      jid,
+      key as proto.IMessageKey,
+      messageContent as AnyMessageContent,
+    );
+    return success(
+      c,
+      {
+        key: result?.key,
+        messageTimestamp: result?.messageTimestamp,
+      },
+      "Message edited successfully",
+    );
   } catch (err) {
     return error(c, `Failed to edit message: ${(err as Error).message}`);
   }
@@ -241,7 +275,7 @@ chatRoutes.post("/:sessionId/read", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.readMessages(parsed.data.keys as any);
+    await session.readMessages(parsed.data.keys as proto.IMessageKey[]);
     return success(c, null, "Messages marked as read");
   } catch (err) {
     return error(c, `Failed to read messages: ${(err as Error).message}`);
@@ -297,7 +331,7 @@ chatRoutes.post("/:sessionId/chat-modify", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.chatModify(parsed.data.mod as any, parsed.data.jid);
+    await session.chatModify(parsed.data.mod as ChatModification, parsed.data.jid);
     return success(c, null, "Chat modified successfully");
   } catch (err) {
     return error(c, `Failed to modify chat: ${(err as Error).message}`);
@@ -315,7 +349,11 @@ chatRoutes.post("/:sessionId/fetch-history", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.fetchMessageHistory(parsed.data.count, parsed.data.oldestMsgKey as any, parsed.data.oldestMsgTimestamp);
+    await session.fetchMessageHistory(
+      parsed.data.count,
+      parsed.data.oldestMsgKey as proto.IMessageKey,
+      parsed.data.oldestMsgTimestamp,
+    );
     return success(c, null, "Message history fetch initiated");
   } catch (err) {
     return error(c, `Failed to fetch history: ${(err as Error).message}`);
@@ -333,7 +371,10 @@ chatRoutes.post("/:sessionId/send-receipts", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    await session.sendReceipts(parsed.data.keys as any, parsed.data.type as any);
+    await session.sendReceipts(
+      parsed.data.keys as proto.IMessageKey[],
+      parsed.data.type as MessageReceiptType,
+    );
     return success(c, null, "Receipts sent");
   } catch (err) {
     return error(c, `Failed to send receipts: ${(err as Error).message}`);

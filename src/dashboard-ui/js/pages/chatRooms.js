@@ -1,5 +1,5 @@
 /** Chat Rooms Page — WhatsApp Web style 1-on-1 conversations */
-(function () {
+(() => {
 	let selectedSessionId = "";
 	let selectedJid = "";
 	let selectedMode = "personal";
@@ -116,7 +116,7 @@
 			.replace(/&/g, "&amp;")
 			.replace(/</g, "&lt;")
 			.replace(/>/g, "&gt;")
-			.replace(/\"/g, "&quot;")
+			.replace(/"/g, "&quot;")
 			.replace(/'/g, "&#39;");
 	}
 
@@ -555,7 +555,9 @@
 					selectedJid = "";
 					document
 						.querySelectorAll(".chatrooms-mode-btn")
-						.forEach((b) => b.classList.remove("active"));
+						.forEach((b) => {
+							b.classList.remove("active");
+						});
 					btn.classList.add("active");
 					await this.loadChatList();
 				});
@@ -735,9 +737,9 @@
 			}
 		},
 
-		startPresenceStream() {
+		async startPresenceStream() {
 			this.stopPresenceStream();
-			const token = API.getToken();
+			const token = await API.getStreamToken();
 			if (!token) return;
 
 			eventSource = new EventSource(
@@ -767,7 +769,9 @@
 				eventSource.close();
 				eventSource = null;
 			}
-			typingTimers.forEach((timer) => clearTimeout(timer));
+			typingTimers.forEach((timer) => {
+				clearTimeout(timer);
+			});
 			typingTimers.clear();
 		},
 
@@ -851,6 +855,7 @@
 
 		updateMessageBubbleStatus(messageId, receiptType) {
 			if (!receiptType) return;
+			if (!messageId) return;
 
 			// Update bubble status in DOM if visible
 			const bubbles = document.querySelectorAll(
@@ -859,6 +864,7 @@
 			bubbles.forEach((bubble) => {
 				const msgKey = bubble.dataset.messageKey;
 				if (!msgKey) return; // Only update tracked messages
+				if (msgKey !== messageId) return;
 
 				const msgBubble = bubble.querySelector(".msg-bubble");
 				const timeEl = bubble.querySelector(".msg-time");
@@ -983,9 +989,9 @@
 			sidebar.querySelectorAll(".chatroom-item").forEach((btn) => {
 				btn.addEventListener("click", async () => {
 					selectedJid = btn.dataset.jid;
-					sidebar
-						.querySelectorAll(".chatroom-item")
-						.forEach((b) => b.classList.remove("active"));
+					sidebar.querySelectorAll(".chatroom-item").forEach((b) => {
+						b.classList.remove("active");
+					});
 					btn.classList.add("active");
 					await this.loadConversation(selectedJid);
 				});

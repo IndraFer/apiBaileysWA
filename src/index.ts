@@ -1,11 +1,12 @@
 import app from "@/app";
-import config from "@/config";
 import connectionManager from "@/baileys/connectionManager";
-import { initializeRedis } from "@/lib/redis";
-import { MediaCleanupService } from "@/services/mediaCleanup";
+import config from "@/config";
+import { hasUsers } from "@/dashboard/auth";
 import logger, { deepSanitizeObject } from "@/lib/logger";
-import { errorToString } from "@/utils/validation";
+import { initializeRedis } from "@/lib/redis";
 import { isBun } from "@/lib/runtime";
+import { MediaCleanupService } from "@/services/mediaCleanup";
+import { errorToString } from "@/utils/validation";
 
 // ── Global Error Handlers ───────────────────────────
 process.on("uncaughtException", (error) => {
@@ -51,7 +52,7 @@ async function startServer() {
   logger.info(`🚀 api-Baileys-WA running on http://${hostname}:${port} (${runtime})`);
   logger.info(
     "⚙️ Config:\n%s",
-    JSON.stringify(deepSanitizeObject(config, { omitKeys: ["globalToken", "password"] }), null, 2)
+    JSON.stringify(deepSanitizeObject(config, { omitKeys: ["globalToken", "password"] }), null, 2),
   );
 }
 
@@ -59,14 +60,49 @@ startServer();
 
 // ── Production Config Validation ────────────────────
 if (config.env === "production") {
-  if (config.dashboard.jwtSecret.includes("change-me") || config.dashboard.jwtSecret.includes("change_me")) {
-    logger.warn("⚠️  DASHBOARD_JWT_SECRET is using default value! Set a secure random secret for production.");
+  if (
+    config.dashboard.jwtSecret.includes("change-me") ||
+    config.dashboard.jwtSecret.includes("change_me")
+  ) {
+    logger.warn(
+      "⚠️  DASHBOARD_JWT_SECRET is using default value! Set a secure random secret for production.",
+    );
   }
   if (config.corsOrigin === "*") {
-    logger.warn("⚠️  CORS_ORIGIN is set to '*'. Consider restricting to specific domains (comma-separated) in production.");
+    logger.warn(
+      "⚠️  CORS_ORIGIN is set to '*'. Consider restricting to specific domains (comma-separated) in production.",
+    );
   }
   if (!config.auth.globalToken && !config.redis.enabled) {
     logger.warn("⚠️  No authentication configured! Set AUTH_GLOBAL_TOKEN or enable Redis API keys.");
+  }
+
+  if (config.webhook.allowGlobalTokenFallback) {
+    logger.warn(
+      "⚠️  WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK is enabled in production. AUTH_GLOBAL_TOKEN may be sent to webhook receivers when per-session secret is missing.",
+    );
+  } else {
+    logger.info("✅ Webhook global-token fallback is disabled in production (recommended).");
+  }
+}
+
+if (config.env === "development") {
+  logger.warn(
+    "⚠️  Development mode is active. API auth middleware may be bypassed for local testing.",
+  );
+}
+
+if (config.dashboard.enabled) {
+  if (!hasUsers()) {
+    logger.warn(
+      "⚠️  Dashboard setup is not initialized yet. The first registered account will become system admin.",
+    );
+  }
+
+  if (config.dashboard.registrationEnabled && !config.dashboard.registrationRequireApproval) {
+    logger.warn(
+      "⚠️  Dashboard registration is enabled without admin approval. Any registrant gets immediate account activation.",
+    );
   }
 }
 

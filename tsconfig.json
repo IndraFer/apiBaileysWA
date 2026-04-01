@@ -16,31 +16,30 @@
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true,
-        "baseUrl": ".",
         "paths": {
             "@/*": [
-                "src/*"
+                "./src/*"
             ],
             "@/baileys/*": [
-                "src/baileys/*"
+                "./src/baileys/*"
             ],
             "@/routes/*": [
-                "src/routes/*"
+                "./src/routes/*"
             ],
             "@/middleware/*": [
-                "src/middleware/*"
+                "./src/middleware/*"
             ],
             "@/services/*": [
-                "src/services/*"
+                "./src/services/*"
             ],
             "@/lib/*": [
-                "src/lib/*"
+                "./src/lib/*"
             ],
             "@/utils/*": [
-                "src/utils/*"
+                "./src/utils/*"
             ],
             "@/schemas/*": [
-                "src/schemas/*"
+                "./src/schemas/*"
             ]
         },
         "outDir": "dist"

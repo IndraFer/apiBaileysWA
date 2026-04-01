@@ -15,7 +15,13 @@ export async function sessionValidator(c: Context, next: Next) {
   }
 
   if (!SESSION_ID_REGEX.test(sessionId)) {
-    return c.json({ success: false, message: "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)" }, 400);
+    return c.json(
+      {
+        success: false,
+        message: "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)",
+      },
+      400,
+    );
   }
 
   if (!connectionManager.hasSession(sessionId)) {

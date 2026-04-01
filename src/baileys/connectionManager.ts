@@ -1,6 +1,10 @@
+import {
+  deleteAuthState,
+  getSavedSessionsWithMetadata,
+  updateSessionMetadata,
+} from "@/baileys/authState";
 import { BaileysConnection, BaileysNotConnectedError } from "@/baileys/connection";
-import { getSavedSessionsWithMetadata, deleteAuthState } from "@/baileys/authState";
-import type { SessionOptions, SessionMetadata } from "@/baileys/types";
+import type { SessionMetadata, SessionOptions } from "@/baileys/types";
 import config from "@/config";
 import logger from "@/lib/logger";
 import { errorToString } from "@/utils/validation";
@@ -22,7 +26,11 @@ class ConnectionManager {
       return;
     }
 
-    logger.info("Reconnecting %d saved sessions: %o", saved.length, saved.map((s) => s.id));
+    logger.info(
+      "Reconnecting %d saved sessions: %o",
+      saved.length,
+      saved.map((s) => s.id),
+    );
 
     for (const { id, metadata } of saved) {
       try {
@@ -55,7 +63,7 @@ class ConnectionManager {
    */
   async createSession(
     sessionId: string,
-    options: SessionOptions
+    options: SessionOptions,
   ): Promise<{ qrCode?: string; pairingCode?: string }> {
     // If session exists and is connected, return existing state
     const existing = this.connections.get(sessionId);
@@ -71,7 +79,9 @@ class ConnectionManager {
 
     // Enforce maximum session limit
     if (this.connections.size >= config.maxSessions) {
-      throw new Error(`Maximum session limit (${config.maxSessions}) reached. Delete unused sessions first.`);
+      throw new Error(
+        `Maximum session limit (${config.maxSessions}) reached. Delete unused sessions first.`,
+      );
     }
 
     const connection = new BaileysConnection(sessionId, {
@@ -158,6 +168,18 @@ class ConnectionManager {
     }
     await deleteAuthState(sessionId);
     logger.info("Session deleted: %s (active: %d)", sessionId, this.connections.size);
+  }
+
+  /**
+   * Update runtime session settings and persist metadata.
+   */
+  async updateSessionSettings(sessionId: string, options: Partial<SessionOptions>): Promise<void> {
+    const conn = this.connections.get(sessionId);
+    if (!conn) throw new BaileysNotConnectedError();
+
+    conn.updateOptions(options);
+    await updateSessionMetadata(sessionId, conn.getSessionMetadata());
+    logger.info("Session settings updated: %s", sessionId);
   }
 
   /**
