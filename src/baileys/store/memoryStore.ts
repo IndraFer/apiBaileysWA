@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { BaileysEventEmitter, WAMessage } from "@whiskeysockets/baileys";
 import { jidNormalizedUser, toNumber } from "@whiskeysockets/baileys";
@@ -196,9 +196,9 @@ export class MemoryStore extends EventEmitter {
         contacts: [...this.contacts.entries()],
         groupMetadata: [...this.groupMetadata.entries()],
       };
-      
+
       const tempFile = `${this.storeFile}.tmp.${Date.now()}`;
-      
+
       // Strip out heavy base64 data to save memory & storage and speed up serialization
       const jsonStr = JSON.stringify(data, (key, value) => {
         if (key === "jpegThumbnail" || key === "historySyncBase64") return undefined;
@@ -213,11 +213,12 @@ export class MemoryStore extends EventEmitter {
     }
   }
 
-  readFromFile() {
+  async readFromFile() {
     try {
       if (!existsSync(this.storeFile)) return;
 
-      const raw = readFileSync(this.storeFile, "utf-8");
+      const { readFile } = await import("node:fs/promises");
+      const raw = await readFile(this.storeFile, "utf-8");
       if (!raw.trim()) return;
 
       const data = JSON.parse(raw);

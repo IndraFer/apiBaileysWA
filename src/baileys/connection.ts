@@ -17,6 +17,7 @@ import makeWASocket, {
   WAMessageStatus,
   type WAPresence,
 } from "@whiskeysockets/baileys";
+import { LRUCache } from "lru-cache";
 import NodeCache from "node-cache";
 import { toDataURL } from "qrcode";
 import { type AuthStateResult, useAuthState } from "@/baileys/authState";
@@ -28,6 +29,7 @@ import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { addWebhookLog } from "@/services/webhookLog";
+import { webhookQueue } from "@/services/webhookQueue";
 import { asyncSleep } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
 
@@ -286,14 +288,17 @@ export class BaileysConnection {
      * Map: chatJid -> userJid -> lastPresenceType
      * Example: presenceState[chatJid][userJid] = "composing" | "recording" | "paused" | ...
      */
-    const presenceState = new Map();
+    const presenceState = new LRUCache<string, number>({
+      max: 1000,
+      ttl: 1000 * 60 * 60, // 1 hour TTL
+    });
+
     this.socket.ev.on("presence.update", (p) => {
       // Throttle presence webhook events (often very noisy)
       const now = Date.now();
       const last = presenceState.get(p.id) || 0;
       // Emit if offline -> online, or if it's been more than 5 seconds since last update
-      const shouldEmit =
-        p.presences[p.id]?.lastKnownPresence === "available" || now - last > 5000;
+      const shouldEmit = p.presences[p.id]?.lastKnownPresence === "available" || now - last > 5000;
 
       if (shouldEmit) {
         presenceState.set(p.id, now);
@@ -303,7 +308,7 @@ export class BaileysConnection {
 
     this.socket.ev.on("call", async (calls) => {
       this.sendToWebhook({ sessionId: this.sessionId, event: "call", data: calls });
-      
+
       if (config.simulation.rejectCalls) {
         for (const call of calls) {
           if (call.status === "offer") {
@@ -311,7 +316,12 @@ export class BaileysConnection {
               await this.socket?.rejectCall(call.id, call.from);
               logger.info("[%s] Auto-rejected call from %s", this.sessionId, call.from);
             } catch (err) {
-              logger.error("[%s] Failed to reject call from %s: %s", this.sessionId, call.from, errorToString(err));
+              logger.error(
+                "[%s] Failed to reject call from %s: %s",
+                this.sessionId,
+                call.from,
+                errorToString(err),
+              );
             }
           }
         }
@@ -828,126 +838,128 @@ export class BaileysConnection {
     const sanitizedPayload = deepSanitizeObject(payload, { omitKeys: [...LOGGER_OMIT_KEYS] });
     logger.debug({ sessionId: this.sessionId, payload: sanitizedPayload }, "Webhook payload");
 
-    const { maxRetries, retryInterval, backoffFactor } = config.webhook.retryPolicy;
-    const maxAttempts = Math.max(1, maxRetries);
-    let attempt = 0;
-    let currentDelay = retryInterval;
-    let lastFailureReason = "";
+    return webhookQueue.add(async () => {
+      const { maxRetries, retryInterval, backoffFactor } = config.webhook.retryPolicy;
+      const maxAttempts = Math.max(1, maxRetries);
+      let attempt = 0;
+      let currentDelay = retryInterval;
+      let lastFailureReason = "";
 
-    while (attempt < maxAttempts) {
-      const startedAt = Date.now();
-      const currentAttempt = attempt + 1;
-      try {
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        const rawBody = JSON.stringify(payload);
-        if (webhookSecret) {
-          headers["x-webhook-secret"] = webhookSecret;
-          headers.Authorization = `Bearer ${webhookSecret}`;
-        }
+      while (attempt < maxAttempts) {
+        const startedAt = Date.now();
+        const currentAttempt = attempt + 1;
+        try {
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          const rawBody = JSON.stringify(payload);
+          if (webhookSecret) {
+            headers["x-webhook-secret"] = webhookSecret;
+            headers.Authorization = `Bearer ${webhookSecret}`;
+          }
 
-        if (config.webhook.signatureMode !== "off") {
-          if (!webhookSecret && config.webhook.signatureMode === "required") {
-            const reason = "Missing secret for required webhook signature mode";
+          if (config.webhook.signatureMode !== "off") {
+            if (!webhookSecret && config.webhook.signatureMode === "required") {
+              const reason = "Missing secret for required webhook signature mode";
+              addWebhookLog({
+                sessionId: this.sessionId,
+                event: payload.event,
+                webhookUrl,
+                status: "network-error",
+                attempt: currentAttempt,
+                latencyMs: Date.now() - startedAt,
+                error: reason,
+              });
+              throw new Error(reason);
+            }
+
+            if (webhookSecret) {
+              const timestamp = String(Date.now());
+              const signature = createHmac("sha256", webhookSecret)
+                .update(`${timestamp}.${rawBody}`)
+                .digest("hex");
+              headers["x-webhook-timestamp"] = timestamp;
+              headers["x-webhook-signature"] = `sha256=${signature}`;
+            }
+          }
+
+          const response = await fetch(webhookUrl, {
+            method: "POST",
+            headers,
+            body: rawBody,
+          });
+
+          if (response.ok) {
+            logger.debug("[%s] Webhook delivered successfully", this.sessionId);
             addWebhookLog({
               sessionId: this.sessionId,
               event: payload.event,
               webhookUrl,
-              status: "network-error",
-              attempt: currentAttempt,
+              status: "success",
+              attempt: attempt + 1,
+              httpStatus: response.status,
               latencyMs: Date.now() - startedAt,
-              error: reason,
             });
-            throw new Error(reason);
+            return "success";
           }
 
-          if (webhookSecret) {
-            const timestamp = String(Date.now());
-            const signature = createHmac("sha256", webhookSecret)
-              .update(`${timestamp}.${rawBody}`)
-              .digest("hex");
-            headers["x-webhook-timestamp"] = timestamp;
-            headers["x-webhook-signature"] = `sha256=${signature}`;
-          }
-        }
-
-        const response = await fetch(webhookUrl, {
-          method: "POST",
-          headers,
-          body: rawBody,
-        });
-
-        if (response.ok) {
-          logger.debug("[%s] Webhook delivered successfully", this.sessionId);
           addWebhookLog({
             sessionId: this.sessionId,
             event: payload.event,
             webhookUrl,
-            status: "success",
-            attempt: attempt + 1,
+            status: "http-error",
+            attempt: currentAttempt,
             httpStatus: response.status,
             latencyMs: Date.now() - startedAt,
+            error: `HTTP ${response.status}`,
           });
-          return "success";
+
+          lastFailureReason = `HTTP ${response.status}`;
+          if (currentAttempt < maxAttempts) {
+            logger.warn(
+              "[%s] Webhook failed (HTTP %d), attempt %d/%d",
+              this.sessionId,
+              response.status,
+              currentAttempt,
+              maxAttempts,
+            );
+          }
+        } catch (error) {
+          const reason = errorToString(error);
+          addWebhookLog({
+            sessionId: this.sessionId,
+            event: payload.event,
+            webhookUrl,
+            status: "network-error",
+            attempt: currentAttempt,
+            latencyMs: Date.now() - startedAt,
+            error: reason,
+          });
+          lastFailureReason = reason;
+          if (currentAttempt < maxAttempts) {
+            logger.warn(
+              "[%s] Webhook error: %s, attempt %d/%d",
+              this.sessionId,
+              reason,
+              currentAttempt,
+              maxAttempts,
+            );
+          }
         }
 
-        addWebhookLog({
-          sessionId: this.sessionId,
-          event: payload.event,
-          webhookUrl,
-          status: "http-error",
-          attempt: currentAttempt,
-          httpStatus: response.status,
-          latencyMs: Date.now() - startedAt,
-          error: `HTTP ${response.status}`,
-        });
-
-        lastFailureReason = `HTTP ${response.status}`;
-        if (currentAttempt < maxAttempts) {
-          logger.warn(
-            "[%s] Webhook failed (HTTP %d), attempt %d/%d",
-            this.sessionId,
-            response.status,
-            currentAttempt,
-            maxAttempts,
-          );
-        }
-      } catch (error) {
-        const reason = errorToString(error);
-        addWebhookLog({
-          sessionId: this.sessionId,
-          event: payload.event,
-          webhookUrl,
-          status: "network-error",
-          attempt: currentAttempt,
-          latencyMs: Date.now() - startedAt,
-          error: reason,
-        });
-        lastFailureReason = reason;
-        if (currentAttempt < maxAttempts) {
-          logger.warn(
-            "[%s] Webhook error: %s, attempt %d/%d",
-            this.sessionId,
-            reason,
-            currentAttempt,
-            maxAttempts,
-          );
+        attempt++;
+        if (attempt < maxAttempts) {
+          const jitter = Math.floor(Math.random() * 1000);
+          await asyncSleep(currentDelay + jitter);
+          currentDelay *= backoffFactor;
         }
       }
 
-      attempt++;
-      if (attempt < maxAttempts) {
-        const jitter = Math.floor(Math.random() * 1000);
-        await asyncSleep(currentDelay + jitter);
-        currentDelay *= backoffFactor;
-      }
-    }
-
-    logger.error(
-      "[%s] Webhook failed after %d attempts (last error: %s)",
-      this.sessionId,
-      maxAttempts,
-      lastFailureReason || "unknown",
-    );
-    return "failed";
+      logger.error(
+        "[%s] Webhook failed after %d attempts (last error: %s)",
+        this.sessionId,
+        maxAttempts,
+        lastFailureReason || "unknown",
+      );
+      return "failed";
+    });
   }
 }
