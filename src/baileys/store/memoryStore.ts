@@ -31,7 +31,7 @@ export class MemoryStore extends EventEmitter {
   constructor(config: StoreConfig) {
     super();
     this.sessionId = config.sessionId;
-    this.maxMessagesPerChat = config.maxMessagesPerChat ?? 500;
+    this.maxMessagesPerChat = config.maxMessagesPerChat ?? 50;
     this.storeFile = join(SESSIONS_DIR, `${config.sessionId}_store.json`);
 
     if (!existsSync(SESSIONS_DIR)) {
@@ -42,7 +42,7 @@ export class MemoryStore extends EventEmitter {
     const interval = config.autoSaveInterval ?? 60000;
     if (interval > 0) {
       this.autoSaveTimer = setInterval(() => {
-        this.writeToFile();
+        this.writeToFile().catch(() => {});
       }, interval);
     }
   }
@@ -184,7 +184,7 @@ export class MemoryStore extends EventEmitter {
     return [...this.contacts.keys()];
   }
 
-  writeToFile() {
+  async writeToFile() {
     try {
       const data = {
         version: "1.0",
@@ -196,9 +196,18 @@ export class MemoryStore extends EventEmitter {
         contacts: [...this.contacts.entries()],
         groupMetadata: [...this.groupMetadata.entries()],
       };
+      
       const tempFile = `${this.storeFile}.tmp.${Date.now()}`;
-      writeFileSync(tempFile, JSON.stringify(data));
-      renameSync(tempFile, this.storeFile);
+      
+      // Strip out heavy base64 data to save memory & storage and speed up serialization
+      const jsonStr = JSON.stringify(data, (key, value) => {
+        if (key === "jpegThumbnail" || key === "historySyncBase64") return undefined;
+        return value;
+      });
+
+      const { writeFile, rename } = await import("node:fs/promises");
+      await writeFile(tempFile, jsonStr);
+      await rename(tempFile, this.storeFile);
     } catch (error) {
       logger.error("[Store:%s] Write error: %s", this.sessionId, (error as Error).message);
     }
@@ -252,10 +261,10 @@ export class MemoryStore extends EventEmitter {
     }
   }
 
-  destroy() {
+  async destroy() {
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
     }
-    this.writeToFile();
+    await this.writeToFile();
   }
 }

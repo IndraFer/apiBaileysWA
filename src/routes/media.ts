@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
@@ -60,7 +61,7 @@ mediaRoutes.get("/file/:id", async (c) => {
   }
 
   try {
-    const buffer = readFileSync(filePath);
+    const buffer = await readFile(filePath);
     return new Response(buffer, {
       headers: {
         "Content-Type": "application/octet-stream",

@@ -763,7 +763,11 @@ export class BaileysConnection {
   }
 
   async destroy() {
-    this.store.writeToFile();
+    if (this.clearOnlinePresenceTimeout) {
+      clearTimeout(this.clearOnlinePresenceTimeout);
+      this.clearOnlinePresenceTimeout = null;
+    }
+    await this.store.writeToFile();
     await this.close();
   }
 

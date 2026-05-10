@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   downloadContentFromMessage,
@@ -91,9 +92,9 @@ export async function downloadMediaFromMessages(
         downloadedMedia[key.id] = fileBuffer.toString("base64");
       }
 
-      // Save to disk
+      // Save to disk asynchronously to prevent blocking event loop on large files
       const filePath = join(MEDIA_DIR, key.id);
-      writeFileSync(filePath, fileBuffer);
+      await writeFile(filePath, fileBuffer);
     } catch (error) {
       logger.error("Failed to download media: %s", errorToString(error));
     }
