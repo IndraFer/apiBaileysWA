@@ -66,6 +66,7 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
   for (let i = 0; i < job.messages.length; i++) {
     if ((job.status as string) === "cancelled") {
       logger.info("[Broadcast:%s] Cancelled at %d/%d", job.id, i, job.total);
+      job.messages = []; // Free memory immediately
       return;
     }
 
@@ -83,14 +84,15 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
           error: "Number not registered on WhatsApp",
         });
         job.progress = i + 1;
-        continue;
+      } else {
+        // Send message
+        await session.sendMessage(jid, message as AnyMessageContent);
+        job.progress = i + 1;
+        logger.debug("[Broadcast:%s] Sent %d/%d to %s", job.id, i + 1, job.total, receiver);
       }
 
-      // Send message
-      await session.sendMessage(jid, message as AnyMessageContent);
-      job.progress = i + 1;
-
-      logger.debug("[Broadcast:%s] Sent %d/%d to %s", job.id, i + 1, job.total, receiver);
+      // Free message payload memory immediately after sending/failing (critical for base64 media)
+      job.messages[i].message = {} as any;
 
       // Delay between messages
       if (i < job.messages.length - 1) {
@@ -116,6 +118,10 @@ async function processBroadcastJob(job: BroadcastJob): Promise<void> {
         error: errorToString(error),
       });
       job.progress = i + 1;
+      
+      // Free memory even on error
+      job.messages[i].message = {} as any;
+      
       logger.error(
         "[Broadcast:%s] Error sending to %s: %s",
         job.id,

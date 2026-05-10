@@ -288,33 +288,33 @@ export class BaileysConnection {
      */
     const presenceState = new Map();
     this.socket.ev.on("presence.update", (p) => {
-      // p: { id: chatJid, presences: { [userJid]: { lastKnownPresence: "composing"|... } } }
-      if (!p?.id || !p.presences) return;
-      const chatJid = p.id;
-      let chatMap = presenceState.get(chatJid);
-      if (!chatMap) {
-        chatMap = new Map();
-        presenceState.set(chatJid, chatMap);
-      }
-      let shouldEmit = false;
-      for (const [userJid, presence] of Object.entries(p.presences)) {
-        const prev = chatMap.get(userJid);
-        const curr = presence.lastKnownPresence;
-        // If paused, only emit if previous was composing/recording
-        if (curr === "paused") {
-          if (prev === "composing" || prev === "recording") {
-            shouldEmit = true;
-            chatMap.set(userJid, curr);
-          } else {
-          }
-        } else {
-          // Always update state and emit for composing/recording/available/unavailable
-          shouldEmit = true;
-          chatMap.set(userJid, curr);
-        }
-      }
+      // Throttle presence webhook events (often very noisy)
+      const now = Date.now();
+      const last = presenceState.get(p.id) || 0;
+      // Emit if offline -> online, or if it's been more than 5 seconds since last update
+      const shouldEmit =
+        p.presences[p.id]?.lastKnownPresence === "available" || now - last > 5000;
+
       if (shouldEmit) {
+        presenceState.set(p.id, now);
         this.sendToWebhook({ sessionId: this.sessionId, event: "presence.update", data: p });
+      }
+    });
+
+    this.socket.ev.on("call", async (calls) => {
+      this.sendToWebhook({ sessionId: this.sessionId, event: "call", data: calls });
+      
+      if (config.simulation.rejectCalls) {
+        for (const call of calls) {
+          if (call.status === "offer") {
+            try {
+              await this.socket?.rejectCall(call.id, call.from);
+              logger.info("[%s] Auto-rejected call from %s", this.sessionId, call.from);
+            } catch (err) {
+              logger.error("[%s] Failed to reject call from %s: %s", this.sessionId, call.from, errorToString(err));
+            }
+          }
+        }
       }
     });
 

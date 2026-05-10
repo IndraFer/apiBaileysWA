@@ -18,6 +18,8 @@ import {
   chatModifySchema,
   deleteMessageSchema,
   downloadMediaSchema,
+  sendReactionSchema,
+  sendPollSchema,
   editMessageSchema,
   fetchHistorySchema,
   forwardMessageSchema,
@@ -128,7 +130,57 @@ chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) =
 });
 
 /**
+ * POST /chats/:sessionId/reaction
+ * Send a reaction to a message.
+ */
+chatRoutes.post("/:sessionId/reaction", sessionValidator, sendRateLimit, async (c) => {
+  const parsed = sendReactionSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+
+  const session = connectionManager.getSession(c.req.param("sessionId") as string);
+  const { jid, messageId, text } = parsed.data;
+
+  const reactionMessage = {
+    react: {
+      text,
+      key: {
+        remoteJid: jid,
+        id: messageId,
+        fromMe: false, // This will be handled by baileys automatically based on actual msg or just required structural keys
+      },
+    },
+  };
+
+  const result = await session.sendMessage(jid, reactionMessage);
+  return success(c, result, "Reaction sent");
+});
+
+/**
+ * POST /chats/:sessionId/poll
+ * Send a poll message.
+ */
+chatRoutes.post("/:sessionId/poll", sessionValidator, sendRateLimit, async (c) => {
+  const parsed = sendPollSchema.safeParse(await c.req.json());
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+
+  const session = connectionManager.getSession(c.req.param("sessionId") as string);
+  const { receiver, name, values, selectableCount } = parsed.data;
+
+  const pollMessage = {
+    poll: {
+      name,
+      values,
+      selectableCount,
+    },
+  };
+
+  const result = await session.sendMessage(receiver, pollMessage as AnyMessageContent);
+  return success(c, result, "Poll sent");
+});
+
+/**
  * POST /chats/:sessionId/send-bulk
+
  * Send bulk messages with anti-spam delays.
  * Returns a broadcast job ID for tracking progress.
  */

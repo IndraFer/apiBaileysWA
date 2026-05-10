@@ -116,3 +116,16 @@ export const downloadMediaSchema = z.object({
   remoteJid: z.string().min(1, "Remote JID is required"),
   messageId: z.string().min(1, "Message ID is required"),
 });
+
+export const sendReactionSchema = z.object({
+  jid: z.string().min(1, "JID is required"),
+  messageId: z.string().min(1, "Message ID is required"),
+  text: z.string().min(1, "Reaction text/emoji is required"),
+});
+
+export const sendPollSchema = z.object({
+  receiver: z.string().min(1, "Receiver is required"),
+  name: z.string().min(1, "Poll name is required"),
+  values: z.array(z.string()).min(2, "At least two options are required"),
+  selectableCount: z.number().int().positive().optional().default(1),
+});

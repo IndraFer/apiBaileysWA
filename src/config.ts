@@ -46,6 +46,7 @@ const {
   AUTO_READ_MESSAGES,
   AUTO_MARK_ONLINE,
   MAX_SESSIONS,
+  REJECT_CALLS,
 } = process.env;
 
 const config = {
@@ -139,6 +140,7 @@ const config = {
     typingDelayMaxMs: SIMULATE_TYPING_DELAY_MAX_MS ? Number(SIMULATE_TYPING_DELAY_MAX_MS) : 3000,
     autoReadMessages: AUTO_READ_MESSAGES === "true",
     autoMarkOnline: AUTO_MARK_ONLINE !== "false",
+    rejectCalls: REJECT_CALLS === "true",
   },
 
   autoReply: {
