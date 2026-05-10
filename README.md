@@ -440,6 +440,7 @@ baileys-wa-api/
 | `RECONNECT_INTERVAL`                      | `5000`                           | Reconnection delay (ms)                                                  |
 | `MAX_SESSIONS`                            | `50`                             | Maximum concurrent WhatsApp sessions                                     |
 | `WEBHOOK_URL`                             | —                                | Default webhook URL                                                      |
+| `WEBHOOK_CONCURRENCY`                     | `20`                             | Max concurrent outbound webhook requests globally                        |
 | `WEBHOOK_SIGNATURE_MODE`                  | `off`                            | Webhook signature mode (`off`, `optional`, `required`)                   |
 | `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | `true`                           | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
 | `WEBHOOK_ALLOWED_EVENTS`                  | `ALL`                            | Comma-separated event filter                                             |
@@ -465,6 +466,7 @@ baileys-wa-api/
 | `SIMULATE_TYPING_DELAY_MAX_MS`            | `3000`                           | Typing delay range in ms (random between min-max)                        |
 | `AUTO_READ_MESSAGES`                      | `false`                          | Auto-mark incoming messages as read (default: false, like WA Web toggle) |
 | `AUTO_MARK_ONLINE`                        | `true`                           | Auto-set presence to "available" when sending messages (default: true)   |
+| `REJECT_CALLS`                            | `false`                          | Auto-reject incoming calls across all sessions                           |
 
 ---
 
