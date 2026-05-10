@@ -922,6 +922,7 @@ dashboardApi.get("/config/simulation", (c) => {
       typingDelayMaxMs: config.simulation.typingDelayMaxMs,
       autoReadMessages: config.simulation.autoReadMessages,
       autoMarkOnline: config.simulation.autoMarkOnline,
+      rejectCalls: config.simulation.rejectCalls,
     },
   });
 });

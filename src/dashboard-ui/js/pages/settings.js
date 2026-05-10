@@ -330,6 +330,7 @@
 					<tr><td class="text-muted">Typing Delay</td><td><strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
 					<tr><td class="text-muted">Auto-Read Messages</td><td>${badge(d.autoReadMessages)}</td></tr>
 					<tr><td class="text-muted">Auto-Mark Online</td><td>${badge(d.autoMarkOnline)}</td></tr>
+					<tr><td class="text-muted">Auto-Reject Calls</td><td>${badge(d.rejectCalls)}</td></tr>
 				  </table>
 				  <p class="text-muted text-sm" style="padding:0.75rem 1rem 0.75rem;margin:0"><span style="font-weight:bold; color:var(--warning)">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
 				`;
