@@ -374,6 +374,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
         method: "POST",
         headers,
         body: rawBody,
+        signal: AbortSignal.timeout(15000), // 15s timeout for test
       });
 
       if (!response.ok) {

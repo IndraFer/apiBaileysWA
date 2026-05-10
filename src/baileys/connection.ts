@@ -759,7 +759,9 @@ export class BaileysConnection {
     this.reconnectCount = 0;
     if (this.clearOnlinePresenceTimeout) {
       clearTimeout(this.clearOnlinePresenceTimeout);
+      this.clearOnlinePresenceTimeout = null;
     }
+    await this.store.destroy();
     this.options.onConnectionClose?.();
   }
 
@@ -773,11 +775,6 @@ export class BaileysConnection {
   }
 
   async destroy() {
-    if (this.clearOnlinePresenceTimeout) {
-      clearTimeout(this.clearOnlinePresenceTimeout);
-      this.clearOnlinePresenceTimeout = null;
-    }
-    await this.store.writeToFile();
     await this.close();
   }
 
@@ -835,8 +832,10 @@ export class BaileysConnection {
       timestamp: Date.now(),
     });
 
-    const sanitizedPayload = deepSanitizeObject(payload, { omitKeys: [...LOGGER_OMIT_KEYS] });
-    logger.debug({ sessionId: this.sessionId, payload: sanitizedPayload }, "Webhook payload");
+    if (logger.isLevelEnabled("debug")) {
+      const sanitizedPayload = deepSanitizeObject(payload, { omitKeys: [...LOGGER_OMIT_KEYS] });
+      logger.debug({ sessionId: this.sessionId, payload: sanitizedPayload }, "Webhook payload");
+    }
 
     return webhookQueue.add(async () => {
       const { maxRetries, retryInterval, backoffFactor } = config.webhook.retryPolicy;
@@ -885,6 +884,7 @@ export class BaileysConnection {
             method: "POST",
             headers,
             body: rawBody,
+            signal: AbortSignal.timeout(30000), // 30s timeout per attempt
           });
 
           if (response.ok) {
