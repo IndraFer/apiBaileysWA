@@ -414,6 +414,12 @@ Deleting a user can revoke every session they own (logout + credentials).
 sanitizer is absent. Refresh that file when upgrading the `dompurify`
 dependency.
 
+**CSP mode.** `CSP_REPORT_ONLY=true` switches the header to
+`Content-Security-Policy-Report-Only`: violations are still posted to
+`/dashboard/csp-report` and logged, but nothing is blocked. Use it for a quiet
+development console; keep enforcement (the default) in production. The report
+endpoint accepts the opaque `Origin: null` that browsers send with reports.
+
 **Redis must not evict.** The bundled Redis runs with
 `--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap
 silently drops arbitrary keys, including session credentials, which logs the

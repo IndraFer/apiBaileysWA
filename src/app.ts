@@ -86,6 +86,10 @@ const DASHBOARD_CSP = [
   "report-to csp",
 ].join("; ");
 
+const CSP_HEADER = config.cspReportOnly
+  ? "Content-Security-Policy-Report-Only"
+  : "Content-Security-Policy";
+
 const CSP_REPORT_TO =
   '{"group":"csp","max_age":10800,"endpoints":[{"url":"/dashboard/csp-report"}]}';
 
@@ -99,7 +103,7 @@ app.use("*", async (c, next) => {
     target.set("X-Content-Type-Options", "nosniff");
     target.set("Referrer-Policy", "no-referrer");
     target.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    target.set("Content-Security-Policy", DASHBOARD_CSP);
+    target.set(CSP_HEADER, DASHBOARD_CSP);
     target.set("Report-To", CSP_REPORT_TO);
     target.set("Reporting-Endpoints", CSP_REPORTING_ENDPOINTS);
     if (isSecureRequest(c)) {
@@ -113,7 +117,7 @@ app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "no-referrer");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  c.header("Content-Security-Policy", DASHBOARD_CSP);
+  c.header(CSP_HEADER, DASHBOARD_CSP);
   c.header("Report-To", CSP_REPORT_TO);
   c.header("Reporting-Endpoints", CSP_REPORTING_ENDPOINTS);
   if (isSecureRequest(c)) {
@@ -146,6 +150,10 @@ if (config.env === "production" && config.trustProxy) {
 // The dashboard is same-origin by design: reject requests that carry a foreign
 // Origin header, so a compromised/malicious page cannot drive dashboard APIs.
 app.use("/dashboard/*", async (c, next) => {
+  // CSP reports arrive with an opaque origin ("null") and credentials omitted;
+  // the endpoint is validated by content type, size and rate limit instead.
+  if (c.req.path === "/dashboard/csp-report") return next();
+
   const origin = c.req.header("origin");
   if (origin) {
     const host = c.req.header("host") ?? "";

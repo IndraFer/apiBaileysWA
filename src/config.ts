@@ -11,6 +11,7 @@ const {
   REDIS_PASSWORD,
   AUTH_STATE_BACKEND,
   AUTH_STATE_SWITCH_CONFIRM,
+  CSP_REPORT_ONLY,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -396,6 +397,8 @@ const config = {
 
   /** Maximum concurrent sessions allowed */
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
+  /** Report violations without enforcing them (useful for a clean dev console). */
+  cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
   /** Per-role session quotas for non-admin dashboard users (0 = unlimited). */
   maxSessionsPerUser: MAX_SESSIONS_PER_USER ? Number(MAX_SESSIONS_PER_USER) : 3,
   maxSessionsPerManager: MAX_SESSIONS_PER_MANAGER ? Number(MAX_SESSIONS_PER_MANAGER) : 5,
