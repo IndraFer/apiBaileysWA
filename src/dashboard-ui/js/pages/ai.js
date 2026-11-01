@@ -202,20 +202,17 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Model &amp; credentials</h3></div>
-          <div class="flex gap-1" style="flex-wrap:wrap">
-            <div class="form-group" style="min-width:160px">
-              <label for="ai-driver">Driver</label>
-              <select id="ai-driver" class="input">
-                <option value="openai">OpenAI-compatible</option>
-                <option value="webhook">Webhook gateway</option>
-              </select>
-            </div>
-            <div class="form-group" style="min-width:220px">
-              <label for="ai-base-url">Base URL</label>
+          <div class="card-header"><h3>Model &amp; API key</h3></div>
+          <div class="form-row cols-2">
+            <div class="form-group">
+              <label for="ai-base-url">Base URL (OpenAI-compatible)</label>
               <input id="ai-base-url" class="input" placeholder="https://openrouter.ai/api/v1" />
+              <small class="text-muted">
+                OpenRouter, OpenAI, Google Vertex (OpenAI-compatible), Fireworks,
+                Hugging Face, Ollama…
+              </small>
             </div>
-            <div class="form-group" style="min-width:180px">
+            <div class="form-group">
               <label for="ai-model">Model</label>
               <input id="ai-model" class="input" placeholder="openai/gpt-4o-mini" />
             </div>
@@ -251,19 +248,7 @@
             <input id="ai-api-key" class="input" type="password" autocomplete="new-password" placeholder="sk-or-..." />
             <small class="text-muted" id="ai-api-key-hint"></small>
           </div>
-          <div class="form-group">
-            <div class="flex gap-1" style="align-items:center;justify-content:space-between">
-              <label for="ai-credentials">Tool credentials (JSON, optional)</label>
-              <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
-            </div>
-            <textarea id="ai-credentials" class="input" rows="4"
-              placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
-            <pre class="example-json example-json-sm">{
-  "search_users":  { "headers": { "X-API-Key": "..." } },
-  "search_events": { "query": { "tenant": "..." } }
-}</pre>
-            <small class="text-muted" id="ai-credentials-hint"></small>
-          </div>
+
         </div>
 
         <div class="card">
@@ -278,6 +263,10 @@
         <div class="card">
           <div class="card-header"><h3>Knowledge endpoints</h3></div>
           <div class="form-group">
+            <div class="flex gap-1" style="align-items:center;justify-content:space-between">
+              <label for="ai-endpoints">Endpoints the assistant may call</label>
+              <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
+            </div>
             <textarea id="ai-endpoints" class="input" rows="8"
               placeholder='[ { "name": "...", "method": "GET", "url": "https://...", "params": [] } ]'></textarea>
             <pre class="example-json example-json-sm">[
@@ -292,8 +281,26 @@
   }
 ]</pre>
             <small class="text-muted">
-              JSON array. Each endpoint declares its own params (name, type, enum, default,
-              required, in: query|body|path). The URL must already be reachable by this server.
+              <strong>What to call.</strong> Each entry declares an endpoint: name, URL, and
+              its parameters (type, enum, default, required, in: query|body|path).
+            </small>
+          </div>
+
+          <div class="card-header" style="margin-top:1.5rem">
+            <h3>Endpoint credentials (optional)</h3>
+          </div>
+          <div class="form-group">
+            <textarea id="ai-credentials" class="input" rows="5"
+              placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
+            <pre class="example-json example-json-sm">{
+  "search_users":  { "headers": { "X-API-Key": "..." } },
+  "search_events": { "query": { "tenant": "..." } }
+}</pre>
+            <small class="text-muted" id="ai-credentials-hint"></small>
+            <small class="text-muted">
+              <strong>How to authenticate those endpoints.</strong> Keys are endpoint names;
+              values are the <code>headers</code> / <code>query</code> to add. Leave empty when
+              the endpoint needs no key. The provider key is the field in “Model &amp; API key”.
             </small>
           </div>
         </div>
@@ -352,15 +359,14 @@
       set("ai-batch-idle", Math.round((Number(routing.batchIdleMs) || 0) / 1000));
       set("ai-human-idle", minutes(routing.humanIdleMs));
       set("ai-handoff-pause", minutes(routing.handoffPauseMs));
-      set("ai-driver", ai.driver || "openai");
-      set("ai-base-url", ai.agentUrl || data.defaults?.agentUrl || "");
+      set("ai-base-url", ai.baseUrl || data.defaults?.baseUrl || "");
       set("ai-model", ai.model || "");
-      set("ai-temperature", ai.temperature ?? 0.4);
-      set("ai-top-p", ai.topP ?? 1);
-      set("ai-min-p", ai.minP ?? 0);
+      set("ai-temperature", ai.temperature ?? 0.6);
+      set("ai-top-p", ai.topP ?? 0.95);
+      set("ai-min-p", ai.minP ?? 0.05);
       set("ai-freq-penalty", ai.frequencyPenalty ?? 0);
       set("ai-pres-penalty", ai.presencePenalty ?? 0);
-      set("ai-max-tokens", ai.maxTokens ?? 800);
+      set("ai-max-tokens", ai.maxTokens ?? 1024);
       set("ai-instruction", ai.systemInstruction || "");
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
@@ -436,15 +442,15 @@
         ai: {
           enabled: value("ai-enabled") === "true",
           mode: value("ai-mode"),
-          driver: value("ai-driver"),
+          driver: "openai",
           model: value("ai-model"),
           baseUrl: value("ai-base-url"),
-          temperature: num("ai-temperature", 0.4),
-          topP: num("ai-top-p", 1),
-          minP: num("ai-min-p", 0),
+          temperature: num("ai-temperature", 0.6),
+          topP: num("ai-top-p", 0.95),
+          minP: num("ai-min-p", 0.05),
           frequencyPenalty: num("ai-freq-penalty", 0),
           presencePenalty: num("ai-pres-penalty", 0),
-          maxTokens: num("ai-max-tokens", 800),
+          maxTokens: num("ai-max-tokens", 1024),
           systemInstruction: value("ai-instruction"),
           ragEndpoints: endpoints,
           ...(apiKey ? { apiKey } : {}),

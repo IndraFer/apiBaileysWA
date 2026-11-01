@@ -288,14 +288,14 @@ const config = {
       | "always",
     baseUrl: AI_BASE_URL || "https://openrouter.ai/api/v1",
     model: AI_MODEL || "",
-    temperature: AI_TEMPERATURE ? Number(AI_TEMPERATURE) : 0.4,
+    temperature: AI_TEMPERATURE ? Number(AI_TEMPERATURE) : 0.6,
     /** Nucleus sampling (standard default 1). */
-    topP: AI_TOP_P ? Number(AI_TOP_P) : 1,
+    topP: AI_TOP_P ? Number(AI_TOP_P) : 0.95,
     /** Min-p sampling; 0 = disabled (only sent when > 0). */
-    minP: AI_MIN_P ? Number(AI_MIN_P) : 0,
+    minP: AI_MIN_P ? Number(AI_MIN_P) : 0.05,
     frequencyPenalty: AI_FREQUENCY_PENALTY ? Number(AI_FREQUENCY_PENALTY) : 0,
     presencePenalty: AI_PRESENCE_PENALTY ? Number(AI_PRESENCE_PENALTY) : 0,
-    maxTokens: AI_MAX_TOKENS ? Number(AI_MAX_TOKENS) : 800,
+    maxTokens: AI_MAX_TOKENS ? Number(AI_MAX_TOKENS) : 1024,
     timeoutMs: AI_TIMEOUT_MS ? Number(AI_TIMEOUT_MS) : 25000,
     /** Max tool-calling rounds per reply, guards endless loops. */
     toolMaxRounds: AI_TOOL_MAX_ROUNDS !== undefined ? Number(AI_TOOL_MAX_ROUNDS) : 2,

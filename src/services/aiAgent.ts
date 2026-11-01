@@ -281,8 +281,9 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         top_p: ai.topP,
         frequency_penalty: ai.frequencyPenalty,
         presence_penalty: ai.presencePenalty,
-        // min_p is an OpenRouter/llama.cpp extension: only send it when asked.
-        ...(ai.minP > 0 ? { min_p: ai.minP } : {}),
+        // min_p is an OpenRouter/llama.cpp extension: other providers reject
+        // unknown parameters, so only send it where it is understood.
+        ...(ai.minP > 0 && /openrouter\.ai/i.test(ai.baseUrl) ? { min_p: ai.minP } : {}),
         max_tokens: ai.maxTokens,
         ...(allowTools ? { tools, tool_choice: "auto" } : {}),
       },

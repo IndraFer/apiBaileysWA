@@ -131,6 +131,16 @@ static away message is sent instead, so the customer always gets an answer.
 Both drivers produce the same output (one reply text), so switching later is a
 configuration change.
 
+The dashboard exposes the OpenAI-compatible driver only. The `webhook` driver is
+an advanced/env-only option for gateways that speak the custom event contract
+instead of OpenAI's; if your gateway is OpenAI-compatible, point `Base URL` at
+it and keep the default driver.
+
+Default sampling values: `temperature 0.6`, `top_p 0.95`, `min_p 0.05`
+(sent only when the base URL is OpenRouter), penalties `0`, `max_tokens 1024`.
+Empty fields fall back to these, so a provider's own defaults apply only when
+you clear a value on purpose.
+
 #### Per-number configuration
 
 ```http

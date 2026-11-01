@@ -347,6 +347,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,
+          baseUrl: ai.baseUrl || config.ai.baseUrl,
           agentUrl: ai.agentUrl || config.ai.agentUrl,
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
@@ -361,7 +362,11 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           credentialsSet: Object.keys(endpointCredentials).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
         },
-        defaults: { routing: config.routing, agentUrl: config.ai.agentUrl },
+        defaults: {
+          routing: config.routing,
+          baseUrl: config.ai.baseUrl,
+          agentUrl: config.ai.agentUrl,
+        },
       },
     });
   } catch (err) {
@@ -446,6 +451,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,
+          baseUrl: ai.baseUrl || config.ai.baseUrl,
           agentUrl: ai.agentUrl || "",
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
