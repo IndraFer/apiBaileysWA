@@ -416,9 +416,12 @@ dependency.
 
 **CSP mode.** `CSP_REPORT_ONLY=true` switches the header to
 `Content-Security-Policy-Report-Only`: violations are still posted to
-`/dashboard/csp-report` and logged, but nothing is blocked. Use it for a quiet
-development console; keep enforcement (the default) in production. The report
-endpoint accepts the opaque `Origin: null` that browsers send with reports.
+`/dashboard/csp-report` and `are still printed in the browser console`; the
+difference is that resources are not blocked. It is a staged-rollout tool, not a
+way to silence the console — keep enforcement (the default) in production and
+fix the violations. To hide only the diagnostics during development, filter
+`Content Security Policy` messages in DevTools. The report endpoint accepts the
+opaque `Origin: null` that browsers send with reports.
 
 **Redis must not evict.** The bundled Redis runs with
 `--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap
