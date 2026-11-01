@@ -7,6 +7,7 @@
   let refreshTimer = null;
   let eventSource = null;
   let activeSelfJid = "";
+  let activeSelfLid = "";
   let isWindowFocused = true;
   let isSending = false;
   const draftByJid = new Map();
@@ -395,6 +396,7 @@
       selectedMode = "personal";
       chatCache = [];
       activeSelfJid = normalizeJid(sessions[0]?.user?.id || "");
+      activeSelfLid = normalizeJid(sessions[0]?.user?.lid || "");
 
       UI.setHtml(
         document.getElementById("page-content"),
@@ -510,6 +512,7 @@
           (s) => (s.sessionId || s.id) === selectedSessionId,
         );
         activeSelfJid = normalizeJid(currentSession?.user?.id || "");
+        activeSelfLid = normalizeJid(currentSession?.user?.lid || "");
         await this.loadChatList();
       });
 
@@ -815,6 +818,7 @@
       chatCache = (result.data || [])
         .filter((chat) => (isGroupMode ? isGroupJid(chat.id) : isOneToOneJid(chat.id)))
         .filter((chat) => normalizeJid(chat.id) !== normalizeJid(activeSelfJid))
+        .filter((chat) => !activeSelfLid || normalizeJid(chat.id) !== normalizeJid(activeSelfLid))
         .filter((chat) => normalizeJid(chat.id) !== "status@broadcast")
         .sort(
           (a, b) => Number(b.conversationTimestamp || 0) - Number(a.conversationTimestamp || 0),

@@ -108,6 +108,10 @@ function requireCapability(c: Context, capability: DashboardCapability) {
   return c.json({ success: false, message: "Forbidden: insufficient permissions" }, 403);
 }
 
+function normalizeChatJid(value: unknown): string {
+  return String(value || "").replace(/:\d+(?=@)/, "");
+}
+
 function hasSessionAccess(c: Context, sessionId: string): boolean {
   const role = getDashboardRole(c);
   if (role === "admin") return true;
@@ -875,7 +879,14 @@ dashboardApi.get("/sessions/:sessionId/chats", (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const chats = session.getStore().getChatList(isGroup);
+    const self = session.user as { id?: string; lid?: string } | null;
+    const selfIds = new Set(
+      [self?.id, self?.lid].filter(Boolean).map((value) => normalizeChatJid(value)),
+    );
+    const chats = session
+      .getStore()
+      .getChatList(isGroup)
+      .filter((chat) => !selfIds.has(normalizeChatJid(chat.id)));
     return c.json({ success: true, data: chats });
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
@@ -1055,6 +1066,8 @@ dashboardApi.post("/sessions/:sessionId/chats/:jid/read", async (c) => {
     if (unreadKeys.length > 0) {
       await session.readMessages(unreadKeys as proto.IMessageKey[]);
     }
+    // Persist the reset: otherwise a page refresh restores the old badge.
+    session.getStore().markChatRead(jid);
 
     return c.json({
       success: true,

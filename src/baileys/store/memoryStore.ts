@@ -54,24 +54,23 @@ export class MemoryStore extends EventEmitter {
         try {
           if (!msg.key.remoteJid) continue;
           const jid = jidNormalizedUser(msg.key.remoteJid);
-          this.addMessage(jid, msg);
-
           // Create the room for every upsert type. Some Baileys versions deliver
           // live messages without type "notify"; gating on it left the chat list
           // empty even though messages were stored.
           const timestamp = toNumber(msg.messageTimestamp || 0);
+          const isNew = this.addMessage(jid, msg);
           const existing = this.chats.get(jid);
           if (!existing) {
             this.chats.set(jid, {
               id: jid,
               name: msg.pushName || undefined,
               conversationTimestamp: timestamp,
-              unreadCount: type === "notify" && !msg.key.fromMe ? 1 : 0,
+              unreadCount: type === "notify" && !msg.key.fromMe && isNew ? 1 : 0,
             });
           } else {
             existing.conversationTimestamp = timestamp;
             if (!existing.name && msg.pushName) existing.name = msg.pushName;
-            if (type === "notify" && !msg.key.fromMe) {
+            if (type === "notify" && !msg.key.fromMe && isNew) {
               existing.unreadCount = Number(existing.unreadCount || 0) + 1;
             }
           }
@@ -155,13 +154,14 @@ export class MemoryStore extends EventEmitter {
     });
   }
 
-  private addMessage(jid: string, msg: WAMessage) {
+  private addMessage(jid: string, msg: WAMessage): boolean {
     if (!this.messages.has(jid)) {
       this.messages.set(jid, new Map());
     }
 
     const chatMessages = this.messages.get(jid);
-    if (!chatMessages || !msg.key.id) return;
+    if (!chatMessages || !msg.key.id) return false;
+    const isNew = !chatMessages.has(msg.key.id);
     chatMessages.set(msg.key.id, msg);
 
     // Evict oldest if over limit
@@ -174,6 +174,8 @@ export class MemoryStore extends EventEmitter {
         chatMessages.delete(id);
       }
     }
+
+    return isNew;
   }
 
   getMessage(jid: string, messageId: string): WAMessage | undefined {
@@ -202,6 +204,16 @@ export class MemoryStore extends EventEmitter {
       }
       return id.endsWith("@s.whatsapp.net") || id.endsWith("@lid");
     });
+  }
+
+  /** Clear the unread badge for a chat (also used when the UI opens it). */
+  markChatRead(jid: string): void {
+    const target = normalizeJidKey(jid);
+    for (const [key, chat] of this.chats) {
+      if (normalizeJidKey(key) === target) {
+        chat.unreadCount = 0;
+      }
+    }
   }
 
   getContactList(): string[] {
@@ -307,4 +319,9 @@ export class MemoryStore extends EventEmitter {
     }
     await this.writeToFile();
   }
+}
+
+/** JIDs may carry a device suffix (123:4@s.whatsapp.net); compare without it. */
+function normalizeJidKey(value: unknown): string {
+  return String(value || "").replace(/:\d+(?=@)/, "");
 }
