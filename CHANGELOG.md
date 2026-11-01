@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-01
+
+### Added
+
+- copy-paste integration snippet for third-party tools
+
 ## [1.10.0] - 2026-11-01
 
 ### Added
