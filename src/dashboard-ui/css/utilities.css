@@ -320,3 +320,86 @@
   cursor: default !important;
   opacity: 0.7 !important;
 }
+
+/* sessions page additions */
+.u-fs-08 {
+  font-size: 0.8rem !important;
+}
+
+.u-flex-1 {
+  flex: 1 !important;
+}
+
+.u-block-mt-035 {
+  display: block !important;
+  margin-top: 0.35rem !important;
+}
+
+.u-indent-block {
+  padding-left: 1rem !important;
+  border-left: 2px solid var(--accent-soft) !important;
+  margin-bottom: 1rem !important;
+}
+
+.u-section-divider {
+  margin: 1.5rem 0 1rem !important;
+  padding-top: 1rem !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.u-fs-09-mb-1 {
+  font-size: 0.9rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.u-qr-box {
+  width: 260px !important;
+  height: 260px !important;
+  margin: 0 auto !important;
+}
+
+.u-mb-15-center {
+  margin-bottom: 1.5rem !important;
+  text-align: center !important;
+}
+
+.u-h-200 {
+  height: 200px !important;
+}
+
+.u-fs-3rem {
+  font-size: 3rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.u-fs-2rem-mb-075 {
+  font-size: 2rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.u-flex-gap-1-mb-1 {
+  display: flex !important;
+  gap: 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.u-success-bold {
+  color: var(--success) !important;
+  font-weight: 600 !important;
+}
+
+.u-danger-text {
+  color: var(--danger) !important;
+}
+
+/* Time-range fields: hidden by default, shown by adding .is-open (toggled from
+ * JS). Using a two-class rule avoids fighting .hidden over !important order. */
+.u-time-range {
+  display: none !important;
+  gap: 1rem !important;
+  margin-bottom: 1rem !important;
+}
+
+.u-time-range.is-open {
+  display: flex !important;
+}
