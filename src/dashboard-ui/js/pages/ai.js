@@ -210,15 +210,9 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Response chain</h3></div>
-          <p class="text-muted text-xs" style="margin:0 0 0.5rem">
-            <strong>Webhooks</strong> only deliver events — they never answer messages.
-            <strong>AI &amp; Routing</strong> answers when it is enabled and eligible, and the
-            <strong>static auto-reply</strong> in Sessions is primary while the AI is off or outside
-            its window, and the fallback when an AI call fails.
-          </p>
+          <div class="card-header"><h3>How responders fit together</h3></div>
           <details>
-            <summary class="text-xs">Show effective chain</summary>
+            <summary class="text-xs" id="ai-chain-summary">Show effective chain</summary>
             <div id="ai-chain" style="margin-top:0.5rem">
               <p class="text-muted text-xs" style="margin:0">Loading…</p>
             </div>
@@ -505,6 +499,21 @@
       const staticText = autoReply.enabled
         ? `role ${autoReply.role || "both"} · trigger ${autoReply.type}`
         : "not enabled";
+
+      // The collapsed summary carries the live chain, so no static paragraph is
+      // needed above it (that was the redundant part of this card).
+      const summary = document.getElementById("ai-chain-summary");
+      if (summary) {
+        const aiShort = !ai.enabled
+          ? "AI off"
+          : mode === "always"
+            ? "AI 24/7"
+            : mode === "window"
+              ? `AI ${routing.aiWindowStart}–${routing.aiWindowEnd}`
+              : "AI off";
+        const staticShort = autoReply.enabled ? `static ${autoReply.role || "both"}` : "static off";
+        summary.textContent = `${aiShort} → ${staticShort} → webhook events only`;
+      }
 
       // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every interpolated value passes through escapeHtml()
       target.innerHTML = `
