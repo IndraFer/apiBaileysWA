@@ -9,6 +9,7 @@ const {
   REDIS_ENABLED,
   REDIS_URL,
   REDIS_PASSWORD,
+  AUTH_STATE_BACKEND,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -166,6 +167,17 @@ const config = {
     enabled: REDIS_ENABLED === "true",
     url: REDIS_URL || "redis://localhost:6379",
     password: REDIS_PASSWORD || "",
+  },
+
+  /**
+   * Explicit auth-state backend. "auto" keeps the legacy behaviour (Redis when
+   * available, otherwise files); "file"/"redis" make the choice deliberate and
+   * the startup check refuses to run when the data lives in the other backend.
+   */
+  authState: {
+    backend: (AUTH_STATE_BACKEND === "file" || AUTH_STATE_BACKEND === "redis"
+      ? AUTH_STATE_BACKEND
+      : "auto") as "auto" | "file" | "redis",
   },
 
   baileys: {

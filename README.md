@@ -385,6 +385,25 @@ Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose netw
 Optional hardening: restrict the dashboard to a VPN/Tailscale network or an IP
 allowlist at the proxy, and expose only `/status` + the REST API publicly.
 
+## 🧱 Auth-state backend, Redis limits and broadcast persistence
+
+**Backend is explicit or clearly resolved.** `AUTH_STATE_BACKEND` accepts
+`auto` (default: Redis when reachable, else files), `file` or `redis`.
+Choosing one backend means the other store is ignored, so the app refuses to
+start when the configured backend disagrees with where sessions actually live —
+that prevents an "empty dashboard" that looks like lost WhatsApp logins.
+
+**Redis must not evict.** The bundled Redis runs with
+`--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap
+silently drops arbitrary keys, including session credentials, which logs the
+WhatsApp session out. Failing writes loudly is the safer failure mode; raise
+`--maxmemory` / the container limit when you outgrow it.
+
+**Broadcast queues are in-memory.** `broadcastQueue` is a plain in-process
+`Map`: enabling Redis does **not** make broadcasts survive a restart. Redis is
+used for auth state, API keys and the broadcast *result* cache only. If restart
+durability for broadcasts matters, it has to be implemented separately.
+
 ## 🐳 Docker Deployment
 
 The project provides configurations for both runtimes. Everything runs in a single

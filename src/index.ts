@@ -1,4 +1,5 @@
 import app from "@/app";
+import { assertAuthStateBackendConsistency } from "@/baileys/authState";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { hasUsers } from "@/dashboard/auth";
@@ -106,6 +107,15 @@ if (config.dashboard.enabled) {
 // ── Initialize Redis & Reconnect Sessions ───────────
 (async () => {
   await initializeRedis();
+
+  // Fail fast when the configured auth backend disagrees with where the
+  // sessions actually live: starting "empty" looks like lost WhatsApp logins.
+  try {
+    await assertAuthStateBackendConsistency();
+  } catch (error) {
+    logger.error("Auth state backend check failed: %s", errorToString(error));
+    process.exit(1);
+  }
 
   if (config.media.cleanupEnabled) {
     mediaCleanup.start();
