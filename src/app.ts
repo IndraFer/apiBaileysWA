@@ -16,6 +16,7 @@ import { generalRateLimit } from "@/middleware/rateLimit";
 import chatRoutes from "@/routes/chat";
 import groupRoutes from "@/routes/group";
 import mediaRoutes from "@/routes/media";
+import messageRoutes from "@/routes/messages";
 import profileRoutes from "@/routes/profile";
 import sessionRoutes from "@/routes/session";
 import statusRoutes from "@/routes/status";
@@ -271,6 +272,7 @@ app.post("/dashboard/csp-report", async (c) => {
 });
 
 app.route("/sessions", sessionRoutes);
+app.route("/messages", messageRoutes);
 app.route("/chats", chatRoutes);
 app.route("/groups", groupRoutes);
 app.route("/profile", profileRoutes);

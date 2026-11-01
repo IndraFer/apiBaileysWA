@@ -245,6 +245,61 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
           responses: { 200: { description: "QR code data URL" } },
         },
       },
+      "/messages": {
+        post: {
+          tags: ["Messages"],
+          summary: "Send text, image, document or location (unified)",
+          description:
+            "Third-party friendly endpoint. from accepts a session id or its bound phone number. Group targets require ALLOW_GROUP_SEND=true (and ALLOWED_GROUP_JIDS when set).",
+          security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["from", "receiver"],
+                  properties: {
+                    from: { type: "string", example: "ROG8" },
+                    receiver: { type: "string", example: "628123456789" },
+                    type: {
+                      type: "string",
+                      enum: ["text", "image", "document", "location"],
+                      default: "text",
+                    },
+                    messages: { type: "string", example: "Halo dari bot" },
+                    media: {
+                      type: "object",
+                      properties: {
+                        url: { type: "string", format: "uri" },
+                        filename: { type: "string" },
+                        mimetype: { type: "string" },
+                      },
+                    },
+                    location: {
+                      type: "object",
+                      properties: {
+                        latitude: { type: "number" },
+                        longitude: { type: "number" },
+                        name: { type: "string" },
+                        address: { type: "string" },
+                      },
+                    },
+                    isGroup: { type: "boolean", default: false },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Message sent" },
+            400: { description: "Validation error or receiver not on WhatsApp" },
+            403: { description: "Group sending disabled or not allowlisted" },
+            404: { description: "Session not found" },
+            409: { description: "Session exists but is not connected" },
+          },
+        },
+      },
       "/chats/{sessionId}/send": {
         post: {
           tags: ["Chats"],

@@ -15,6 +15,8 @@ const {
   AI_HISTORY_MAX_MESSAGES,
   AI_HISTORY_MAX_AGE_MS,
   AI_HISTORY_MAX_CHARS,
+  ALLOW_GROUP_SEND,
+  ALLOWED_GROUP_JIDS,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -402,6 +404,16 @@ const config = {
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
+
+  messaging: {
+    /** Group sends are disabled by default: highest ban-risk pattern. */
+    allowGroupSend: ALLOW_GROUP_SEND === "true" || ALLOW_GROUP_SEND === "1",
+    /** Optional allowlist of group JIDs or numeric ids (empty = all groups). */
+    allowedGroupJids: (ALLOWED_GROUP_JIDS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  },
 
   /** Prompt history limits: count, age window and character budget. */
   aiHistory: {

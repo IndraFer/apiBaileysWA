@@ -730,6 +730,92 @@ Content-Type: application/json
 }
 ```
 
+### Unified send (third-party friendly)
+
+One endpoint for widgets, chatbots and LLM tools. Authenticate with the same API
+key as the rest of the REST API (`Authorization: Bearer <API_KEY>` or
+`x-api-key`). `from` accepts a session id or the WhatsApp number bound to it.
+
+```bash
+POST /messages
+Content-Type: application/json
+Authorization: Bearer <API_KEY>
+
+{
+  "from": "ROG8",
+  "receiver": "628123456789",
+  "type": "text",
+  "messages": "Halo, ini pesan dari bot."
+}
+```
+
+| `type` | Required fields |
+|---|---|
+| `text` (default) | `messages` |
+| `image` | `media.url`; `messages` becomes the caption |
+| `document` | `media.url`, optional `media.filename`, `media.mimetype` |
+| `location` | `location.latitude`, `location.longitude`, optional `name`/`address` |
+
+```bash
+# Image with caption
+POST /messages
+{
+  "from": "62812xxxxxxx",
+  "receiver": "62813xxxxxxx",
+  "type": "image",
+  "messages": "Bukti transfer",
+  "media": { "url": "https://example.com/bukti.jpg" }
+}
+
+# Document
+{
+  "from": "ROG8",
+  "receiver": "62813xxxxxxx",
+  "type": "document",
+  "media": {
+    "url": "https://example.com/invoice.pdf",
+    "filename": "invoice.pdf",
+    "mimetype": "application/pdf"
+  }
+}
+
+# Location
+{
+  "from": "ROG8",
+  "receiver": "62813xxxxxxx",
+  "type": "location",
+  "location": {
+    "latitude": -6.2,
+    "longitude": 106.8,
+    "name": "Kantor",
+    "address": "Jl. Contoh 1"
+  }
+}
+```
+
+Success response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "messageId": "3EB0...",
+    "to": "628123456789@s.whatsapp.net",
+    "type": "text",
+    "timestamp": 1761000000
+  },
+  "message": "Message sent successfully"
+}
+```
+
+Errors: `400` validation or receiver not on WhatsApp, `401` missing/invalid
+API key, `403` group sending disabled or not allowlisted, `404` session not
+found, `409` session exists but is not connected.
+
+**Groups are opt-in.** Send to `...@g.us` only when `ALLOW_GROUP_SEND=true`;
+optionally restrict with `ALLOWED_GROUP_JIDS`. Group blasts are the highest ban
+risk for an unofficial client — keep them allowlisted and low-volume.
+
 ### Send Bulk Messages (Anti-Spam)
 
 ```bash
