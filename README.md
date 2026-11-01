@@ -419,8 +419,11 @@ dependency.
 `/dashboard/csp-report` and `are still printed in the browser console`; the
 difference is that resources are not blocked. It is a staged-rollout tool, not a
 way to silence the console — keep enforcement (the default) in production and
-fix the violations. To hide only the diagnostics during development, filter
-`Content Security Policy` messages in DevTools. The report endpoint accepts the
+fix the violations. The console text is "Content Security Policy" (with spaces),
+so to hide only the diagnostics during development use the DevTools console
+filter `-/Content Security Policy/i` (leading `-` negates, matching is regex).
+On builds without regex negation, `/Content Security Policy/` shows just those
+messages so they can be read or collapsed. The report endpoint accepts the
 opaque `Origin: null` that browsers send with reports.
 
 **Redis must not evict.** The bundled Redis runs with
