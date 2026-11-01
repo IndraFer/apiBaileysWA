@@ -276,7 +276,12 @@
     "method": "GET",
     "url": "https://api.example.com/v1/users/search",
     "params": [
-      { "name": "q", "type": "string", "description": "Kata kunci", "required": true }
+      {
+        "name": "q",
+        "type": "string",
+        "description": "Kata kunci",
+        "required": true
+      }
     ]
   }
 ]</pre>
@@ -293,8 +298,16 @@
             <textarea id="ai-credentials" class="input" rows="5"
               placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
             <pre class="example-json example-json-sm">{
-  "search_users":  { "headers": { "X-API-Key": "..." } },
-  "search_events": { "query": { "tenant": "..." } }
+  "search_users": {
+    "headers": {
+      "X-API-Key": "..."
+    }
+  },
+  "search_events": {
+    "query": {
+      "tenant": "..."
+    }
+  }
 }</pre>
             <small class="text-muted" id="ai-credentials-hint"></small>
             <small class="text-muted">
