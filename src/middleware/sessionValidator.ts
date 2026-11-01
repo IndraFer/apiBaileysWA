@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
 import connectionManager from "@/baileys/connectionManager";
-import { SESSION_ID_REGEX } from "@/schemas/session";
 import { error } from "@/lib/response";
+import { SESSION_ID_REGEX } from "@/schemas/session";
 
 /**
  * Middleware to validate that a session exists and is connected.

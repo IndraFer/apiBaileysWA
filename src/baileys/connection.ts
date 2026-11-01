@@ -1,7 +1,6 @@
 import { createHmac } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import type { Boom } from "@hapi/boom";
-import { humanizeReadBeforeReply, resolveHumanizeOptions } from "@/baileys/replyEngine";
 import makeWASocket, {
   type AnyMessageContent,
   type BaileysEventMap,
@@ -25,14 +24,15 @@ import { toDataURL } from "qrcode";
 import { type AuthStateResult, useAuthState } from "@/baileys/authState";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
 import { shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
+import { humanizeReadBeforeReply, resolveHumanizeOptions } from "@/baileys/replyEngine";
 import { MemoryStore } from "@/baileys/store/memoryStore";
 import type { SessionMetadata, SessionOptions, WebhookPayload } from "@/baileys/types";
 import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
-import { addWebhookLog } from "@/services/webhookLog";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
-import { webhookQueue, webhookRateLimiter, webhookCircuitBreaker } from "@/services/webhookQueue";
+import { addWebhookLog } from "@/services/webhookLog";
+import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
 import { asyncSleep } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
 

@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Context, Next } from "hono";
 import config from "@/config";
-import { error } from "@/lib/response";
 import logger from "@/lib/logger";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
+import { error } from "@/lib/response";
 
 const REDIS_API_KEY_PREFIX = "@baileys-wa-api:api-keys";
 

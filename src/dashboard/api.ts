@@ -18,14 +18,14 @@ import config from "@/config";
 import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import { isBun } from "@/lib/runtime";
-import { addWebhookLog, clearWebhookLogs, getWebhookLogs } from "@/services/webhookLog";
-import { type DeadLetterEntry } from "@/services/webhookDeadLetter";
 import {
   clearDeadLetters,
+  type DeadLetterEntry,
   getDeadLetters,
   replayAllDeadLetters,
   replayDeadLetter,
 } from "@/services/webhookDeadLetter";
+import { addWebhookLog, clearWebhookLogs, getWebhookLogs } from "@/services/webhookLog";
 
 const dashboardApi = new Hono();
 

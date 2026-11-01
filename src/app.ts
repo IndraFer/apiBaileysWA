@@ -9,7 +9,7 @@ import config from "@/config";
 import { loadDashboard } from "@/dashboard/loader";
 import { generateOpenApiSpec } from "@/docs/openapi";
 import appLogger from "@/lib/logger";
-import { success, error } from "@/lib/response";
+import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
 import { generalRateLimit } from "@/middleware/rateLimit";
 import chatRoutes from "@/routes/chat";
