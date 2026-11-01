@@ -286,7 +286,13 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
         webhookSecret,
         events: eventChecks,
       });
-      result.success ? Toast.success("Webhook updated") : Toast.error(result.message);
+      if (result.success) {
+        Toast.success("Webhook updated");
+        // The Events monitor only makes sense once a webhook exists.
+        await window.App?.refreshAvailability?.();
+      } else {
+        Toast.error(result.message);
+      }
     },
 
     async testWebhook(sessionId) {

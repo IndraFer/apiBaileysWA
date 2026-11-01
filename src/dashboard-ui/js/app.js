@@ -32,39 +32,87 @@
     messaging: {
       title: "Messaging",
       requires: "sendOutbound",
+      needsSession: true,
       render: () => MessagingPage.render(),
     },
     chatrooms: {
       title: "Chat Rooms",
       requires: "viewChats",
+      needsSession: true,
       render: () => ChatRoomsPage.render(),
       destroy: () => ChatRoomsPage.destroy?.(),
     },
     groups: {
       title: "Groups",
       requires: "manageGroups",
+      needsSession: true,
       render: () => GroupsPage.render(),
     },
     webhooks: {
       title: "Webhooks",
       requires: "manageWebhooks",
+      needsSession: true,
       render: () => WebhooksPage.render(),
     },
     events: {
       title: "Event Monitor",
       requires: "viewChats",
+      needsWebhook: true,
       render: () => EventsPage.render(),
       destroy: () => EventsPage.destroy?.(),
     },
     ai: {
       title: "AI & Routing",
       requires: "manageSessions",
+      needsSession: true,
       render: () => AiPage.render(),
     },
-    settings: { title: "Settings", render: () => SettingsPage.render() },
+    settings: {
+      title: "Settings",
+      requiresRole: "admin",
+      render: () => SettingsPage.render(),
+    },
   };
 
   let currentPage = null;
+  /** Cached session list used to gate session-dependent navigation. */
+  let sessionCache = [];
+
+  async function loadSessionsForNav() {
+    try {
+      const result = await API.get("/sessions");
+      sessionCache = result.success ? result.data || [] : [];
+    } catch {
+      sessionCache = [];
+    }
+    return sessionCache;
+  }
+
+  function hasSession() {
+    return sessionCache.length > 0;
+  }
+
+  function hasWebhookConfigured() {
+    return sessionCache.some((session) => String(session.webhookUrl || "").trim().length > 0);
+  }
+
+  /** Read the cached user without throwing on corrupted storage. */
+  function readStoredUser() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Pages that need infrastructure hide themselves until it exists. */
+  function isPageAvailable(page) {
+    if (!page) return false;
+    if (page.needsSession && !hasSession()) return false;
+    if (page.needsWebhook && !hasWebhookConfigured()) return false;
+    return true;
+  }
 
   window.App = {
     async init() {
@@ -107,7 +155,7 @@
       if (token) {
         const result = await API.get("/auth/me");
         if (result.success) {
-          this.showDashboard(result.data);
+          await this.showDashboard(result.data);
           return;
         }
       }
@@ -120,11 +168,12 @@
       AuthUI.init();
     },
 
-    showDashboard(user) {
+    async showDashboard(user) {
       localStorage.setItem("wa-dashboard-user", JSON.stringify(user || {}));
       document.getElementById("auth-screen").classList.add("hidden");
       document.getElementById("dashboard").classList.remove("hidden");
       this.renderUserBadge(user?.username || "User");
+      await loadSessionsForNav();
       this.applyRoleAccess(user || {});
 
       // Navigate to hash or default
@@ -143,12 +192,28 @@
     },
 
     applyRoleAccess(user) {
+      const role = user?.role || "assistant";
       document.querySelectorAll(".nav-item").forEach((item) => {
         const pageName = item.dataset.page;
         const page = pages[pageName];
-        const allowed = this.hasCapability(user, page?.requires);
+        const roleOk =
+          this.hasCapability(user, page?.requires) &&
+          (!page?.requiresRole || role === page.requiresRole);
+        // Session-dependent menus stay hidden until they can actually be used.
+        const allowed = roleOk && isPageAvailable(page);
         item.style.display = allowed ? "" : "none";
       });
+    },
+
+    /**
+     * Re-evaluate navigation after sessions or webhooks change, so pages that
+     * depend on them appear/disappear without a reload.
+     */
+    async refreshAvailability() {
+      await loadSessionsForNav();
+      const user = readStoredUser();
+      this.applyRoleAccess(user);
+      if (currentPage && !isPageAvailable(pages[currentPage])) this.navigate("overview");
     },
 
     /** Get initials from username: "admin" → "A", "admin_dashboard" → "AD", "john_doe_smith" → "JD" */
@@ -198,9 +263,16 @@
         return;
       }
 
-      if (!this.hasCapability(user, page.requires)) {
+      const role = user?.role || "assistant";
+      const roleOk =
+        this.hasCapability(user, page.requires) &&
+        (!page.requiresRole || role === page.requiresRole);
+      if (!roleOk) {
         Toast.warning("Your role does not have access to this page");
-        pageName = "settings";
+        pageName = "overview";
+      } else if (!isPageAvailable(page)) {
+        Toast.info("Create or connect a session first");
+        pageName = "sessions";
       }
 
       const finalPage = pages[pageName];

@@ -189,6 +189,8 @@
         const result = await API.post(`/sessions/${sessionId}`, body);
         if (result.success) {
           Toast.success("Session created");
+          // Session-dependent menus appear as soon as a session exists.
+          window.App?.refreshAvailability?.();
           if (result.data?.pairingCode) this.showPairingCode(result.data.pairingCode);
           else
             this.showQR(sessionId, {
@@ -302,6 +304,7 @@
       const result = await API.del(`/sessions/${sessionId}`);
       if (result.success) {
         Toast.success("Session deleted");
+        window.App?.refreshAvailability?.();
         this.loadSessions();
       } else {
         Toast.error(result.message || "Failed to delete");

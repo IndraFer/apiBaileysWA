@@ -194,6 +194,16 @@
       // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- all interpolated values pass through escapeHtml(); same convention as the other dashboard pages
       container.innerHTML = `
         <div class="toolbar">
+          <div class="form-group" style="margin:0;min-width:220px">
+            <select id="ai-session-select" class="input">
+              ${sessions
+                .map(
+                  (session) =>
+                    `<option value="${escapeHtml(session.sessionId)}" ${session.sessionId === state.sessionId ? "selected" : ""}>${escapeHtml(session.sessionId)}</option>`,
+                )
+                .join("")}
+            </select>
+          </div>
           <div class="toolbar-spacer"></div>
           <button class="btn btn-outline btn-sm" id="ai-refresh">↻ Refresh</button>
           <button class="btn btn-primary btn-sm" id="ai-save">Save changes</button>
@@ -201,33 +211,18 @@
 
         <div class="card">
           <div class="card-header"><h3>Response chain</h3></div>
-          <div class="flex gap-1" style="align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
-            <div class="form-group" style="min-width:220px;margin:0">
-              <label for="ai-session-select">Session</label>
-              <select id="ai-session-select" class="input">
-                ${sessions
-                  .map(
-                    (session) =>
-                      `<option value="${escapeHtml(session.sessionId)}" ${session.sessionId === state.sessionId ? "selected" : ""}>${escapeHtml(session.sessionId)}</option>`,
-                  )
-                  .join("")}
-              </select>
+          <p class="text-muted text-xs" style="margin:0 0 0.5rem">
+            <strong>Webhooks</strong> only deliver events — they never answer messages.
+            <strong>AI &amp; Routing</strong> answers when it is enabled and eligible, and the
+            <strong>static auto-reply</strong> in Sessions is primary while the AI is off or outside
+            its window, and the fallback when an AI call fails.
+          </p>
+          <details>
+            <summary class="text-xs">Show effective chain</summary>
+            <div id="ai-chain" style="margin-top:0.5rem">
+              <p class="text-muted text-xs" style="margin:0">Loading…</p>
             </div>
-            <div style="flex:1;min-width:280px">
-              <p class="text-muted text-xs" style="margin:0 0 0.5rem">
-                <strong>Webhooks</strong> only deliver events — they never answer messages.
-                <strong>AI &amp; Routing</strong> answers when it is enabled and eligible, and the
-                <strong>static auto-reply</strong> in Sessions is primary while the AI is off or outside
-                its window, and the fallback when an AI call fails.
-              </p>
-              <details>
-                <summary class="text-xs">Show effective chain</summary>
-                <div id="ai-chain" style="margin-top:0.5rem">
-                  <p class="text-muted text-xs" style="margin:0">Loading…</p>
-                </div>
-              </details>
-            </div>
-          </div>
+          </details>
         </div>
 
         <div class="card">
