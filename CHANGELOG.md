@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-11-01
+
+### Fixed
+
+- show chats addressed with @lid and create rooms for every upsert
+
 ## [1.13.0] - 2026-11-01
 
 ### Fixed
