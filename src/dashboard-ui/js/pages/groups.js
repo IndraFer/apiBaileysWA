@@ -9,7 +9,7 @@
 
       document.getElementById("page-content").innerHTML = `
         <div class="toolbar">
-          <div class="form-group mb-0" style="min-width:180px">
+          <div class="form-group mb-0 u-minw-180">
             <select id="group-session">${opts || "<option disabled>No sessions</option>"}</select>
           </div>
           <button class="btn btn-primary btn-sm" id="btn-load-groups">Load Groups</button>
@@ -28,7 +28,7 @@
       if (!session) return Toast.warning("Select a session first");
 
       const el = document.getElementById("groups-list");
-      el.innerHTML = '<div class="skeleton skeleton-card w-full" style="height:150px"></div>';
+      el.innerHTML = '<div class="skeleton skeleton-card w-full u-h-150"></div>';
 
       // Use the main API endpoint
       const result = await API.request(`/groups/${session}/list`, {

@@ -29,8 +29,8 @@
       return new Promise((resolve) => {
         this.show(
           title,
-          `<p style="margin-bottom:1.5rem;color:var(--text-secondary)">${message}</p>
-          <div class="flex gap-1" style="justify-content:flex-end">
+          `<p class="u-mb-15-muted">${message}</p>
+          <div class="flex gap-1 u-end">
             <button class="btn btn-outline" id="modal-cancel">${cancelText}</button>
             <button class="btn btn-${variant}" id="modal-confirm">${confirmText}</button>
           </div>`,

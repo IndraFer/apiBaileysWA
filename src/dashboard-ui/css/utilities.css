@@ -427,3 +427,48 @@
   align-items: center !important;
   justify-content: space-between !important;
 }
+
+/* remaining pages */
+.u-flex-1-minw-200 {
+  flex: 1 !important;
+  min-width: 200px !important;
+}
+
+.u-bg-input {
+  background: var(--bg-input) !important;
+}
+
+.u-ml-05 {
+  margin-left: 0.5rem !important;
+}
+
+.u-m0-pl-12 {
+  margin: 0 !important;
+  padding-left: 1.2rem !important;
+}
+
+.u-p-0-0-05 {
+  padding: 0 0 0.5rem !important;
+}
+
+.u-h-150 {
+  height: 150px !important;
+}
+
+.u-minw-180 {
+  min-width: 180px !important;
+}
+
+.u-end {
+  justify-content: flex-end !important;
+}
+
+.u-mb-15-muted {
+  margin-bottom: 1.5rem !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Generic visibility toggle used where display used to be set inline. */
+.is-hidden {
+  display: none !important;
+}

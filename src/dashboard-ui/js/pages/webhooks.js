@@ -108,7 +108,7 @@
             Webhooks only <strong>deliver events</strong> to your endpoint — they never answer
             messages. Replies come from the responder chain:
           </p>
-          <ol class="text-sm text-muted" style="margin:0;padding-left:1.2rem">
+          <ol class="text-sm text-muted u-m0-pl-12">
             <li><strong>AI &amp; Routing</strong> — answers when enabled and eligible.</li>
             <li><strong>Static auto-reply</strong> (session settings) — primary when the AI is off
               or outside its window, fallback when the AI call fails.</li>
@@ -120,9 +120,9 @@
         <div class="card mb-2">
           <div class="card-header"><h3>Webhook Configuration</h3></div>
           <p class="text-sm text-muted mb-2">Configure webhook URL and event subscriptions per session.</p>
-			  <div class="mb-2" style="padding:0 0 0.5rem">
+			  <div class="mb-2 u-p-0-0-05">
 				<span class="badge ${meta?.signatureMode === "required" ? "badge-danger" : meta?.signatureMode === "optional" ? "badge-warning" : "badge-info"}">SIGNATURE: ${(meta?.signatureMode || "off").toUpperCase()}</span>
-				<span class="text-muted text-xs" style="margin-left:0.5rem">Auth fallback: ${(meta?.authFallback || []).join(" -> ") || "session webhook secret -> AUTH_GLOBAL_TOKEN"}</span>
+				<span class="text-muted text-xs u-ml-05">Auth fallback: ${(meta?.authFallback || []).join(" -> ") || "session webhook secret -> AUTH_GLOBAL_TOKEN"}</span>
 			  </div>
           ${
             sessions.length === 0
@@ -256,7 +256,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
           ? session.webhookEvents
           : ALL_EVENTS;
       return `
-        <div class="card mb-1" style="background:var(--bg-input)">
+        <div class="card mb-1 u-bg-input">
           <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-1">
               <strong>${sid}</strong>

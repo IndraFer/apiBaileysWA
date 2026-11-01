@@ -236,13 +236,13 @@
       if (!text) {
         el.textContent = "";
         el.className = "chatroom-read-status";
-        el.style.display = "none";
+        el.classList.add("is-hidden");
         return;
       }
 
       el.textContent = text;
       el.className = `chatroom-read-status ${kind}`;
-      el.style.display = "inline-flex";
+      el.classList.remove("is-hidden");
     },
 
     async sendChatPresence(type, jid, sessionId = selectedSessionId, force = false) {
@@ -711,7 +711,7 @@
       if (!indicator) return;
 
       indicator.textContent = typingLabel;
-      indicator.style.display = "inline-flex";
+      indicator.classList.remove("is-hidden");
 
       const key = `${selectedSessionId}:${selectedJid}`;
       if (typingTimers.has(key)) clearTimeout(typingTimers.get(key));
@@ -719,7 +719,7 @@
         key,
         setTimeout(() => {
           const current = document.getElementById("chatroom-typing-indicator");
-          if (current) current.style.display = "none";
+          if (current) current.classList.add("is-hidden");
         }, 3500),
       );
     },
@@ -1058,8 +1058,8 @@
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
             <p class="text-sm text-muted">Session: ${selectedSessionId}</p>
-						<span class="chatroom-read-status" id="chatroom-read-status" style="display:none"></span>
-						<span class="chatroom-typing-indicator" id="chatroom-typing-indicator" style="display:none"></span>
+						<span class="chatroom-read-status is-hidden" id="chatroom-read-status"></span>
+						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
           </div>
           <div class="chatroom-header-actions">
             ${isGroupMode ? '<button class="btn btn-outline btn-sm" id="chatroom-load-members">Members</button>' : ""}

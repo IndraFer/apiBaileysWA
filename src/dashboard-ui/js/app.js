@@ -250,7 +250,15 @@
       const color = this.getAvatarColor(username);
       const displayName = this.toTitleCase(username);
       const el = document.getElementById("user-badge");
-      el.innerHTML = `<div class="user-avatar" style="background:${color}">${initials}</div><span class="user-name">${displayName}</span>`;
+      el.replaceChildren();
+      const avatar = document.createElement("div");
+      avatar.className = "user-avatar";
+      avatar.style.background = color;
+      avatar.textContent = initials;
+      const name = document.createElement("span");
+      name.className = "user-name";
+      name.textContent = displayName;
+      el.append(avatar, name);
     },
 
     navigate(pageName) {

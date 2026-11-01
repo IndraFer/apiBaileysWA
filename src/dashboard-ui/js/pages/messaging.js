@@ -11,12 +11,12 @@
         <div class="card mb-2">
           <div class="card-header"><h3>Send Message</h3></div>
           <form id="send-msg-form">
-            <div class="flex gap-2" style="flex-wrap:wrap">
-              <div class="form-group" style="flex:1;min-width:200px">
+            <div class="flex gap-2 u-flex-wrap">
+              <div class="form-group u-flex-1-minw-200">
                 <label>Session</label>
                 <select id="msg-session" required>${opts || "<option disabled>No sessions</option>"}</select>
               </div>
-              <div class="form-group" style="flex:1;min-width:200px">
+              <div class="form-group u-flex-1-minw-200">
                 <label>Receiver</label>
                 <input type="text" id="msg-receiver" placeholder="6281234567890" required />
               </div>
@@ -48,8 +48,8 @@
             <div class="form-group hidden" id="msg-location-group">
               <label>Latitude / Longitude</label>
               <div class="flex gap-1">
-                <input type="text" id="msg-lat" placeholder="Latitude" style="flex:1" />
-                <input type="text" id="msg-lng" placeholder="Longitude" style="flex:1" />
+                <input class="u-flex-1" type="text" id="msg-lat" placeholder="Latitude" />
+                <input class="u-flex-1" type="text" id="msg-lng" placeholder="Longitude" />
               </div>
             </div>
             <button type="submit" class="btn btn-primary">Send Message</button>

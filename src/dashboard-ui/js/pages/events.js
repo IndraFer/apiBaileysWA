@@ -58,7 +58,7 @@
           eventCount++;
           const badge = document.getElementById("events-badge");
           if (badge) {
-            badge.style.display = "inline";
+            badge.classList.remove("is-hidden");
             badge.textContent = eventCount;
           }
         } catch {}
@@ -125,7 +125,7 @@
         feed.innerHTML = '<div class="empty-state"><p class="text-muted">Events cleared</p></div>';
       eventCount = 0;
       const badge = document.getElementById("events-badge");
-      if (badge) badge.style.display = "none";
+      if (badge) badge.classList.add("is-hidden");
       API.post("/events/clear");
     },
 

@@ -67,7 +67,7 @@ app.use("*", async (c, next) => {
 const DASHBOARD_CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self'",

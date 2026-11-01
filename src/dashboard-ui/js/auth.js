@@ -101,8 +101,8 @@
         if (!input) return;
         const isPassword = input.type === "password";
         input.type = isPassword ? "text" : "password";
-        btn.querySelector(".eye-open").style.display = isPassword ? "none" : "";
-        btn.querySelector(".eye-closed").style.display = isPassword ? "" : "none";
+        btn.querySelector(".eye-open")?.classList.toggle("is-hidden", isPassword);
+        btn.querySelector(".eye-closed")?.classList.toggle("is-hidden", !isPassword);
         btn.title = isPassword ? "Hide password" : "Show password";
       });
     });
