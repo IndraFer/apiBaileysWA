@@ -2,10 +2,19 @@
 (() => {
   let pollTimer = null;
 
+  /** Escape dynamic values before they enter an HTML template. */
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   window.SessionsPage = {
     async render() {
       const container = document.getElementById("page-content");
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
       container.innerHTML = `
         <div class="toolbar">
           <button class="btn btn-primary" id="btn-new-session">+ New Session</button>
@@ -40,14 +49,12 @@
       const result = await API.get("/sessions");
       const el = document.getElementById("sessions-list");
       if (!result.success) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         el.innerHTML = '<p class="text-muted">Failed to load sessions</p>';
         return;
       }
 
       const sessions = result.data || [];
       if (sessions.length === 0) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         el.innerHTML = `<div class="empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/></svg>
           <h3>No Sessions</h3><p class="text-muted">Create a new session to connect your WhatsApp account</p>
@@ -55,24 +62,24 @@
         return;
       }
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every interpolated value passes through escapeHtml(); same convention as the other dashboard pages
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every dynamic value below is escaped with escapeHtml()
       el.innerHTML = `<div class="table-wrapper"><table>
         <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th><th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
             (s) => `
           <tr>
-            <td><strong>${s.sessionId || s.id || "—"}</strong></td>
+            <td><strong>${escapeHtml(s.sessionId || s.id || "—")}</strong></td>
             <td>${
               s.connected
                 ? '<span class="badge badge-success"><span class="badge-dot pulse"></span>CONNECTED</span>'
                 : '<span class="badge badge-danger"><span class="badge-dot"></span>DISCONNECTED</span>'
             }</td>
-            <td class="text-muted">${s.user?.id || s.phone || "—"}</td>
+            <td class="text-muted">${escapeHtml(s.user?.id || s.phone || "—")}</td>
             <td class="flex gap-1">
-              ${!s.connected ? `<button class="btn btn-outline btn-sm" data-action="qr" data-session-id="${s.sessionId || s.id}">QR</button>` : ""}
-							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${s.sessionId || s.id}">Settings</button>
-              <button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${s.sessionId || s.id}">Delete</button>
+              ${!s.connected ? `<button class="btn btn-outline btn-sm" data-action="qr" data-session-id="${escapeHtml(s.sessionId || s.id)}">QR</button>` : ""}
+							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${escapeHtml(s.sessionId || s.id)}">Settings</button>
+              <button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>
             </td>
           </tr>`,
           )
@@ -259,7 +266,6 @@
         if (status.connected) {
           clearInterval(pollTimer);
           setQrStatus("CONNECTED", "badge-success");
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
           el.innerHTML = `<div class="u-fs-3rem">✓</div><p class="u-success-bold">Connected successfully!</p>`;
           Toast.success(`Session ${sessionId} connected!`);
           setTimeout(() => {
@@ -271,15 +277,20 @@
         if (status.qrCode) {
           missingQrCount = 0;
           setQrStatus("READY TO SCAN", "badge-info");
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
-          el.innerHTML = `<img src="${status.qrCode}" alt="QR Code" /><p>Scan this QR code with WhatsApp</p>`;
+          // Build the image through the DOM: assigning src as a property cannot
+          // break out of the attribute, unlike interpolating it into HTML.
+          const img = document.createElement("img");
+          img.src = status.qrCode;
+          img.alt = "QR Code";
+          const hint = document.createElement("p");
+          hint.textContent = "Scan this QR code with WhatsApp";
+          el.replaceChildren(img, hint);
           return;
         }
 
         missingQrCount += 1;
         if (missingQrCount >= 5 || status.exists === false) {
           setQrStatus("EXPIRED", "badge-danger");
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
           el.innerHTML = `<div class="u-fs-2rem-mb-075">!</div><p>QR code is no longer available. Recreate the session to start a new login.</p>`;
           clearInterval(pollTimer);
           return;
@@ -339,11 +350,11 @@
         <form id="update-session-form">
           <div class="form-group">
             <label for="update-webhook">Webhook URL</label>
-            <input type="url" id="update-webhook" placeholder="https://your-server.com/webhook" value="${session.webhookUrl || ""}" />
+            <input type="url" id="update-webhook" placeholder="https://your-server.com/webhook" value="${escapeHtml(session.webhookUrl || "")}" />
           </div>
 					<div class="form-group">
 						<label for="update-secret">Webhook Secret Header</label>
-						<input type="text" id="update-secret" placeholder="Optional secret key" value="${session.webhookSecret || ""}" />
+						<input type="text" id="update-secret" placeholder="Optional secret key" value="${escapeHtml(session.webhookSecret || "")}" />
 					</div>
 
 					<div class="u-section-divider">
@@ -378,11 +389,11 @@
 							<div id="update-autoreply-time-group" class="u-time-range ${ar.type === "time_range" ? "is-open" : ""}">
 								<div class="u-flex-1">
 									<label class="u-fs-08">Start Time</label>
-									<input type="time" id="update-autoreply-start" value="${ar.timeStart || "18:00"}" />
+									<input type="time" id="update-autoreply-start" value="${escapeHtml(ar.timeStart || "18:00")}" />
 								</div>
 								<div class="u-flex-1">
 									<label class="u-fs-08">End Time</label>
-									<input type="time" id="update-autoreply-end" value="${ar.timeEnd || "08:00"}" />
+									<input type="time" id="update-autoreply-end" value="${escapeHtml(ar.timeEnd || "08:00")}" />
 								</div>
 							</div>
 							<div class="form-group">

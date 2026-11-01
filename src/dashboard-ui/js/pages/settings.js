@@ -53,15 +53,15 @@
             "Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
         }[role] || "Limited operational access.";
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
       document.getElementById("page-content").innerHTML = `
         <div class="card mb-2">
           <div class="card-header">
             <h3>Account</h3>
           </div>
           <table class="u-mb-1">
-            <tr><td class="text-muted u-w-100">Username</td><td><strong>${user.username || "—"}</strong></td></tr>
-			<tr><td class="text-muted">Role</td><td><span class="badge ${user.role === "admin" ? "badge-success" : "badge-info"}">${(user.role || "assistant").toUpperCase()}</span></td></tr>
+            <tr><td class="text-muted u-w-100">Username</td><td><strong>${escapeHtml(user.username || "—")}</strong></td></tr>
+			<tr><td class="text-muted">Role</td><td><span class="badge ${user.role === "admin" ? "badge-success" : "badge-info"}">${escapeHtml((user.role || "assistant").toUpperCase())}</span></td></tr>
           </table>
           <button class="btn btn-outline btn-sm" id="btn-show-password-modal">
             <svg class="u-mr-4px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
@@ -151,7 +151,7 @@
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
           const restricted = Boolean(data.infoRestricted);
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
           aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
@@ -165,7 +165,7 @@
       } catch (_err) {
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
           aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
@@ -203,7 +203,7 @@
         const projectName = d.name || "Baileys WA API";
         const projectVersion = d.version || "v1.0.0";
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         document.getElementById("modal-body").innerHTML = `
           <div class="u-text-center-mb-125">
             <div class="u-status-icon" data-status-color="${statusColor}">${statusIcon}</div>
@@ -247,7 +247,7 @@
           el.style.setProperty("--status-color", el.getAttribute("data-status-color") || "");
         });
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         document.getElementById("modal-body").innerHTML = `
           <div class="u-text-center-p-15">
             <div class="u-text-2rem">⚠️</div>
@@ -320,13 +320,13 @@
           <a href="/openapi.json" target="_blank" class="btn btn-outline btn-sm">Download JSON</a>
         </div>`;
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         document.getElementById("modal-body").innerHTML = html;
 
         // Allow the modal to be wider for the spec
         document.getElementById("modal").style.maxWidth = "700px";
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         document.getElementById("modal-body").innerHTML = `
           <div class="u-text-center-p-15">
             <div class="u-text-2rem">⚠️</div>
@@ -350,7 +350,7 @@
             ? '<span class="badge badge-success">ON</span>'
             : '<span class="badge badge-warning">OFF</span>';
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <table>
@@ -363,7 +363,7 @@
 				  <p class="text-muted text-sm u-p-075-1"><span class="u-text-warning-bold">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
 				`;
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
         card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <div class="u-p-15-center">
@@ -476,8 +476,8 @@
       ]);
 
       if (!usersRes.success) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
-        table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${usersRes.message}</td></tr>`;
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
+        table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${escapeHtml(usersRes.message)}</td></tr>`;
         return;
       }
 
@@ -508,7 +508,7 @@
                 const checked = assignedSessions.includes(sessionId) ? "checked" : "";
                 return `
 									<label class="ui-list-row">
-										<input type="checkbox" class="user-session-option" data-user-id="${u.id}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
+										<input type="checkbox" class="user-session-option" data-user-id="${escapeHtml(u.id)}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
 										<span class="text-sm u-break-all">${escapeHtml(sessionId)}</span>
 									</label>`;
               })
@@ -517,41 +517,41 @@
 
         html += `
                 <tr>
-                    <td><strong>${u.username}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}</td>
+                    <td><strong>${escapeHtml(u.username)}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}</td>
 					<td>
 						${u.status === "pending" ? '<span class="badge badge-warning">PENDING</span>' : '<span class="badge badge-success">ACTIVE</span>'}
 					</td>
                     <td>
-                        <select class="user-role-select u-input-mini" data-id="${u.id}" ${isCurrentUser ? "disabled" : ""}>
+                        <select class="user-role-select u-input-mini" data-id="${escapeHtml(u.id)}" ${isCurrentUser ? "disabled" : ""}>
 							<option value="assistant" ${u.role === "assistant" ? "selected" : ""}>ASSISTANT</option>
 							<option value="manager" ${u.role === "manager" ? "selected" : ""}>MANAGER</option>
                             <option value="admin" ${u.role === "admin" ? "selected" : ""}>ADMIN</option>
                         </select>
                     </td>
 					<td>
-                        <details class="user-sessions-picker u-relative" data-id="${u.id}">
+                        <details class="user-sessions-picker u-relative" data-id="${escapeHtml(u.id)}">
 							<summary class="u-user-sessions-summary" data-locked="${isCurrentUser ? "true" : "false"}">
-								<span class="user-sessions-summary u-truncate" data-id="${u.id}">${escapeHtml(assignedSummary)}</span>
+								<span class="user-sessions-summary u-truncate" data-id="${escapeHtml(u.id)}">${escapeHtml(assignedSummary)}</span>
 								<span class="text-muted">${isCurrentUser ? "Locked" : "Edit"}</span>
 							</summary>
 							<div class="u-settings-popover">
 								<p class="text-muted text-xs u-m-0-045">Empty selection means this user can access all sessions.</p>
 								<div class="u-scroll-170">${sessionSelector}</div>
 								<div class="flex gap-1 u-mt-065-end">
-									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${u.id}">Use All</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${u.id}">Save</button>`}
+									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${escapeHtml(u.id)}">Use All</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${escapeHtml(u.id)}">Save</button>`}
 								</div>
 							</div>
 						</details>
 					</td>
                     <td class="text-muted">${date}</td>
                     <td class="u-text-right">
-						${!isCurrentUser && u.status === "pending" ? `<button class="btn btn-outline btn-sm text-xs btn-approve-user u-pill-mr" data-id="${u.id}" data-username="${u.username}">Approve</button>` : ""}
-						${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user u-pill" data-id="${u.id}" data-username="${u.username}">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
+						${!isCurrentUser && u.status === "pending" ? `<button class="btn btn-outline btn-sm text-xs btn-approve-user u-pill-mr" data-id="${escapeHtml(u.id)}" data-username="${u.username}">Approve</button>` : ""}
+						${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user u-pill" data-id="${escapeHtml(u.id)}" data-username="${u.username}">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
                     </td>
                 </tr>`;
       });
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
       table.innerHTML = html;
 
       table.querySelectorAll(".user-role-select").forEach((sel) => {
