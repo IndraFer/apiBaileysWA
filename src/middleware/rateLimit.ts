@@ -18,6 +18,10 @@ interface RateLimitOptions {
   keyGenerator?: (c: Context) => string;
   /** Custom message for rate limit exceeded */
   message?: string;
+  /** Stable machine-readable code for the 429 body. */
+  code?: string;
+  /** Actionable next step for the caller. */
+  hint?: string;
 }
 
 interface RateLimitEntry {
@@ -34,6 +38,8 @@ export function rateLimit(options: RateLimitOptions) {
     max,
     keyGenerator,
     message = "Too many requests, please try again later",
+    code = "RATE_LIMITED",
+    hint = "Back off and retry after the seconds in the Retry-After header.",
   } = options;
 
   const cache = new LRUCache<string, RateLimitEntry>({
@@ -55,7 +61,7 @@ export function rateLimit(options: RateLimitOptions) {
         c.header("X-RateLimit-Limit", String(max));
         c.header("X-RateLimit-Remaining", "0");
         c.header("X-RateLimit-Reset", String(Math.ceil(entry.resetAt / 1000)));
-        return error(c, message, 429);
+        return error(c, message, 429, code, { hint, retryable: true });
       }
 
       cache.set(key, entry);
@@ -83,7 +89,7 @@ export function rateLimit(options: RateLimitOptions) {
  * address is used instead so attackers cannot bypass rate limits / auth by
  * forging x-forwarded-for.
  */
-function getClientIp(c: Context): string {
+export function getClientIp(c: Context): string {
   if (config.trustProxy) {
     return (
       c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -147,6 +153,18 @@ export const bulkRateLimit = rateLimit({
     const ip = getClientIp(c);
     const sessionId = c.req.param("sessionId") || "global";
     return `bulk:${sessionId}:${ip}`;
+  },
+});
+
+/** Per API key: configurable, falls back to IP when unauthenticated. */
+export const apiKeyRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: config.rateLimit.perApiKey,
+  message: "API key rate limit exceeded",
+  hint: "Wait for Retry-After, or create a separate key per integration if you need more throughput.",
+  keyGenerator: (c) => {
+    const auth = c.get("auth") as { keyId?: string } | undefined;
+    return auth?.keyId ? `key:${auth.keyId}` : `ip:${getClientIp(c)}`;
   },
 });
 

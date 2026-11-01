@@ -472,3 +472,69 @@
 .is-hidden {
   display: none !important;
 }
+
+/* Create-key row: session, label and action on one line */
+.u-row-create {
+  display: flex !important;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.u-row-create .form-group {
+  flex: 1 1 12rem;
+}
+
+/* Modal rhythm: headings and copy buttons never touch the block above */
+.modal-body h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.modal-body h4:first-child {
+  margin-top: 0;
+}
+
+.modal-body pre + div,
+.modal-body pre + button {
+  margin-top: 0.5rem;
+}
+
+.modal-body {
+  scrollbar-width: thin;
+}
+
+.webhook-ref-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.webhook-ref-code::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.webhook-ref-code::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+
+/* Long-form fields: taller by default, still resizable */
+#ai-instruction {
+  min-height: 12rem;
+}
+
+#ai-endpoints {
+  min-height: 16rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#ai-credentials {
+  min-height: 8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

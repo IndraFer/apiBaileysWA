@@ -12,7 +12,8 @@ import config from "@/config";
 import logger from "@/lib/logger";
 import { isSecureRequest } from "@/lib/request";
 import { hashPassword, verifyPassword } from "@/lib/runtime";
-import { authRateLimit } from "@/middleware/rateLimit";
+import { authRateLimit, getClientIp } from "@/middleware/rateLimit";
+import { lockRemainingMs, recordLoginFailure, resetLoginFailures } from "@/services/loginGuard";
 
 const DATA_DIR = join(process.cwd(), "data");
 const USERS_FILE = join(DATA_DIR, "dashboard-users.json");
@@ -147,16 +148,52 @@ dashboardAuth.post("/login", authRateLimit, async (c) => {
 
   const users = loadUsers();
   const normalizedLogin = String(username).toLowerCase().trim();
+  const ip = getClientIp(c);
+
+  const lockMs = lockRemainingMs(normalizedLogin, ip);
+  if (lockMs > 0) {
+    c.header("Retry-After", String(Math.ceil(lockMs / 1000)));
+    return c.json(
+      {
+        success: false,
+        code: "ACCOUNT_LOCKED",
+        message: "Too many failed login attempts. Try again later.",
+        retryable: true,
+      },
+      429,
+    );
+  }
+
   const user = users.find((u) => u.username === normalizedLogin);
 
   if (!user) {
-    return c.json({ success: false, message: "Invalid credentials" }, 401);
+    recordLoginFailure(normalizedLogin, ip);
+    return c.json(
+      {
+        success: false,
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid credentials",
+        retryable: false,
+      },
+      401,
+    );
   }
 
   const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) {
-    return c.json({ success: false, message: "Invalid credentials" }, 401);
+    recordLoginFailure(normalizedLogin, ip);
+    return c.json(
+      {
+        success: false,
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid credentials",
+        retryable: false,
+      },
+      401,
+    );
   }
+
+  resetLoginFailures(normalizedLogin, ip);
 
   if (getUserStatus(user) !== "active") {
     return c.json({ success: false, message: "Your account is pending admin approval" }, 403);

@@ -28,6 +28,12 @@ const {
   CSP_EXTRA_FONT_SRC,
   CSP_EXTRA_IMG_SRC,
   CSP_EXTRA_CONNECT_SRC,
+  RATE_LIMIT_API_KEY,
+  AUTH_MAX_FAILURES,
+  AUTH_FAILURE_WINDOW_MS,
+  AUTH_LOCK_MS,
+  SEND_TIMEOUT_MS,
+  MAX_CONCURRENT_SENDS,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -422,6 +428,22 @@ const config = {
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
+
+  rateLimit: {
+    /** Requests per minute allowed per API key (falls back to IP). */
+    perApiKey: RATE_LIMIT_API_KEY ? Number(RATE_LIMIT_API_KEY) : 60,
+  },
+
+  loginGuard: {
+    maxFailures: AUTH_MAX_FAILURES ? Number(AUTH_MAX_FAILURES) : 10,
+    windowMs: AUTH_FAILURE_WINDOW_MS ? Number(AUTH_FAILURE_WINDOW_MS) : 15 * 60 * 1000,
+    lockMs: AUTH_LOCK_MS ? Number(AUTH_LOCK_MS) : 15 * 60 * 1000,
+  },
+
+  send: {
+    timeoutMs: SEND_TIMEOUT_MS ? Number(SEND_TIMEOUT_MS) : 30000,
+    maxConcurrent: MAX_CONCURRENT_SENDS ? Number(MAX_CONCURRENT_SENDS) : 5,
+  },
 
   /** CSP origins are configurable: self-hosting is the default, CDNs opt-in. */
   csp: {

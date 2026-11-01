@@ -388,6 +388,36 @@ buckets and the most recent decisions. They are visible while the app is
 running and reset on restart. Redis-backed persistence can be added later
 without changing the endpoints.
 
+### Brute force & rate limits
+
+| Layer | Default | Env |
+|---|---|---|
+| Dashboard login per IP | 5 requests/min | (built-in) |
+| Login lockout per account and per IP | 10 failures in 15 min → 15 min lock | `AUTH_MAX_FAILURES`, `AUTH_FAILURE_WINDOW_MS`, `AUTH_LOCK_MS` |
+| REST API per key | 60 requests/min | `RATE_LIMIT_API_KEY` |
+| Send per session+IP | 30 requests/min | (built-in) |
+| Concurrent sends per session | 5 | `MAX_CONCURRENT_SENDS` |
+| Send timeout | 30 s | `SEND_TIMEOUT_MS` |
+
+Lockout responses are generic (`ACCOUNT_LOCKED`) and unknown usernames are
+tracked too, so locking does not reveal whether an account exists. Rate-limited
+responses carry `Retry-After`, a stable `code` (`RATE_LIMITED`,
+`SESSION_BUSY`) and `retryable: true`.
+
+For a public deployment, also put a limiter in front: nginx
+`limit_req_zone`/`limit_conn_zone`, Cloudflare rate limiting or fail2ban for
+repeated 401/429s. In-process limits protect one instance; the proxy protects
+the whole fleet.
+
+### Session config persistence & cleanup
+
+Per-number settings (webhook, AI/routing, autoReply, owner) are written to
+`sessions/md_<id>/metadata.json` (file backend) or the Redis auth hash, so a
+restart reconnects the session with the same configuration. Deleting a session
+removes its auth folder, metadata and store file, and revokes every API key
+scoped to that session so a recreated session with the same id cannot reuse an
+old key.
+
 ## 🔐 Deployment security (TLS & reverse proxy)
 
 The API speaks plain HTTP; **terminate TLS in front of it** (Caddy, nginx,

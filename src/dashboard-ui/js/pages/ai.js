@@ -324,7 +324,7 @@
         <div class="card">
           <div class="card-header"><h3>System instruction</h3></div>
           <div class="form-group">
-            <textarea id="ai-instruction" class="input" rows="6"
+            <textarea id="ai-instruction" class="input" rows="10"
               placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
             <small class="text-muted">Persona, tone, language and escalation rules.</small>
           </div>
@@ -333,11 +333,11 @@
         <div class="card">
           <div class="card-header"><h3>Knowledge endpoints</h3></div>
           <div class="form-group">
-            <div class="flex gap-1 u-between-center">
+            <div class="flex gap-1 u-between-center u-mb-05">
               <label for="ai-endpoints">Endpoints the assistant may call</label>
               <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
             </div>
-            <textarea id="ai-endpoints" class="input" rows="8"
+            <textarea id="ai-endpoints" class="input" rows="12"
               placeholder='[ { "name": "...", "method": "GET", "url": "https://...", "params": [] } ]'></textarea>
             <pre class="example-json example-json-sm">[
   {
@@ -367,7 +367,7 @@
             <h3>Endpoint credentials (optional)</h3>
           </div>
           <div class="form-group">
-            <textarea id="ai-credentials" class="input" rows="5"
+            <textarea id="ai-credentials" class="input" rows="6"
               placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
             <pre class="example-json example-json-sm">{
   "search_users": {

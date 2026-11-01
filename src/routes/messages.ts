@@ -14,11 +14,16 @@ import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { success } from "@/lib/response";
 import { type AuthData, authMiddleware } from "@/middleware/auth";
-import { sendRateLimit } from "@/middleware/rateLimit";
+import { apiKeyRateLimit, sendRateLimit } from "@/middleware/rateLimit";
 import { unifiedSendJsonSchema, unifiedSendSchema } from "@/schemas/message";
 import { maskReceiver, recordApiCall } from "@/services/apiAuditLog";
 import { keyAllowsSession } from "@/services/apiKeys";
-import { MessageSendError, resolveSessionId, sendUnifiedMessage } from "@/services/messageSender";
+import {
+  MessageSendError,
+  resolveSessionId,
+  sendUnifiedMessage,
+  withTimeout,
+} from "@/services/messageSender";
 
 const messageRoutes = new Hono();
 
@@ -60,7 +65,22 @@ function failure(c: Context, extra: FailureExtra) {
 
 messageRoutes.use("*", authMiddleware);
 
-messageRoutes.post("/", sendRateLimit, async (c) => {
+const inFlight = new Map<string, number>();
+
+function acquireSlot(session: string): boolean {
+  const current = inFlight.get(session) ?? 0;
+  if (current >= config.send.maxConcurrent) return false;
+  inFlight.set(session, current + 1);
+  return true;
+}
+
+function releaseSlot(session: string): void {
+  const current = inFlight.get(session) ?? 0;
+  if (current <= 1) inFlight.delete(session);
+  else inFlight.set(session, current - 1);
+}
+
+messageRoutes.post("/", apiKeyRateLimit, sendRateLimit, async (c) => {
   const startedAt = Date.now();
   const auth = authPayload(c);
   const requestId =
@@ -129,9 +149,26 @@ messageRoutes.post("/", sendRateLimit, async (c) => {
       });
     }
 
-    const data = await sendUnifiedMessage(input);
-    audit(200, { session, receiver: data.to, type: input.type });
-    return success(c, data, "Message sent successfully");
+    if (!acquireSlot(session)) {
+      audit(429, { session, receiver: input.receiver, type: input.type });
+      return failure(c, {
+        status: 429,
+        code: "SESSION_BUSY",
+        message: `Session "${session}" already has ${config.send.maxConcurrent} sends in flight`,
+        field: "from",
+        hint: "Retry after a short delay; consider queueing sends on your side instead of firing them concurrently.",
+        details: { session, maxConcurrent: config.send.maxConcurrent },
+        requestId,
+      });
+    }
+
+    try {
+      const data = await withTimeout(sendUnifiedMessage(input), config.send.timeoutMs);
+      audit(200, { session, receiver: data.to, type: input.type });
+      return success(c, data, "Message sent successfully");
+    } finally {
+      releaseSlot(session);
+    }
   } catch (err) {
     if (err instanceof MessageSendError) {
       audit(err.status, { session, receiver: input.receiver, type: input.type });

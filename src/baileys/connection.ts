@@ -1347,6 +1347,11 @@ export class BaileysConnection {
     await this.close();
   }
 
+  /** Prevent any later close-event from recreating the store file. */
+  markDeleted(): void {
+    this.store.markDeleted();
+  }
+
   // ──────────────────────────────────────
   // Webhook
   // ──────────────────────────────────────

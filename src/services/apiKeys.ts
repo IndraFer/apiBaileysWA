@@ -249,6 +249,19 @@ export async function revokeApiKey(idPrefix: string): Promise<boolean> {
   return true;
 }
 
+/** Remove keys scoped to a session that is being deleted. Wildcard keys stay. */
+export async function revokeApiKeysForSession(sessionId: string): Promise<number> {
+  const records = await readAllRecords();
+  let removed = 0;
+  for (const record of records.values()) {
+    if (record.sessions.includes(sessionId)) {
+      await deleteRecord(record.hash);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 /** Resolve a presented token. Legacy plaintext keys are migrated on the way. */
 export async function findApiKeyByToken(token: string): Promise<ApiKeyAuth | null> {
   const hash = hashToken(token);

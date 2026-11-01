@@ -13,7 +13,7 @@ import config from "@/config";
 import type { UnifiedSendInput } from "@/schemas/message";
 import { extractPhone, formatGroup, formatPhone } from "@/utils/phone";
 
-export type SendErrorStatus = 400 | 403 | 404 | 409;
+export type SendErrorStatus = 400 | 403 | 404 | 409 | 429 | 504;
 
 export type SendErrorCode =
   | "INVALID_REQUEST"
@@ -21,7 +21,9 @@ export type SendErrorCode =
   | "SESSION_NOT_CONNECTED"
   | "GROUP_DISABLED"
   | "GROUP_NOT_ALLOWED"
-  | "RECEIVER_NOT_ON_WHATSAPP";
+  | "RECEIVER_NOT_ON_WHATSAPP"
+  | "SESSION_BUSY"
+  | "SEND_TIMEOUT";
 
 export interface SendErrorOptions {
   status?: SendErrorStatus;
@@ -31,6 +33,7 @@ export interface SendErrorOptions {
   /** Actionable next step for the caller (and for an LLM). */
   hint?: string;
   details?: Record<string, unknown>;
+  retryable?: boolean;
 }
 
 export class MessageSendError extends Error {
@@ -39,6 +42,7 @@ export class MessageSendError extends Error {
   readonly field?: string;
   readonly hint?: string;
   readonly details?: Record<string, unknown>;
+  readonly retryable?: boolean;
 
   constructor(message: string, options: SendErrorOptions = {}) {
     super(message);
@@ -48,6 +52,31 @@ export class MessageSendError extends Error {
     this.field = options.field;
     this.hint = options.hint;
     this.details = options.details;
+    this.retryable = options.retryable;
+  }
+}
+
+/** Reject after `ms` without leaking a hanging promise (message may still arrive). */
+export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new MessageSendError("The send operation timed out", {
+              status: 504,
+              code: "SEND_TIMEOUT",
+              hint: "Retry after a short delay. The message may still be delivered on the server side.",
+              retryable: true,
+            }),
+          );
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { BaileysEventEmitter, WAMessage } from "@whiskeysockets/baileys";
 import { jidNormalizedUser, toNumber } from "@whiskeysockets/baileys";
@@ -22,6 +22,7 @@ export class MemoryStore extends EventEmitter {
   private maxMessagesPerChat: number;
   private storeFile: string;
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  private deleted = false;
 
   public chats = new Map<string, Record<string, unknown>>();
   public messages = new Map<string, Map<string, WAMessage>>();
@@ -202,7 +203,22 @@ export class MemoryStore extends EventEmitter {
     return [...this.contacts.keys()];
   }
 
+  /** Mark the session deleted: late close events must not resurrect the file. */
+  markDeleted(): void {
+    this.deleted = true;
+    if (this.autoSaveTimer) {
+      clearInterval(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+    try {
+      rmSync(this.storeFile, { force: true });
+    } catch {
+      // The file may already be gone.
+    }
+  }
+
   async writeToFile() {
+    if (this.deleted) return;
     try {
       const data = {
         version: "1.0",

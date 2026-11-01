@@ -7,6 +7,7 @@ import { BaileysConnection, BaileysNotConnectedError } from "@/baileys/connectio
 import type { SessionMetadata, SessionOptions } from "@/baileys/types";
 import config from "@/config";
 import logger from "@/lib/logger";
+import { revokeApiKeysForSession } from "@/services/apiKeys";
 import { errorToString } from "@/utils/validation";
 
 /**
@@ -34,7 +35,10 @@ class ConnectionManager {
 
     for (const { id, metadata } of saved) {
       try {
+        // Every persisted field must be restored here: connect() rewrites the
+        // metadata file from these options, so a missing field is lost on restart.
         const connection = new BaileysConnection(id, {
+          ownerId: metadata?.ownerId,
           clientName: metadata?.clientName,
           webhookUrl: metadata?.webhookUrl,
           webhookSecret: metadata?.webhookSecret,
@@ -42,6 +46,8 @@ class ConnectionManager {
           includeMedia: metadata?.includeMedia,
           syncFullHistory: metadata?.syncFullHistory,
           autoReply: metadata?.autoReply,
+          routing: metadata?.routing,
+          ai: metadata?.ai,
           isReconnect: true,
           onConnectionClose: () => {
             this.connections.delete(id);
@@ -165,10 +171,20 @@ class ConnectionManager {
   async deleteSession(sessionId: string): Promise<void> {
     const conn = this.connections.get(sessionId);
     if (conn) {
+      // Tombstone first: close events can fire twice and would rewrite the file.
+      conn.markDeleted();
       await conn.logout();
       this.connections.delete(sessionId);
     }
     await deleteAuthState(sessionId);
+
+    // Credentials scoped to this session must not outlive it: otherwise a
+    // recreated session with the same id would silently reuse an old key.
+    const revokedKeys = await revokeApiKeysForSession(sessionId);
+    if (revokedKeys > 0) {
+      logger.info("Revoked %d API key(s) bound to deleted session %s", revokedKeys, sessionId);
+    }
+
     logger.info("Session deleted: %s (active: %d)", sessionId, this.connections.size);
   }
 

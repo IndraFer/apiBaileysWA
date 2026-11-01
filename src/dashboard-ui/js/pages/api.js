@@ -31,26 +31,51 @@
     return Number.isNaN(date.getTime()) ? esc(value) : date.toLocaleString();
   }
 
+  /** Sessions that already have a key are not offered twice. */
+  function boundSessions() {
+    const used = new Set();
+    for (const key of state.keys) {
+      for (const id of key.sessions || []) {
+        if (id && id !== "*") used.add(id);
+      }
+    }
+    return used;
+  }
+
+  function refreshSessionOptions() {
+    const select = document.getElementById("key-session");
+    const button = document.getElementById("btn-create-key");
+    if (!select) return;
+
+    if (state.sessions.length === 0) {
+      window.UI.setHtml(select, '<option value="">No connected session</option>');
+      if (button) button.disabled = true;
+      return;
+    }
+
+    const used = boundSessions();
+    const available = state.sessions.filter((id) => !used.has(id));
+    if (available.length === 0) {
+      window.UI.setHtml(select, '<option value="">All sessions already have a key</option>');
+      if (button) button.disabled = true;
+      return;
+    }
+
+    window.UI.setHtml(
+      select,
+      ['<option value="">Select a session…</option>']
+        .concat(available.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`))
+        .join(""),
+    );
+    if (button) button.disabled = false;
+  }
+
   async function loadSessions() {
     const result = await window.API.get("/sessions");
     state.sessions = (result.success ? result.data : []).map((session) =>
       String(session.sessionId),
     );
-    const select = document.getElementById("key-session");
-    const button = document.getElementById("btn-create-key");
-    if (button) button.disabled = state.sessions.length === 0;
-
-    if (!select) return;
-    if (state.sessions.length === 0) {
-      window.UI.setHtml(select, '<option value="">No connected session</option>');
-      return;
-    }
-    window.UI.setHtml(
-      select,
-      ['<option value="">Select a session…</option>']
-        .concat(state.sessions.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`))
-        .join(""),
-    );
+    refreshSessionOptions();
   }
 
   async function loadKeys() {
@@ -67,6 +92,7 @@
     }
 
     state.keys = result.data || [];
+    refreshSessionOptions();
     if (state.keys.length === 0) {
       window.UI.setHtml(
         table,
@@ -195,7 +221,7 @@
       "API key created",
       `<p class="text-sm">Copy this token now. Only its hash is stored, so it cannot be shown again.</p>
        <pre class="webhook-ref-code" id="new-key-token"></pre>
-       <div class="u-mt-075-end">
+       <div class="u-mt-075">
          <button class="btn btn-primary btn-sm" id="btn-copy-key">Copy token</button>
        </div>`,
     );
@@ -289,6 +315,8 @@
       example,
     };
 
+    document.getElementById("modal").style.maxWidth = "860px";
+
     window.Modal.show(
       "Integration snippet",
       `<p class="text-sm text-muted">Copy each block into your chatbot's external tool configuration. Replace <code>&lt;API_KEY&gt;</code> with a key created below.</p>
@@ -367,20 +395,18 @@
 
         <div class="card">
           <h3 class="u-mt-0">Create API key</h3>
-          <div class="u-grid-2-gap">
-            <div class="form-group u-mb-0">
-              <label for="key-label">Label</label>
-              <input id="key-label" class="input" placeholder="chatbot-widget" autocomplete="off">
-            </div>
+          <div class="u-row-create">
             <div class="form-group u-mb-0">
               <label for="key-session">Session</label>
               <select id="key-session" class="input"></select>
             </div>
-          </div>
-          <div class="u-mt-075-between">
-            <span class="text-muted text-xs">One key is bound to one session. Create a separate key per number you expose.</span>
+            <div class="form-group u-mb-0">
+              <label for="key-label">Label</label>
+              <input id="key-label" class="input" placeholder="chatbot-widget" autocomplete="off">
+            </div>
             <button class="btn btn-primary btn-sm" id="btn-create-key">Create key</button>
           </div>
+          <p class="text-muted text-xs u-mt-05">One key is bound to one session. Sessions that already have a key are not listed here.</p>
         </div>
 
         <div class="card">
