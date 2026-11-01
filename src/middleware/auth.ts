@@ -4,11 +4,17 @@ import config from "@/config";
 import logger from "@/lib/logger";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
 import { error } from "@/lib/response";
+import { findApiKeyByToken } from "@/services/apiKeys";
 
 const REDIS_API_KEY_PREFIX = "@baileys-wa-api:api-keys";
 
 export interface AuthData {
   role: "user" | "admin";
+  /** Short id of the API key that authenticated the request. */
+  keyId?: string;
+  label?: string;
+  /** Session ids the key may use; ["*"] means every session. */
+  sessions?: string[];
 }
 
 function normalizeToken(value?: string): string | null {
@@ -69,16 +75,18 @@ export async function authMiddleware(c: Context, next: Next) {
     }
   }
 
-  // Try Redis API key auth
+  // Try hashed Redis API keys (legacy plaintext keys migrate on use)
   if (isRedisAvailable()) {
     for (const apiKey of authCandidates) {
       try {
-        const redis = getRedis();
-        if (!redis) continue;
-        const raw = await redis.get(`${REDIS_API_KEY_PREFIX}:${apiKey}`);
-
-        if (raw) {
-          const auth: AuthData = JSON.parse(raw);
+        const record = await findApiKeyByToken(apiKey);
+        if (record) {
+          const auth: AuthData = {
+            role: record.role,
+            keyId: record.id,
+            label: record.label,
+            sessions: record.sessions,
+          };
           c.set("auth", auth);
           return next();
         }

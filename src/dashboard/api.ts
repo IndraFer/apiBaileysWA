@@ -34,6 +34,13 @@ import {
   serializeCredentials,
 } from "@/services/aiAgent";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
+import { listApiCalls } from "@/services/apiAuditLog";
+import {
+  ApiKeyStoreUnavailable,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+} from "@/services/apiKeys";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -1251,6 +1258,100 @@ dashboardApi.get("/config/simulation", (c) => {
       autoMarkOnline: config.simulation.autoMarkOnline,
       rejectCalls: config.simulation.rejectCalls,
     },
+  });
+});
+
+/**
+ * GET /dashboard/api/api-keys
+ * List managed API keys. Only the short id and label are returned, never tokens.
+ */
+dashboardApi.get("/api-keys", async (c) => {
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  try {
+    return c.json({ success: true, data: await listApiKeys() });
+  } catch (err) {
+    if (err instanceof ApiKeyStoreUnavailable) {
+      return c.json({ success: false, message: err.message }, 503);
+    }
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * POST /dashboard/api/api-keys
+ * Create a key. The token is returned once and never stored in plaintext.
+ */
+dashboardApi.post("/api-keys", async (c) => {
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const label = String(body.label ?? "").trim();
+  if (label.length < 2 || label.length > 64) {
+    return c.json({ success: false, message: "label must be 2-64 characters" }, 400);
+  }
+
+  const role = body.role === "admin" ? "admin" : "user";
+  const sessions = Array.isArray(body.sessions)
+    ? body.sessions.filter(
+        (value: unknown): value is string => typeof value === "string" && value.length > 0,
+      )
+    : ["*"];
+
+  try {
+    const created = await createApiKey({ label, role, sessions });
+    return c.json(
+      {
+        success: true,
+        data: created,
+        message: "API key created. Copy it now: it is not shown again.",
+      },
+      201,
+    );
+  } catch (err) {
+    if (err instanceof ApiKeyStoreUnavailable) {
+      return c.json({ success: false, message: err.message }, 503);
+    }
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * DELETE /dashboard/api/api-keys/:id
+ * Revoke a key by its short id.
+ */
+dashboardApi.delete("/api-keys/:id", async (c) => {
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  try {
+    const revoked = await revokeApiKey(c.req.param("id"));
+    if (!revoked) return c.json({ success: false, message: "API key not found" }, 404);
+    return c.json({ success: true, message: "API key revoked" });
+  } catch (err) {
+    if (err instanceof ApiKeyStoreUnavailable) {
+      return c.json({ success: false, message: err.message }, 503);
+    }
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/api-logs
+ * Recent inbound API calls (audit). Supports limit/session/status/keyId filters.
+ */
+dashboardApi.get("/api-logs", (c) => {
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const limit = Number(c.req.query("limit") ?? 100);
+  const statusRaw = c.req.query("status");
+  const status = statusRaw ? Number(statusRaw) : undefined;
+
+  return c.json({
+    success: true,
+    data: listApiCalls({
+      limit: Number.isFinite(limit) ? limit : 100,
+      session: c.req.query("session") || undefined,
+      keyId: c.req.query("keyId") || undefined,
+      status: Number.isFinite(status) ? status : undefined,
+    }),
   });
 });
 

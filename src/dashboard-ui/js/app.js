@@ -68,6 +68,12 @@
       needsSession: true,
       render: () => AiPage.render(),
     },
+    api: {
+      title: "REST API",
+      requiresRole: "admin",
+      render: () => ApiPage.render(),
+      destroy: () => ApiPage.destroy?.(),
+    },
     settings: {
       title: "Settings",
       requiresRole: "admin",

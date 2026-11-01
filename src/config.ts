@@ -17,6 +17,10 @@ const {
   AI_HISTORY_MAX_CHARS,
   ALLOW_GROUP_SEND,
   ALLOWED_GROUP_JIDS,
+  AUDIT_LOG_ENABLED,
+  AUDIT_LOG_BODY,
+  AUDIT_LOG_RETENTION_DAYS,
+  AUDIT_LOG_MAX_ENTRIES,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -404,6 +408,14 @@ const config = {
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
+
+  /** Inbound API audit log (dashboard REST API page). */
+  auditLog: {
+    enabled: AUDIT_LOG_ENABLED !== "false",
+    body: AUDIT_LOG_BODY === "true" || AUDIT_LOG_BODY === "1",
+    retentionDays: AUDIT_LOG_RETENTION_DAYS ? Number(AUDIT_LOG_RETENTION_DAYS) : 7,
+    maxEntries: AUDIT_LOG_MAX_ENTRIES ? Number(AUDIT_LOG_MAX_ENTRIES) : 5000,
+  },
 
   messaging: {
     /** Group sends are disabled by default: highest ban-risk pattern. */

@@ -700,6 +700,37 @@ curl -H "x-api-key: <your-api-key>" http://localhost:3000/sessions
 
 ---
 
+## 🔑 Managed API keys & audit log
+
+Open **Dashboard → REST API** (admin only) to create and revoke keys without the
+CLI. Each key stores:
+
+| Field | Meaning |
+|---|---|
+| Label | Human name (`chatbot-widget`) |
+| Role | `user` or `admin` |
+| Session scope | Sessions the key may send from; empty means all |
+| Last used | Updated on every authenticated call |
+
+The token is shown **once** at creation and stored only as a SHA-256 hash. A
+leaked database dump does not expose usable keys. Legacy plaintext keys are
+migrated automatically on first use. Session scope is enforced on `/messages`:
+a key restricted to `ROG8` gets `403` when `from` resolves to another session.
+
+Every call is written to the audit log (Dashboard → REST API → Request log):
+time, key id/label, session, masked receiver, type, status, latency and IP. The
+message body is **not** stored unless `AUDIT_LOG_BODY=true`, and tokens never
+appear in the log. Entries also append to `logs/api-audit-YYYY-MM-DD.jsonl` and
+are pruned after `AUDIT_LOG_RETENTION_DAYS`.
+
+```bash
+# Create a scoped key with the REST API itself (admin session cookie required)
+curl -X POST https://api.your-domain.com/dashboard/api/api-keys \
+  -H "Content-Type: application/json" \
+  -b "wa_dashboard_session=<cookie>" \
+  -d '{"label":"chatbot-widget","role":"user","sessions":["ROG8"]}'
+```
+
 ## 📱 API Usage Examples
 
 ### Create Session (Pairing Code)
@@ -732,12 +763,20 @@ Content-Type: application/json
 
 ### Unified send (third-party friendly)
 
-One endpoint for widgets, chatbots and LLM tools. Authenticate with the same API
+Base URL depends on where the API runs:
+
+| Environment | Base URL |
+|---|---|
+| Local / development | `http://localhost:3000` |
+| Production (VPS) | `https://api.your-domain.com` (or whatever your reverse proxy exposes) |
+
+So the endpoint is `<BASE_URL>/messages`. One endpoint for widgets, chatbots
+and LLM tools. Authenticate with the same API
 key as the rest of the REST API (`Authorization: Bearer <API_KEY>` or
 `x-api-key`). `from` accepts a session id or the WhatsApp number bound to it.
 
 ```bash
-POST /messages
+POST https://api.your-domain.com/messages
 Content-Type: application/json
 Authorization: Bearer <API_KEY>
 
@@ -758,7 +797,7 @@ Authorization: Bearer <API_KEY>
 
 ```bash
 # Image with caption
-POST /messages
+POST https://api.your-domain.com/messages
 {
   "from": "62812xxxxxxx",
   "receiver": "62813xxxxxxx",
