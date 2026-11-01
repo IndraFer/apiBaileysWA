@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-01
+
+### Added
+
+- CDN-friendly policy by default and CDN-hosted assets
+
 ## [1.9.0] - 2026-11-01
 
 ### Added
