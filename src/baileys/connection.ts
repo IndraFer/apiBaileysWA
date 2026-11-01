@@ -30,6 +30,8 @@ import type { SessionMetadata, SessionOptions, WebhookPayload } from "@/baileys/
 import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
+import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
+import { isAiWindowActive, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
@@ -72,7 +74,29 @@ const LOGGER_OMIT_KEYS = [
   "thumbnailSha256",
   "thumbnailEncSha256",
   "appStateSyncKeyShare",
+  // Per-number AI credentials (encrypted blob) and any plaintext variant
+  // passed by the dashboard must never reach the logs.
+  "credentials",
+  "credentialsJson",
+  "apiKey",
+  "authorization",
 ];
+
+/**
+ * Extract the human-readable text of a message (plain text or media caption).
+ * Returns null for anything without text, so callers can skip it.
+ */
+function extractMessageText(message: WAMessage): string | null {
+  const content = message.message;
+  if (!content) return null;
+  const text =
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    null;
+  return typeof text === "string" && text.trim() ? text.trim() : null;
+}
 
 /**
  * Parse an HTTP Retry-After header (seconds or HTTP-date) into milliseconds.
@@ -142,6 +166,12 @@ export class BaileysConnection {
   private clearOnlinePresenceTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Last time a "composing" presence was sent per chat (for presence dedupe). */
   private lastComposingAt = new Map<string, number>();
+  /**
+   * Message ids sent through this API. `fromMe` messages outside this set were
+   * typed by a human (dashboard, phone, or WhatsApp Web), which is how human
+   * activity is detected without a separate presence service.
+   */
+  private apiSentIds = new Set<string>();
   private _isConnected = false;
   private _qrCode: string | null = null;
   private _pairingCode: string | null = null;
@@ -185,20 +215,17 @@ export class BaileysConnection {
       includeMedia: this.options.includeMedia,
       syncFullHistory: this.options.syncFullHistory,
       autoReply: this.options.autoReply,
+      routing: this.options.routing,
+      ai: this.options.ai,
     };
   }
 
   async connect(): Promise<{ qrCode?: string; pairingCode?: string }> {
     if (this.socket) return {};
 
-    const metadata: SessionMetadata = {
-      clientName: this.options.clientName,
-      webhookUrl: this.options.webhookUrl,
-      webhookSecret: this.options.webhookSecret,
-      webhookEvents: this.options.webhookEvents,
-      includeMedia: this.options.includeMedia,
-      syncFullHistory: this.options.syncFullHistory,
-    };
+    // Single source of truth: reuse getSessionMetadata() so per-number config
+    // (autoReply, routing, ai) is never dropped/overwritten on reconnect.
+    const metadata: SessionMetadata = this.getSessionMetadata();
 
     this.authResult = await useAuthState(this.sessionId, metadata);
     const { state, saveCreds } = this.authResult;
@@ -547,16 +574,29 @@ export class BaileysConnection {
 
   /**
    * Handles auto-reply logic based on session or global configuration.
+   *
+   * Route selection:
+   *   1. AI driver — when enabled for this number, the configured AI window is
+   *      active in the configured timezone, and no human replied recently in
+   *      this conversation.
+   *   2. Otherwise the legacy static auto-reply rules (unchanged).
    */
   private async handleAutoReply(data: BaileysEventMap["messages.upsert"], webhookFailed: boolean) {
     const autoReply = this.options.autoReply ?? config.autoReply;
-    if (!autoReply.enabled) return;
+    const ai = resolveAiConfig(this.options.ai);
+    const routing = resolveRoutingConfig(this.options.routing);
 
     // Only reply to incoming messages from others
     const messages = data.messages.filter(
       (m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid),
     );
     if (messages.length === 0) return;
+    if (!autoReply.enabled && !ai.enabled) return;
+
+    const aiReady = Boolean(ai.enabled && isAiWindowActive(routing) && ai.model && ai.apiKey);
+    if (aiReady && (await this.replyWithAi(messages, ai, routing))) return;
+
+    if (!autoReply.enabled) return;
 
     let shouldReply = false;
     if (autoReply.type === "always") {
@@ -607,6 +647,114 @@ export class BaileysConnection {
           logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
         }
       }
+    }
+  }
+
+  /**
+   * Ask the AI agent for a reply and send it.
+   * Returns true when the AI path handled the event (including the deliberate
+   * "stay silent because a human is active" case), so the static fallback
+   * does not run as well.
+   */
+  private async replyWithAi(
+    messages: WAMessage[],
+    ai: ReturnType<typeof resolveAiConfig>,
+    routing: ReturnType<typeof resolveRoutingConfig>,
+  ): Promise<boolean> {
+    const last = messages[messages.length - 1];
+    const remoteJid = last?.key.remoteJid;
+    if (!remoteJid || !last) return false;
+
+    // Human replied recently (phone, dashboard, WhatsApp Web) → stay silent.
+    if (this.isHumanRecentlyActive(remoteJid, routing.humanIdleMs)) {
+      logger.debug(
+        "[%s] AI skipped for %s: human activity within %dms",
+        this.sessionId,
+        remoteJid,
+        routing.humanIdleMs,
+      );
+      return true;
+    }
+
+    const cooldownKey = `${this.sessionId}:cooldown:${remoteJid}`;
+    if (autoReplyCooldownCache.has(cooldownKey)) {
+      logger.debug("[%s] AI skipped for %s: cooldown active", this.sessionId, remoteJid);
+      return true;
+    }
+
+    const texts = messages
+      .map((m) => extractMessageText(m))
+      .filter((text): text is string => Boolean(text))
+      .slice(-routing.maxBatchMessages);
+    if (texts.length === 0) return false;
+
+    // Exclude the current batch from history: it is sent explicitly below.
+    const currentIds = new Set(
+      messages.map((m) => (m.key.id ? String(m.key.id) : "")).filter(Boolean),
+    );
+    const history = this.store
+      .loadMessages(remoteJid, 16)
+      .filter((m) => !currentIds.has(String(m.key.id ?? "")))
+      .map((m) => ({ message: extractMessageText(m), fromMe: Boolean(m.key.fromMe) }))
+      .filter((entry): entry is { message: string; fromMe: boolean } => Boolean(entry.message))
+      .map((entry) => ({
+        role: entry.fromMe ? ("assistant" as const) : ("user" as const),
+        content: entry.message,
+      }));
+
+    autoReplyCooldownCache.set(cooldownKey, true);
+    await this.humanizeReadStep(last);
+
+    const result = await generateAgentReply({
+      sessionId: this.sessionId,
+      conversationId: remoteJid,
+      texts,
+      history,
+      ai,
+    });
+
+    if (!result.ok) {
+      logger.warn("[%s] AI reply failed for %s: %s", this.sessionId, remoteJid, result.error);
+      return false;
+    }
+
+    logger.info(
+      "[%s] AI reply to %s (tools: %s)",
+      this.sessionId,
+      remoteJid,
+      result.toolsUsed.length > 0 ? result.toolsUsed.join(",") : "none",
+    );
+    await this.sendMessage(remoteJid, { text: result.text }, { quoted: last });
+    return true;
+  }
+
+  /**
+   * True when a human sent a message in this conversation recently.
+   * `fromMe` messages sent through this API are tracked separately, so only
+   * messages typed elsewhere (phone, WhatsApp Web) count as human activity.
+   */
+  private isHumanRecentlyActive(conversationId: string, humanIdleMs: number): boolean {
+    const cutoff = Date.now() - humanIdleMs;
+    const history = this.store.loadMessages(conversationId, 20);
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const msg = history[index];
+      if (!msg?.key?.fromMe) continue;
+      const timestamp = Number(msg.messageTimestamp ?? 0) * 1000;
+      if (timestamp < cutoff) continue;
+      const id = msg.key.id ? String(msg.key.id) : "";
+      if (id && this.apiSentIds.has(id)) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /** Remember an API-sent message id so it is not mistaken for human activity. */
+  private rememberApiSent(id: string | null | undefined) {
+    if (!id) return;
+    this.apiSentIds.add(String(id));
+    if (this.apiSentIds.size > 500) {
+      const oldest = this.apiSentIds.values().next().value;
+      if (oldest) this.apiSentIds.delete(oldest);
     }
   }
 
@@ -760,7 +908,11 @@ export class BaileysConnection {
       await delay(paceMs);
     }
 
-    return this.safeSocket().sendMessage(receiver, message, { quoted: options?.quoted });
+    const sent = await this.safeSocket().sendMessage(receiver, message, {
+      quoted: options?.quoted,
+    });
+    this.rememberApiSent(sent?.key?.id);
+    return sent;
   }
 
   async sendMessageWithDelay(receiver: string, message: AnyMessageContent, delayMs = 1000) {

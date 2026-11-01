@@ -77,6 +77,28 @@ const {
   BROADCAST_DELAY_DISTRIBUTION,
   BROADCAST_BATCH_CHECK_WA,
   BROADCAST_CHECK_WA_BATCH_SIZE,
+  // Time-based routing between human CS and the AI agent (global defaults;
+  // each session can override them from the dashboard).
+  ROUTING_TZ,
+  AI_WINDOW_START,
+  AI_WINDOW_END,
+  ROUTING_BATCH_IDLE_MS,
+  ROUTING_BATCH_MAX_WAIT_MS,
+  ROUTING_MAX_BATCH_MESSAGES,
+  ROUTING_HUMAN_IDLE_MS,
+  ROUTING_HANDOFF_PAUSE_MS,
+  AI_AGENT_URL,
+  AI_SERVICE_TOKEN,
+  AI_DRIVER,
+  AI_BASE_URL,
+  AI_MODEL,
+  AI_TEMPERATURE,
+  AI_MAX_TOKENS,
+  AI_TIMEOUT_MS,
+  AI_TOOL_MAX_ROUNDS,
+  AI_TOOL_TIMEOUT_MS,
+  AI_TOOL_MAX_RESPONSE_CHARS,
+  AI_TOOL_BLOCK_INTERNAL,
 } = process.env;
 
 /**
@@ -226,6 +248,48 @@ const config = {
      * Enable in production when webhook URLs may be set by untrusted users.
      */
     blockInternal: WEBHOOK_BLOCK_INTERNAL === "true",
+  },
+
+  /**
+   * Time-based routing: inside the AI window every inbound message is handled
+   * by the AI agent, unless a human replied recently (then it stays human for
+   * humanIdleMs). Per-session values in session metadata take precedence.
+   */
+  routing: {
+    timezone: ROUTING_TZ || "Asia/Jakarta",
+    aiWindowStart: AI_WINDOW_START || "16:00",
+    aiWindowEnd: AI_WINDOW_END || "08:00",
+    /** Debounce before forwarding; reset on every new inbound message. */
+    batchIdleMs: ROUTING_BATCH_IDLE_MS ? Number(ROUTING_BATCH_IDLE_MS) : 20000,
+    batchMaxWaitMs: ROUTING_BATCH_MAX_WAIT_MS ? Number(ROUTING_BATCH_MAX_WAIT_MS) : 60000,
+    maxBatchMessages: ROUTING_MAX_BATCH_MESSAGES ? Number(ROUTING_MAX_BATCH_MESSAGES) : 8,
+    /** How long a conversation stays human-owned after human activity. */
+    humanIdleMs: ROUTING_HUMAN_IDLE_MS ? Number(ROUTING_HUMAN_IDLE_MS) : 900000,
+    /** Pause applied when the AI requests a human takeover. */
+    handoffPauseMs: ROUTING_HANDOFF_PAUSE_MS ? Number(ROUTING_HANDOFF_PAUSE_MS) : 1800000,
+  },
+
+  /**
+   * AI agent gateway defaults. Per-session values override these; secrets are
+   * stored encrypted in session metadata, never in this global config.
+   */
+  ai: {
+    /** "openai" calls an OpenAI-compatible API directly, "webhook" posts to a gateway. */
+    driver: (AI_DRIVER === "webhook" ? "webhook" : "openai") as "openai" | "webhook",
+    baseUrl: AI_BASE_URL || "https://openrouter.ai/api/v1",
+    model: AI_MODEL || "",
+    temperature: AI_TEMPERATURE ? Number(AI_TEMPERATURE) : 0.4,
+    maxTokens: AI_MAX_TOKENS ? Number(AI_MAX_TOKENS) : 800,
+    timeoutMs: AI_TIMEOUT_MS ? Number(AI_TIMEOUT_MS) : 25000,
+    /** Max tool-calling rounds per reply, guards endless loops. */
+    toolMaxRounds: AI_TOOL_MAX_ROUNDS !== undefined ? Number(AI_TOOL_MAX_ROUNDS) : 2,
+    toolTimeoutMs: AI_TOOL_TIMEOUT_MS ? Number(AI_TOOL_TIMEOUT_MS) : 8000,
+    toolMaxResponseChars: AI_TOOL_MAX_RESPONSE_CHARS ? Number(AI_TOOL_MAX_RESPONSE_CHARS) : 2000,
+    /** When true, configured tool URLs pointing at private hosts are refused. */
+    toolBlockInternal: AI_TOOL_BLOCK_INTERNAL === "true",
+    agentUrl: AI_AGENT_URL || "",
+    /** Service identity for gateway -> API internal calls (not per-user). */
+    serviceToken: AI_SERVICE_TOKEN || "",
   },
 
   broadcast: {

@@ -86,6 +86,134 @@ The API will start at `http://localhost:3000`. Access the following default rout
 
 ---
 
+## 🤖 AI Auto-Response (time-based routing + RAG tools)
+
+Inside a configured window the AI answers; outside it humans do. Per-number
+settings live in the session metadata (dashboard), so every WhatsApp number has
+its own window, model, instruction and knowledge endpoints.
+
+**Routing rule** — the AI only replies when all are true:
+
+1. `ai.enabled` is on for that number (dashboard).
+2. The current time is inside `AI_WINDOW_START`–`AI_WINDOW_END`, evaluated in
+   `ROUTING_TZ` (cross-midnight supported: `16:00`→`08:00`).
+3. **No human replied recently** in that conversation. A reply typed on the
+   phone, WhatsApp Web or the dashboard counts; messages sent through this API
+   do not. Silence lasts `ROUTING_HUMAN_IDLE_MS` (default 15 min).
+
+If a call fails, the static away message (`AUTO_REPLY_*`) is used instead, so
+the customer is never left without an answer.
+
+#### Drivers
+
+| `AI_DRIVER` | Talks to | Needs |
+|---|---|---|
+| `openai` (default) | any OpenAI-compatible `/chat/completions` — OpenRouter, OpenAI, Groq, Together, Ollama | `AI_BASE_URL`, `AI_MODEL`, per-number key |
+| `webhook` | your own agent gateway (e.g. `apiLLM`) | `AI_AGENT_URL` |
+
+Both drivers produce the same output (one reply text), so switching later is a
+configuration change.
+
+#### Per-number configuration
+
+```http
+GET   /dashboard/api/sessions/:sessionId/ai-config
+PATCH /dashboard/api/sessions/:sessionId/ai-config
+```
+
+`PATCH` body (every field optional, merged):
+
+```jsonc
+{
+  "routing": { "aiWindowStart": "16:00", "aiWindowEnd": "08:00", "timezone": "Asia/Jakarta",
+               "humanIdleMs": 900000, "handoffPauseMs": 1800000 },
+  "ai": {
+    "enabled": true,
+    "driver": "openai",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "model": "openai/gpt-4o-mini",
+    "systemInstruction": "Anda CS IKA UI. Jawab ramah, singkat, Bahasa Indonesia.",
+    "ragEndpoints": [],
+    "credentialsJson": "{\"apiKey\":\"sk-or-...\",\"endpoints\":{}}"
+  }
+}
+```
+
+Credentials are **encrypted before persisting** (AES-256-GCM) using
+`CONFIG_ENC_KEY` and are never returned by the API — reads only report
+`credentialsSet` / `credentialsEncrypted`. Logs redact them by key name.
+
+#### Knowledge endpoints (simple RAG, no vector DB)
+
+Each endpoint declares **its own parameters** — nothing is hardcoded. They are
+converted into tool schemas, so the model decides when to call them.
+
+```jsonc
+{
+  "name": "cek_anggota",
+  "description": "Cek status anggota IKA UI berdasarkan nama atau nomor anggota.",
+  "method": "GET",
+  "url": "https://ika.ui.ac.id/api/members/search",
+  "params": [
+    { "name": "q", "type": "string", "description": "Nama lengkap atau nomor anggota (min 2 karakter)", "required": true }
+  ],
+  "timeoutMs": 6000,
+  "maxResponseChars": 1500
+}
+```
+
+```jsonc
+{
+  "name": "cari_artikel",
+  "description": "Cari artikel atau agenda kegiatan.",
+  "method": "GET",
+  "url": "https://ika.ui.ac.id/api/articles/search",
+  "params": [
+    { "name": "q", "type": "string", "description": "Kata kunci", "required": true },
+    { "name": "type", "type": "string", "description": "article atau event", "enum": ["article", "event"] },
+    { "name": "date_from", "type": "string", "description": "Tanggal awal (YYYY-MM-DD)" },
+    { "name": "per_page", "type": "integer", "description": "Jumlah hasil (1-50)", "default": 10 }
+  ]
+}
+```
+
+```jsonc
+{
+  "name": "kirim_aduan",
+  "description": "Kirim aduan anggota. Gunakan hanya setelah data lengkap.",
+  "method": "POST",
+  "url": "https://ika.ui.ac.id/api/complaints",
+  "params": [
+    { "name": "name", "type": "string", "description": "Nama pelapor", "required": true },
+    { "name": "content", "type": "string", "description": "Isi aduan (min 10 karakter)", "required": true },
+    { "name": "category", "type": "string", "description": "Kategori", "required": true,
+      "enum": ["fasilitas", "pelayanan", "keanggotaan", "iuran", "kegiatan", "lainnya"] },
+    { "name": "source", "type": "string", "description": "Sumber", "default": "whatsapp" }
+  ]
+}
+```
+
+Parameter can target `query`, `body` or `path` (`in`). Path placeholders use
+`{name}`, e.g. `/api/members/{member_number}/detail`.
+
+Credentials per endpoint live in the encrypted blob, never in the prompt:
+
+```jsonc
+{ "apiKey": "sk-or-...", "endpoints": { "kirim_aduan": { "headers": { "X-API-Key": "..." } } } }
+```
+
+Safety limits: URL always comes from configuration (never from the model),
+optional private-host block (`AI_TOOL_BLOCK_INTERNAL`), per-endpoint timeout,
+response truncation (`AI_TOOL_MAX_RESPONSE_CHARS`) and `AI_TOOL_MAX_ROUNDS` to
+stop tool loops.
+
+> **Status:** routing window, human-activity detection, provider call and
+tool-calling are implemented. The idle **debounce** (`ROUTING_BATCH_IDLE_MS`,
+> `ROUTING_BATCH_MAX_WAIT_MS`) is configured but not enforced yet: messages are
+> batched only when they arrive in the same `messages.upsert` event, and the
+> 5-minute auto-reply cooldown currently prevents a second reply to the same
+> chat.
+
 ## 🐳 Docker Deployment
 
 The project provides configurations for both runtimes. Everything runs in a single

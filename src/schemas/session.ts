@@ -40,3 +40,93 @@ export const createSessionSchema = z
 
 /** Session ID must be alphanumeric with hyphens/underscores, 1-64 chars */
 export const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** HH:mm (00:00 - 23:59) */
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:mm)");
+
+/** Only http(s) targets may be configured for knowledge endpoints. */
+const httpUrl = z
+  .string()
+  .url("Invalid URL")
+  .refine((value) => /^https?:\/\//i.test(value), "Only http(s) URLs are allowed");
+
+/**
+ * Time-based routing overrides for one session.
+ * Every field is optional: unset values fall back to the global env defaults.
+ */
+export const routingConfigSchema = z
+  .object({
+    timezone: z.string().min(1).max(64).optional(),
+    aiWindowStart: timeOfDay.optional(),
+    aiWindowEnd: timeOfDay.optional(),
+    batchIdleMs: z.number().int().min(3000).max(120000).optional(),
+    batchMaxWaitMs: z.number().int().min(5000).max(600000).optional(),
+    maxBatchMessages: z.number().int().min(1).max(50).optional(),
+    humanIdleMs: z.number().int().min(60000).max(86400000).optional(),
+    handoffPauseMs: z.number().int().min(60000).max(86400000).optional(),
+  })
+  .strict();
+
+/** One declared parameter of a knowledge endpoint (nothing hardcoded). */
+export const ragParamSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-zA-Z0-9_.-]+$/, "Use letters, digits, dot, dash or underscore"),
+    type: z.enum(["string", "number", "integer", "boolean"]),
+    description: z.string().min(1).max(300),
+    required: z.boolean().optional(),
+    in: z.enum(["query", "body", "path"]).optional(),
+    enum: z.array(z.string().max(100)).max(50).optional(),
+    default: z.union([z.string().max(500), z.number(), z.boolean()]).optional(),
+  })
+  .strict();
+
+/** One simple (non-vector) knowledge endpoint exposed to the AI as a tool. */
+export const ragEndpointSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-zA-Z0-9_.-]+$/, "Use letters, digits, dot, dash or underscore"),
+    description: z.string().min(1).max(500),
+    method: z.enum(["GET", "POST"]),
+    url: httpUrl,
+    params: z.array(ragParamSchema).max(20).optional(),
+    timeoutMs: z.number().int().min(500).max(30000).optional(),
+    maxResponseChars: z.number().int().min(100).max(8000).optional(),
+  })
+  .strict();
+
+/**
+ * Per-number AI agent config accepted from the dashboard.
+ * `credentialsJson` is plaintext on the wire only; it is encrypted before it
+ * is written to session metadata and is never returned by the API.
+ */
+export const aiConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    driver: z.enum(["openai", "webhook"]).optional(),
+    baseUrl: httpUrl.optional().or(z.literal("")),
+    model: z.string().max(128).optional(),
+    temperature: z.number().min(0).max(2).optional(),
+    maxTokens: z.number().int().min(64).max(8192).optional(),
+    toolMaxRounds: z.number().int().min(0).max(5).optional(),
+    timeoutMs: z.number().int().min(2000).max(120000).optional(),
+    agentUrl: httpUrl.optional().or(z.literal("")),
+    systemInstruction: z.string().max(8000).optional(),
+    ragEndpoints: z.array(ragEndpointSchema).max(20).optional(),
+    credentialsJson: z.string().max(8000).optional(),
+  })
+  .strict();
+
+/** Payload for PATCH /dashboard/api/sessions/:sessionId/ai-config */
+export const aiConfigPatchSchema = z
+  .object({
+    routing: routingConfigSchema.optional(),
+    ai: aiConfigSchema.optional(),
+  })
+  .strict();

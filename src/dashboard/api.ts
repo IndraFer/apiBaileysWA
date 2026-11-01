@@ -14,10 +14,19 @@ import {
   validateWebhookTarget,
 } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
+import type { AiAgentConfig, RoutingConfig } from "@/baileys/types";
 import config from "@/config";
 import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
+import logger from "@/lib/logger";
 import { isBun } from "@/lib/runtime";
+import {
+  encryptionConfigured,
+  encryptSecret,
+  isEncrypted,
+  redactCredentials,
+} from "@/lib/secretBox";
+import { aiConfigPatchSchema } from "@/schemas/session";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -300,6 +309,118 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
     await updateSessionMetadata(sessionId, nextMetadata);
 
     return c.json({ success: true, message: "Webhook config updated" });
+  } catch (err) {
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/sessions/:sessionId/ai-config
+ *
+ * Effective routing + AI settings for one number (session values merged over
+ * the global env defaults). Credentials are never returned: the response only
+ * tells whether they are stored and whether they are encrypted.
+ */
+dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
+  const denied = requireCapability(c, "viewSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  try {
+    const options = connectionManager.getSession(sessionId).getOptions();
+    const ai = options.ai ?? {};
+    return c.json({
+      success: true,
+      data: {
+        routing: { ...config.routing, ...(options.routing ?? {}) },
+        ai: {
+          enabled: ai.enabled ?? false,
+          agentUrl: ai.agentUrl || config.ai.agentUrl,
+          systemInstruction: ai.systemInstruction || "",
+          ragEndpoints: ai.ragEndpoints ?? [],
+          credentialsSet: Boolean(ai.credentials),
+          credentialsEncrypted: isEncrypted(ai.credentials),
+        },
+        defaults: { routing: config.routing, agentUrl: config.ai.agentUrl },
+      },
+    });
+  } catch (err) {
+    return c.json({ success: false, message: (err as Error).message }, 404);
+  }
+});
+
+/**
+ * PATCH /dashboard/api/sessions/:sessionId/ai-config
+ *
+ * Update routing overrides and AI settings for one number. Credentials
+ * (`ai.credentialsJson`, plaintext on the wire) are encrypted before they are
+ * persisted and are never echoed back.
+ */
+dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const parsed = aiConfigPatchSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json(
+      { success: false, message: parsed.error.issues[0]?.message ?? "Invalid payload" },
+      400,
+    );
+  }
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const current = session.getOptions();
+
+    const routing: RoutingConfig = { ...(current.routing ?? {}), ...(parsed.data.routing ?? {}) };
+    const { credentialsJson, ...aiFields } = parsed.data.ai ?? {};
+    const ai: AiAgentConfig = { ...(current.ai ?? {}), ...aiFields };
+
+    if (credentialsJson !== undefined) {
+      const encrypted = encryptSecret(credentialsJson);
+      if (encrypted) {
+        ai.credentials = encrypted;
+        if (!encryptionConfigured()) {
+          logger.warn(
+            "[Dashboard] CONFIG_ENC_KEY is not set — AI credentials for %s are stored unencrypted",
+            sessionId,
+          );
+        }
+      } else {
+        delete ai.credentials;
+      }
+    }
+
+    session.updateOptions({ routing, ai });
+    await updateSessionMetadata(sessionId, { ...session.getSessionMetadata(), routing, ai });
+
+    // Never log raw credentials — redactCredentials strips them by key name.
+    logger.info(
+      "[Dashboard] AI config updated for %s: %s",
+      sessionId,
+      JSON.stringify(redactCredentials({ routing, ai })),
+    );
+
+    return c.json({
+      success: true,
+      message: "AI configuration updated",
+      data: {
+        routing,
+        ai: {
+          enabled: ai.enabled ?? false,
+          agentUrl: ai.agentUrl || "",
+          systemInstruction: ai.systemInstruction || "",
+          ragEndpoints: ai.ragEndpoints ?? [],
+          credentialsSet: Boolean(ai.credentials),
+          credentialsEncrypted: isEncrypted(ai.credentials),
+        },
+      },
+    });
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
