@@ -88,7 +88,15 @@ The API will start at `http://localhost:3000`. Access the following default rout
 
 ## 🐳 Docker Deployment
 
-The project provides configurations for both runtimes. Redis is highly recommended and included in the `docker-compose` setups.
+The project provides configurations for both runtimes. Everything runs in a single
+API container; Redis is optional and never published to the host.
+
+First, create your environment file:
+
+```bash
+cp .env.example .env
+# edit .env (secrets, dashboard JWT, webhook flags, …)
+```
 
 #### Option A: Docker with Bun (Default & Recommended)
 
@@ -99,11 +107,45 @@ docker compose logs -f api
 
 #### Option B: Docker with Node.js
 
-If you prefer forcing the native Node.js container:
+The Node image compiles the TypeScript sources with Bun at build time and then
+runs the plain-JS bundle on native Node.js.
 
 ```bash
 docker compose -f docker-compose.node.yml up -d
 docker compose -f docker-compose.node.yml logs -f api
+```
+
+#### Redis options
+
+Redis is **optional** and resolved at runtime from `REDIS_ENABLED` / `REDIS_URL`:
+
+| Scenario | What to do |
+|---|---|
+| No Redis (file-based storage) | `REDIS_ENABLED=false` in `.env` (default) — just run compose |
+| Redis already on the VPS host | `REDIS_ENABLED=true` and `REDIS_URL=redis://host.docker.internal:6379` |
+| Redis already on the VPS in another container | `REDIS_ENABLED=true` and `REDIS_URL=redis://<host-or-container>:6379` |
+| Bundled Redis container | `REDIS_ENABLED=true`, `REDIS_URL=redis://redis:6379`, then run compose with `--profile redis` |
+
+```bash
+# bundled Redis (isolated: no host port is published)
+docker compose --profile redis up -d
+docker compose -f docker-compose.node.yml --profile redis up -d   # Node variant
+```
+
+The bundled Redis has no published port, so it never collides with a Redis
+already running on the VPS. Stop it with the same profile flag:
+
+```bash
+docker compose --profile redis down
+```
+
+#### Changing the port
+
+`PORT` in `.env` is honored on both sides of the mapping, and the container
+health check follows it:
+
+```bash
+PORT=8080   # → host 8080 → container 8080, healthy
 ```
 
 To stop containers: `docker compose down`
