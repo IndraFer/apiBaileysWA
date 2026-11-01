@@ -227,6 +227,16 @@ a:active {
   outline: none;
 }
 
+/* A <select> carries a taller intrinsic box than an <input> with identical
+ * padding, which makes mixed rows look ragged. Pin both to one height. */
+.form-group select,
+.form-group input:not([type="checkbox"]):not([type="file"]) {
+  height: 2.5rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
+}
+
 .form-group input[type="checkbox"] {
   margin: 0;
   width: auto;
