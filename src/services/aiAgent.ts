@@ -68,7 +68,7 @@ export type AgentReplyResult =
   | { ok: false; error: string };
 
 /** Read the encrypted credentials blob; unreadable blobs degrade to empty. */
-function readCredentials(blob: string | undefined): StoredAiCredentials {
+export function readStoredCredentials(blob: string | undefined): StoredAiCredentials {
   const plain = decryptSecret(blob);
   if (!plain) return {};
   try {
@@ -79,10 +79,38 @@ function readCredentials(blob: string | undefined): StoredAiCredentials {
   }
 }
 
+/**
+ * Parse the dashboard's endpoints-only JSON. Accepts either
+ * `{ "tool": { "headers": {...} } }` or the legacy
+ * `{ "apiKey": "...", "endpoints": {...} }` shape.
+ * Returns null when the input is not a valid object.
+ */
+export function parseEndpointCredentials(raw: string): ToolCredentials | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const endpoints = record.endpoints;
+    if (endpoints && typeof endpoints === "object" && !Array.isArray(endpoints)) {
+      return endpoints as ToolCredentials;
+    }
+    return record as ToolCredentials;
+  } catch {
+    return null;
+  }
+}
+
+/** Serialize credentials for encryption at rest. */
+export function serializeCredentials(apiKey: string, endpoints: ToolCredentials): string {
+  return JSON.stringify({ apiKey, endpoints });
+}
+
 /** Merge per-number settings over the global env defaults. */
 export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
   const stored = override ?? {};
-  const credentials = readCredentials(stored.credentials);
+  const credentials = readStoredCredentials(stored.credentials);
   return {
     enabled: stored.enabled ?? false,
     mode: stored.mode ?? config.ai.mode,

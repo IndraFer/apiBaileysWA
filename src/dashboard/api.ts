@@ -24,9 +24,15 @@ import {
   encryptionConfigured,
   encryptSecret,
   isEncrypted,
+  maskSecret,
   redactCredentials,
 } from "@/lib/secretBox";
 import { aiConfigPatchSchema } from "@/schemas/session";
+import {
+  parseEndpointCredentials,
+  readStoredCredentials,
+  serializeCredentials,
+} from "@/services/aiAgent";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import {
   clearDeadLetters,
@@ -332,6 +338,8 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
   try {
     const options = connectionManager.getSession(sessionId).getOptions();
     const ai = options.ai ?? {};
+    const stored = readStoredCredentials(ai.credentials);
+    const endpointCredentials = stored.endpoints ?? {};
     return c.json({
       success: true,
       data: {
@@ -342,7 +350,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           agentUrl: ai.agentUrl || config.ai.agentUrl,
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
-          credentialsSet: Boolean(ai.credentials),
+          apiKeySet: Boolean(stored.apiKey),
+          apiKeyHint: stored.apiKey ? maskSecret(stored.apiKey) : "",
+          credentialsSet: Object.keys(endpointCredentials).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
         },
         defaults: { routing: config.routing, agentUrl: config.ai.agentUrl },
@@ -380,11 +390,24 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     const current = session.getOptions();
 
     const routing: RoutingConfig = { ...(current.routing ?? {}), ...(parsed.data.routing ?? {}) };
-    const { credentialsJson, ...aiFields } = parsed.data.ai ?? {};
+    const { credentialsJson, apiKey, ...aiFields } = parsed.data.ai ?? {};
     const ai: AiAgentConfig = { ...(current.ai ?? {}), ...aiFields };
 
-    if (credentialsJson !== undefined) {
-      const encrypted = encryptSecret(credentialsJson);
+    if (credentialsJson !== undefined || apiKey !== undefined) {
+      const stored = readStoredCredentials(current.ai?.credentials);
+      let endpoints = stored.endpoints ?? {};
+      if (credentialsJson !== undefined) {
+        const parsedEndpoints = parseEndpointCredentials(credentialsJson);
+        if (parsedEndpoints === null) {
+          return c.json(
+            { success: false, message: "Endpoint credentials must be a JSON object" },
+            400,
+          );
+        }
+        endpoints = parsedEndpoints;
+      }
+      const nextKey = apiKey !== undefined ? apiKey.trim() : (stored.apiKey ?? "");
+      const encrypted = encryptSecret(serializeCredentials(nextKey, endpoints));
       if (encrypted) {
         ai.credentials = encrypted;
         if (!encryptionConfigured()) {
@@ -521,6 +544,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
         );
       }
 
+      // pi-lens-ignore: ts-ssrf -- validateWebhookTarget() above checked scheme and the optional internal-host block; the URL is operator-configured
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers,

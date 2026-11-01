@@ -113,6 +113,7 @@ export const aiConfigSchema = z
     driver: z.enum(["openai", "webhook"]).optional(),
     baseUrl: httpUrl.optional().or(z.literal("")),
     model: z.string().max(128).optional(),
+    apiKey: z.string().max(400).optional(),
     temperature: z.number().min(0).max(2).optional(),
     maxTokens: z.number().int().min(64).max(8192).optional(),
     toolMaxRounds: z.number().int().min(0).max(5).optional(),

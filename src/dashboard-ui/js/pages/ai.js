@@ -80,8 +80,18 @@
           <button class="btn btn-primary btn-sm" id="ai-save">Save changes</button>
         </div>
 
-        <div class="card">
-          <div class="card-header"><h3>Responder</h3></div>
+      <div class="card">
+        <div class="card-header"><h3>How responders fit together</h3></div>
+        <p class="text-muted text-xs" style="margin:0">
+          <strong>Webhooks</strong> only deliver events to your endpoint — they never answer messages.
+          <strong>AI &amp; Routing</strong> (this page) decides who answers: the AI or the static rules.
+          The <strong>static auto-reply</strong> in Sessions is the fallback used when the AI is off or a
+          call fails.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Responder</h3></div>
           <div class="form-group">
             <label for="ai-enabled">Enable AI for this number</label>
             <select id="ai-enabled" class="input">
@@ -162,9 +172,20 @@
             </div>
           </div>
           <div class="form-group">
-            <label for="ai-credentials">Credentials (JSON, write-only)</label>
-            <textarea id="ai-credentials" class="input" rows="3"
-              placeholder='{"apiKey":"sk-...","endpoints":{"cek_anggota":{"headers":{"X-API-Key":"..."}}}}'></textarea>
+            <label for="ai-api-key">API key (provider)</label>
+            <input id="ai-api-key" class="input" type="password" autocomplete="new-password" placeholder="sk-or-..." />
+            <small class="text-muted" id="ai-api-key-hint"></small>
+          </div>
+          <div class="form-group">
+            <div class="flex gap-1" style="align-items:center;justify-content:space-between">
+              <label for="ai-credentials">Tool credentials (JSON, optional)</label>
+              <button type="button" class="btn btn-outline btn-sm" id="ai-example">Copy weather example</button>
+            </div>
+            <textarea id="ai-credentials" class="input" rows="6"
+              placeholder='{
+  "cek_anggota": { "headers": { "X-API-Key": "..." } },
+  "web_search":  { "headers": { "X-API-KEY": "..." } }
+}'></textarea>
             <small class="text-muted" id="ai-credentials-hint"></small>
           </div>
         </div>
@@ -211,6 +232,7 @@
       document
         .getElementById("ai-reset-metrics")
         .addEventListener("click", () => this.resetMetrics());
+      document.getElementById("ai-example").addEventListener("click", () => this.fillExample());
       document.getElementById("ai-mode").addEventListener("change", (event) => {
         const hint = document.getElementById("ai-mode-hint");
         if (hint) hint.textContent = MODE_HINTS[event.target.value] || "";
@@ -253,11 +275,21 @@
 
       const credentials = document.getElementById("ai-credentials");
       if (credentials) credentials.value = "";
+      const apiKeyField = document.getElementById("ai-api-key");
+      if (apiKeyField) apiKeyField.value = "";
+
+      const apiKeyHint = document.getElementById("ai-api-key-hint");
+      if (apiKeyHint) {
+        apiKeyHint.textContent = ai.apiKeySet
+          ? `Stored${ai.apiKeyHint ? ` (${ai.apiKeyHint})` : ""} — ${ai.credentialsEncrypted ? "encrypted" : "plaintext"}. Leave empty to keep it.`
+          : "No API key stored yet.";
+      }
+
       const hint = document.getElementById("ai-credentials-hint");
       if (hint) {
         hint.textContent = ai.credentialsSet
-          ? `Stored (${ai.credentialsEncrypted ? "encrypted" : "plaintext"}). Leave empty to keep it.`
-          : "No credentials stored yet.";
+          ? "Tool credentials stored. Leave empty to keep them."
+          : "Optional: headers/query per knowledge endpoint (only when that API needs a key).";
       }
 
       const modeHint = document.getElementById("ai-mode-hint");
@@ -279,12 +311,22 @@
       const credentialsJson = value("ai-credentials");
       if (credentialsJson) {
         try {
-          JSON.parse(credentialsJson);
+          const parsedCredentials = JSON.parse(credentialsJson);
+          if (
+            !parsedCredentials ||
+            typeof parsedCredentials !== "object" ||
+            Array.isArray(parsedCredentials)
+          ) {
+            Toast.error("Tool credentials must be a JSON object");
+            return;
+          }
         } catch {
-          Toast.error("Credentials must be valid JSON");
+          Toast.error("Tool credentials must be valid JSON");
           return;
         }
       }
+
+      const apiKey = value("ai-api-key");
 
       const payload = {
         routing: {
@@ -305,6 +347,7 @@
           maxTokens: Number(value("ai-max-tokens")) || 800,
           systemInstruction: value("ai-instruction"),
           ragEndpoints: endpoints,
+          ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),
         },
       };
@@ -339,14 +382,14 @@
       const maxHour = Math.max(1, ...hourly.map((h) => (h.ai || 0) + (h.human || 0)));
 
       return `
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">AI replies</span><strong>${metricValue(counters.aiReplies)}</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Human handled</span><strong>${metricValue(counters.humanSkips)}</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Static replies</span><strong>${metricValue(counters.staticReplies)}</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Failures</span><strong>${metricValue(counters.failures)}</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Tool calls</span><strong>${metricValue(counters.toolCalls)}</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Avg latency</span><strong>${metricValue(latency.avgMs)} ms</strong></div></div>
-          <div class="stat-card"><div class="stat-info"><span class="text-muted text-xs">Tokens in/out</span><strong>${metricValue(counters.tokensIn)} / ${metricValue(counters.tokensOut)}</strong></div></div>
+        <div class="stats-grid cols-4">
+          <div class="stat-card"><div class="stat-info"><h4>AI replies</h4><div class="stat-value">${metricValue(counters.aiReplies)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Human handled</h4><div class="stat-value">${metricValue(counters.humanSkips)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Static replies</h4><div class="stat-value">${metricValue(counters.staticReplies)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Failures</h4><div class="stat-value">${metricValue(counters.failures)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Tool calls</h4><div class="stat-value">${metricValue(counters.toolCalls)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Avg latency</h4><div class="stat-value">${metricValue(latency.avgMs)} ms</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Tokens in / out</h4><div class="stat-value">${metricValue(counters.tokensIn)} / ${metricValue(counters.tokensOut)}</div></div></div>
         </div>
         <p class="text-muted text-xs" style="margin-top:8px">
           In-process counters since ${new Date(metrics.since).toLocaleString()} — they reset on restart.
@@ -391,6 +434,50 @@
             '<tr><td colspan="5" class="text-muted text-xs">No decisions yet</td></tr>'
           }
           </tbody></table></div>`;
+    },
+
+    async fillExample() {
+      const example = [
+        {
+          name: "cari_lokasi",
+          description:
+            "Cari koordinat kota/kecamatan berdasarkan nama. Panggil ini dulu sebelum cek cuaca.",
+          method: "GET",
+          url: "https://geocoding-api.open-meteo.com/v1/search",
+          params: [
+            {
+              name: "name",
+              type: "string",
+              description: "Nama kota, mis. Jakarta",
+              required: true,
+            },
+            { name: "count", type: "integer", description: "Jumlah hasil", default: 1 },
+          ],
+          timeoutMs: 6000,
+          maxResponseChars: 1200,
+        },
+        {
+          name: "cek_cuaca",
+          description: "Cuaca saat ini untuk koordinat hasil cari_lokasi.",
+          method: "GET",
+          url: "https://api.open-meteo.com/v1/forecast",
+          params: [
+            { name: "latitude", type: "number", description: "Latitude", required: true },
+            { name: "longitude", type: "number", description: "Longitude", required: true },
+            {
+              name: "current_weather",
+              type: "string",
+              description: "Set true untuk cuaca saat ini",
+              default: "true",
+            },
+          ],
+          timeoutMs: 6000,
+          maxResponseChars: 1200,
+        },
+      ];
+      const field = document.getElementById("ai-endpoints");
+      if (field) field.value = JSON.stringify(example, null, 2);
+      Toast.success("Weather example loaded — free public APIs, no key needed");
     },
 
     async resetMetrics() {

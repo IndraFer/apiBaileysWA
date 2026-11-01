@@ -91,6 +91,10 @@
 						<h4 style="font-size: 0.9rem; margin-bottom: 1rem">Auto Reply Configuration</h4>
 						<div class="form-group">
 							<label class="checkbox-label"><input type="checkbox" id="session-autoreply-enabled" /> Enable Auto Reply for this session</label>
+							<small class="text-muted" style="display:block;margin-top:0.35rem">
+								Static reply only. The AI responder is configured on the
+								<a href="#ai">AI &amp; Routing</a> page and takes priority when enabled.
+							</small>
 						</div>
 						<div id="autoreply-settings" class="hidden" style="padding-left: 1rem; border-left: 2px solid var(--accent-soft); margin-bottom: 1rem">
 							<div class="form-group">
@@ -316,6 +320,10 @@
 						<h4 style="font-size: 0.9rem; margin-bottom: 1rem">Auto Reply Configuration</h4>
 						<div class="form-group">
 							<label class="checkbox-label"><input type="checkbox" id="update-autoreply-enabled" ${ar.enabled ? "checked" : ""} /> Enable Auto Reply</label>
+							<small class="text-muted" style="display:block;margin-top:0.35rem">
+								Static fallback. The AI responder takes priority when enabled on the
+								<a href="#ai">AI &amp; Routing</a> page.
+							</small>
 						</div>
 						<div id="update-autoreply-settings" class="${ar.enabled ? "" : "hidden"}" style="padding-left: 1rem; border-left: 2px solid var(--accent-soft); margin-bottom: 1rem">
 							<div class="form-group">
