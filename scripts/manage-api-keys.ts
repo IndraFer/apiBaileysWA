@@ -39,7 +39,10 @@ switch (command) {
       process.exit(1);
     }
     const apiKey = generateApiKey();
-    await redis.set(`${REDIS_KEY_PREFIX}:${apiKey}`, JSON.stringify({ role, createdAt: new Date().toISOString() }));
+    await redis.set(
+      `${REDIS_KEY_PREFIX}:${apiKey}`,
+      JSON.stringify({ role, createdAt: new Date().toISOString() }),
+    );
     console.log(`\n✅ API key created successfully!`);
     console.log(`   Key:  ${apiKey}`);
     console.log(`   Role: ${role}`);
@@ -56,7 +59,13 @@ switch (command) {
       for (const key of keys) {
         const apiKey = key.replace(`${REDIS_KEY_PREFIX}:`, "");
         const data = await redis.get(key);
-        const parsed = data ? JSON.parse(data) : {};
+        let parsed: { role?: string; createdAt?: string } = {};
+        try {
+          parsed = data ? JSON.parse(data) : {};
+        } catch {
+          console.log(`   ${apiKey}  (unparseable record)`);
+          continue;
+        }
         console.log(`   ${apiKey}  (role: ${parsed.role}, created: ${parsed.createdAt})`);
       }
       console.log();

@@ -170,9 +170,11 @@ const config = {
   },
 
   /**
-   * Auth-state backend. Required: "file" or "redis". There is deliberately no
-   * "auto": picking by Redis availability would change where sessions live just
-   * because Redis came up or went down. Startup fails when this is unset.
+   * Auth-state backend: "auto" (default), "file" or "redis".
+   *
+   * "auto" prefers Redis when reachable, but it never abandons sessions that
+   * only exist on disk: in that case it falls back to files and warns. Explicit
+   * values are honoured and refuse a mismatched store at startup.
    */
   authState: {
     backend:
@@ -180,7 +182,7 @@ const config = {
         ? ("file" as const)
         : AUTH_STATE_BACKEND === "redis"
           ? ("redis" as const)
-          : undefined,
+          : ("auto" as const),
   },
 
   baileys: {

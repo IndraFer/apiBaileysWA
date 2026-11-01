@@ -34,6 +34,7 @@ export const baileysLogger = pino({
 /**
  * Deep sanitize an object by omitting sensitive keys.
  */
+// pi-lens-ignore: no-unknown-returns -- generic sanitizer for arbitrary log payloads; narrowing the return type would be a lie
 export function deepSanitizeObject(obj: unknown, options: { omitKeys?: string[] } = {}): unknown {
   const { omitKeys = [] } = options;
   if (obj === null || obj === undefined) return obj;
