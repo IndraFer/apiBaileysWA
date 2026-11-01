@@ -374,7 +374,8 @@ Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose netw
   cannot read the token. Bearer auth is still accepted for API/agent clients.
 - SSE (`/dashboard/api/events/stream`) authenticates by cookie; no token in the
   query string (those end up in proxy access logs).
-- `Content-Security-Policy` (same-origin scripts and styles, no inline),
+- `Content-Security-Policy` (same-origin scripts and `<style>` elements; inline
+  style attributes are allowed because WebKit attaches one to native `<select>`),
   HSTS over
   HTTPS, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, restrictive
   `Permissions-Policy`.

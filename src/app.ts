@@ -62,12 +62,19 @@ app.use("*", async (c, next) => {
 });
 
 // Strict CSP: the dashboard ships no inline scripts or styles, so both
-// directives stay at 'self'. Violations are reported to /dashboard/csp-report so
-// the real source can be read from server logs instead of guessed.
+// directives stay at 'self'. 'report-sample' asks the browser to include the
+// offending snippet, but support varies (Safari may omit it), so a report can
+// still arrive with an empty sample. Violations are reported to
+// /dashboard/csp-report so the real source is read from logs, not guessed.
 const DASHBOARD_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
+  "script-src 'self' 'report-sample'",
+  "style-src 'self' 'report-sample'",
+  // WebKit attaches a UA inline style to native <select> (text-overflow); a
+  // strict style-src-attr blocks it and floods the console. Keep <style>
+  // elements at 'self' but allow style attributes.
+  "style-src-attr 'unsafe-inline'",
+  "style-src-elem 'self'",
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self'",
@@ -82,6 +89,10 @@ const DASHBOARD_CSP = [
 const CSP_REPORT_TO =
   '{"group":"csp","max_age":10800,"endpoints":[{"url":"/dashboard/csp-report"}]}';
 
+// Reporting API v1 (Chrome 96+): report-to resolves group names from this header,
+// not from the legacy Report-To header above.
+const CSP_REPORTING_ENDPOINTS = 'csp="/dashboard/csp-report"';
+
 app.use("*", async (c, next) => {
   const applyHeaders = (target: Headers) => {
     target.set("X-Frame-Options", "DENY");
@@ -90,6 +101,7 @@ app.use("*", async (c, next) => {
     target.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     target.set("Content-Security-Policy", DASHBOARD_CSP);
     target.set("Report-To", CSP_REPORT_TO);
+    target.set("Reporting-Endpoints", CSP_REPORTING_ENDPOINTS);
     if (isSecureRequest(c)) {
       target.set("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     }
@@ -103,6 +115,7 @@ app.use("*", async (c, next) => {
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   c.header("Content-Security-Policy", DASHBOARD_CSP);
   c.header("Report-To", CSP_REPORT_TO);
+  c.header("Reporting-Endpoints", CSP_REPORTING_ENDPOINTS);
   if (isSecureRequest(c)) {
     c.header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
   }
