@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-01
+
+### Added
+
+- scoped hashed API keys and an inbound audit log
+
 ## [1.7.0] - 2026-11-01
 
 ### Added
