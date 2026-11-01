@@ -79,7 +79,8 @@
   }
 
   function isOneToOneJid(jid) {
-    return typeof jid === "string" && jid.endsWith("@s.whatsapp.net");
+    // Newer WhatsApp accounts address DMs with @lid as well as @s.whatsapp.net.
+    return typeof jid === "string" && (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid"));
   }
 
   function isGroupJid(jid) {

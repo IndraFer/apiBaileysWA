@@ -56,18 +56,23 @@ export class MemoryStore extends EventEmitter {
           const jid = jidNormalizedUser(msg.key.remoteJid);
           this.addMessage(jid, msg);
 
-          if (type === "notify") {
-            const existing = this.chats.get(jid);
-            if (!existing) {
-              this.chats.set(jid, {
-                id: jid,
-                name: msg.pushName || undefined,
-                conversationTimestamp: toNumber(msg.messageTimestamp || 0),
-                unreadCount: 1,
-              });
-            } else {
-              existing.conversationTimestamp = toNumber(msg.messageTimestamp || 0);
-              if (!existing.name && msg.pushName) existing.name = msg.pushName;
+          // Create the room for every upsert type. Some Baileys versions deliver
+          // live messages without type "notify"; gating on it left the chat list
+          // empty even though messages were stored.
+          const timestamp = toNumber(msg.messageTimestamp || 0);
+          const existing = this.chats.get(jid);
+          if (!existing) {
+            this.chats.set(jid, {
+              id: jid,
+              name: msg.pushName || undefined,
+              conversationTimestamp: timestamp,
+              unreadCount: type === "notify" && !msg.key.fromMe ? 1 : 0,
+            });
+          } else {
+            existing.conversationTimestamp = timestamp;
+            if (!existing.name && msg.pushName) existing.name = msg.pushName;
+            if (type === "notify" && !msg.key.fromMe) {
+              existing.unreadCount = Number(existing.unreadCount || 0) + 1;
             }
           }
         } catch {
