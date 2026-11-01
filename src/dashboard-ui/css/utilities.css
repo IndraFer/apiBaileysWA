@@ -403,3 +403,27 @@
 .u-time-range.is-open {
   display: flex !important;
 }
+
+/* ai page additions */
+.u-m0-minw-220 {
+  margin: 0 !important;
+  min-width: 220px !important;
+}
+
+.u-mt-8px {
+  margin-top: 8px !important;
+}
+
+.u-mt-05 {
+  margin-top: 0.5rem !important;
+}
+
+.u-end-mt-1 {
+  justify-content: flex-end !important;
+  margin-top: 1rem !important;
+}
+
+.u-between-center {
+  align-items: center !important;
+  justify-content: space-between !important;
+}

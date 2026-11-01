@@ -194,7 +194,7 @@
       // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- all interpolated values pass through escapeHtml(); same convention as the other dashboard pages
       container.innerHTML = `
         <div class="toolbar">
-          <div class="form-group" style="margin:0;min-width:220px">
+          <div class="form-group u-m0-minw-220">
             <select id="ai-session-select" class="input">
               ${sessions
                 .map(
@@ -213,8 +213,8 @@
           <div class="card-header"><h3>How responders fit together</h3></div>
           <details>
             <summary class="text-xs" id="ai-chain-summary">Show effective chain</summary>
-            <div id="ai-chain" style="margin-top:0.5rem">
-              <p class="text-muted text-xs" style="margin:0">Loading…</p>
+            <div class="u-mt-05" id="ai-chain">
+              <p class="text-muted text-xs u-m-0">Loading…</p>
             </div>
           </details>
         </div>
@@ -329,7 +329,7 @@
         <div class="card">
           <div class="card-header"><h3>Knowledge endpoints</h3></div>
           <div class="form-group">
-            <div class="flex gap-1" style="align-items:center;justify-content:space-between">
+            <div class="flex gap-1 u-between-center">
               <label for="ai-endpoints">Endpoints the assistant may call</label>
               <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
             </div>
@@ -359,7 +359,7 @@
             </small>
           </div>
 
-          <div class="card-header" style="margin-top:1.5rem">
+          <div class="card-header u-mt-15">
             <h3>Endpoint credentials (optional)</h3>
           </div>
           <div class="form-group">
@@ -614,6 +614,11 @@
       if (!target) return;
       // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- renderMetrics() escapes every dynamic value with escapeHtml()
       target.innerHTML = this.renderMetrics(data);
+
+      // Bar widths go through CSSOM (allowed by CSP) instead of an inline style.
+      target.querySelectorAll("[data-width]").forEach((bar) => {
+        bar.style.width = `${bar.getAttribute("data-width") || 0}%`;
+      });
     },
 
     renderMetrics(metrics) {
@@ -637,7 +642,7 @@
           <div class="stat-card"><div class="stat-info"><h4>Avg latency</h4><div class="stat-value">${metricValue(latency.avgMs)} ms</div></div></div>
           <div class="stat-card"><div class="stat-info"><h4>Tokens in / out</h4><div class="stat-value">${metricValue(counters.tokensIn)} / ${metricValue(counters.tokensOut)}</div></div></div>
         </div>
-        <p class="text-muted text-xs" style="margin-top:8px">
+        <p class="text-muted text-xs u-mt-8px">
           In-process counters since ${new Date(metrics.since).toLocaleString()} — they reset on restart.
         </p>
 
@@ -654,14 +659,14 @@
                 <td class="font-mono text-xs">${String(bucket.hour).padStart(2, "0")}:00</td>
                 <td>${metricValue(bucket.ai)}</td>
                 <td>${metricValue(bucket.human)}</td>
-                <td><span class="badge badge-info" style="width:${width}%">${total}</span></td>
+                <td><span class="badge badge-info" data-width="${width}">${total}</span></td>
               </tr>`;
               })
               .join("") || '<tr><td colspan="4" class="text-muted text-xs">No traffic yet</td></tr>'
           }
           </tbody></table></div>
 
-        <div class="card-header" style="margin-top:1.5rem"><h3>Recent decisions</h3></div>
+        <div class="card-header u-mt-15"><h3>Recent decisions</h3></div>
         <div class="table-wrapper"><table>
           <thead><tr><th>Time</th><th>Route</th><th>Conversation</th><th>Reason</th><th>Latency</th></tr></thead>
           <tbody>${
@@ -691,7 +696,7 @@
            (DuckDuckGo). Copy the JSON, then paste it into <strong>Knowledge endpoints</strong>.
          </p>
          <pre class="example-json">${escapeHtml(json)}</pre>
-         <div class="flex gap-1" style="justify-content:flex-end;margin-top:1rem">
+         <div class="flex gap-1 u-end-mt-1">
            <button type="button" class="btn btn-outline btn-sm" id="ai-example-use">Use example</button>
            <button type="button" class="btn btn-primary btn-sm" id="ai-example-copy">Copy JSON</button>
          </div>`,
