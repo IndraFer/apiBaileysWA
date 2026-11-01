@@ -14,6 +14,65 @@
     failed: "badge-danger",
   };
 
+  /** Ready-to-paste examples: two placeholders + one live free endpoint. */
+  const EXAMPLE_ENDPOINTS = [
+    {
+      name: "search_users",
+      description: "Cari user/anggota berdasarkan nama, email, atau nomor anggota.",
+      method: "GET",
+      url: "https://api.example.com/v1/users/search",
+      params: [
+        { name: "q", type: "string", description: "Kata kunci pencarian", required: true },
+        { name: "page", type: "integer", description: "Halaman hasil", default: 1 },
+      ],
+      timeoutMs: 6000,
+      maxResponseChars: 1500,
+    },
+    {
+      name: "search_events",
+      description: "Cari agenda/kegiatan yang akan datang.",
+      method: "GET",
+      url: "https://api.example.com/v1/events/search",
+      params: [
+        { name: "q", type: "string", description: "Kata kunci", required: true },
+        { name: "date_from", type: "string", description: "Tanggal awal (YYYY-MM-DD)" },
+        { name: "per_page", type: "integer", description: "Jumlah hasil (1-50)", default: 10 },
+      ],
+      timeoutMs: 6000,
+      maxResponseChars: 1500,
+    },
+    {
+      name: "web_search",
+      description: "Cari informasi umum di web (contoh nyata, gratis, tanpa API key).",
+      method: "GET",
+      url: "https://api.duckduckgo.com/",
+      params: [
+        { name: "q", type: "string", description: "Query pencarian", required: true },
+        { name: "format", type: "string", description: "json", default: "json" },
+      ],
+      timeoutMs: 6000,
+      maxResponseChars: 1500,
+    },
+  ];
+
+  /** Clipboard copy with a fallback for non-secure contexts. */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      return ok;
+    }
+  }
+
   const state = { sessions: [], sessionId: "", config: null, metrics: null };
 
   function escapeHtml(value) {
@@ -92,50 +151,50 @@
 
       <div class="card">
         <div class="card-header"><h3>Responder</h3></div>
-          <div class="form-group">
-            <label for="ai-enabled">Enable AI for this number</label>
-            <select id="ai-enabled" class="input">
-              <option value="false">No — static auto-reply</option>
-              <option value="true">Yes — AI agent</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="ai-mode">When may the AI answer?</label>
-            <select id="ai-mode" class="input">
-              <option value="off">Off (static only)</option>
-              <option value="window">Inside the time window</option>
-              <option value="always">Always (full handle)</option>
-            </select>
-            <small class="text-muted" id="ai-mode-hint"></small>
+          <div class="form-row cols-2">
+            <div class="form-group">
+              <label for="ai-enabled">Enable AI for this number</label>
+              <select id="ai-enabled" class="input">
+                <option value="false">No — static auto-reply</option>
+                <option value="true">Yes — AI agent</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ai-mode">When may the AI answer?</label>
+              <select id="ai-mode" class="input">
+                <option value="off">Off (static only)</option>
+                <option value="window">Inside the time window</option>
+                <option value="always">Always (full handle)</option>
+              </select>
+              <small class="text-muted" id="ai-mode-hint"></small>
+            </div>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header"><h3>Time window</h3></div>
-          <div class="flex gap-1" style="flex-wrap:wrap">
-            <div class="form-group" style="min-width:120px">
+          <div class="form-row cols-6">
+            <div class="form-group">
               <label for="ai-window-start">Start</label>
               <input id="ai-window-start" class="input" placeholder="16:00" />
             </div>
-            <div class="form-group" style="min-width:120px">
+            <div class="form-group">
               <label for="ai-window-end">End</label>
               <input id="ai-window-end" class="input" placeholder="08:00" />
             </div>
-            <div class="form-group" style="min-width:180px">
+            <div class="form-group">
               <label for="ai-timezone">Timezone</label>
               <input id="ai-timezone" class="input" placeholder="Asia/Jakarta" />
             </div>
-          </div>
-          <div class="flex gap-1" style="flex-wrap:wrap">
-            <div class="form-group" style="min-width:150px">
-              <label for="ai-batch-idle">Idle before reply (sec)</label>
+            <div class="form-group">
+              <label for="ai-batch-idle">Idle (sec)</label>
               <input id="ai-batch-idle" class="input" type="number" min="3" max="120" />
             </div>
-            <div class="form-group" style="min-width:150px">
+            <div class="form-group">
               <label for="ai-human-idle">Human pause (min)</label>
               <input id="ai-human-idle" class="input" type="number" min="1" max="1440" />
             </div>
-            <div class="form-group" style="min-width:150px">
+            <div class="form-group">
               <label for="ai-handoff-pause">Handoff pause (min)</label>
               <input id="ai-handoff-pause" class="input" type="number" min="1" max="1440" />
             </div>
@@ -161,12 +220,28 @@
               <input id="ai-model" class="input" placeholder="openai/gpt-4o-mini" />
             </div>
           </div>
-          <div class="flex gap-1" style="flex-wrap:wrap">
-            <div class="form-group" style="min-width:120px">
+          <div class="form-row cols-6">
+            <div class="form-group">
               <label for="ai-temperature">Temperature</label>
               <input id="ai-temperature" class="input" type="number" step="0.1" min="0" max="2" />
             </div>
-            <div class="form-group" style="min-width:120px">
+            <div class="form-group">
+              <label for="ai-top-p">Top P</label>
+              <input id="ai-top-p" class="input" type="number" step="0.05" min="0" max="1" />
+            </div>
+            <div class="form-group">
+              <label for="ai-min-p">Min P</label>
+              <input id="ai-min-p" class="input" type="number" step="0.01" min="0" max="1" />
+            </div>
+            <div class="form-group">
+              <label for="ai-freq-penalty">Freq. penalty</label>
+              <input id="ai-freq-penalty" class="input" type="number" step="0.1" min="-2" max="2" />
+            </div>
+            <div class="form-group">
+              <label for="ai-pres-penalty">Pres. penalty</label>
+              <input id="ai-pres-penalty" class="input" type="number" step="0.1" min="-2" max="2" />
+            </div>
+            <div class="form-group">
               <label for="ai-max-tokens">Max tokens</label>
               <input id="ai-max-tokens" class="input" type="number" min="64" max="8192" />
             </div>
@@ -179,13 +254,14 @@
           <div class="form-group">
             <div class="flex gap-1" style="align-items:center;justify-content:space-between">
               <label for="ai-credentials">Tool credentials (JSON, optional)</label>
-              <button type="button" class="btn btn-outline btn-sm" id="ai-example">Copy weather example</button>
+              <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
             </div>
-            <textarea id="ai-credentials" class="input" rows="6"
-              placeholder='{
-  "cek_anggota": { "headers": { "X-API-Key": "..." } },
-  "web_search":  { "headers": { "X-API-KEY": "..." } }
-}'></textarea>
+            <textarea id="ai-credentials" class="input" rows="4"
+              placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
+            <pre class="example-json example-json-sm">{
+  "search_users":  { "headers": { "X-API-Key": "..." } },
+  "search_events": { "query": { "tenant": "..." } }
+}</pre>
             <small class="text-muted" id="ai-credentials-hint"></small>
           </div>
         </div>
@@ -193,9 +269,9 @@
         <div class="card">
           <div class="card-header"><h3>System instruction</h3></div>
           <div class="form-group">
-            <textarea id="ai-instruction" class="input" rows="5"
-              placeholder="Anda CS IKA UI. Jawab ramah, singkat, Bahasa Indonesia."></textarea>
-            <small class="text-muted">Persona, tone, dan aturan eskalasi ke manusia.</small>
+            <textarea id="ai-instruction" class="input" rows="6"
+              placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
+            <small class="text-muted">Persona, tone, language and escalation rules.</small>
           </div>
         </div>
 
@@ -203,7 +279,18 @@
           <div class="card-header"><h3>Knowledge endpoints</h3></div>
           <div class="form-group">
             <textarea id="ai-endpoints" class="input" rows="8"
-              placeholder='[{"name":"cek_anggota","description":"Cek status anggota","method":"GET","url":"https://example.com/api/members/search","params":[{"name":"q","type":"string","description":"Nama atau nomor anggota","required":true}]}]'></textarea>
+              placeholder='[ { "name": "...", "method": "GET", "url": "https://...", "params": [] } ]'></textarea>
+            <pre class="example-json example-json-sm">[
+  {
+    "name": "search_users",
+    "description": "Cari user berdasarkan nama atau nomor.",
+    "method": "GET",
+    "url": "https://api.example.com/v1/users/search",
+    "params": [
+      { "name": "q", "type": "string", "description": "Kata kunci", "required": true }
+    ]
+  }
+]</pre>
             <small class="text-muted">
               JSON array. Each endpoint declares its own params (name, type, enum, default,
               required, in: query|body|path). The URL must already be reachable by this server.
@@ -232,7 +319,7 @@
       document
         .getElementById("ai-reset-metrics")
         .addEventListener("click", () => this.resetMetrics());
-      document.getElementById("ai-example").addEventListener("click", () => this.fillExample());
+      document.getElementById("ai-example").addEventListener("click", () => this.showExample());
       document.getElementById("ai-mode").addEventListener("change", (event) => {
         const hint = document.getElementById("ai-mode-hint");
         if (hint) hint.textContent = MODE_HINTS[event.target.value] || "";
@@ -268,8 +355,12 @@
       set("ai-driver", ai.driver || "openai");
       set("ai-base-url", ai.agentUrl || data.defaults?.agentUrl || "");
       set("ai-model", ai.model || "");
-      set("ai-temperature", data.temperature ?? 0.4);
-      set("ai-max-tokens", data.maxTokens ?? 800);
+      set("ai-temperature", ai.temperature ?? 0.4);
+      set("ai-top-p", ai.topP ?? 1);
+      set("ai-min-p", ai.minP ?? 0);
+      set("ai-freq-penalty", ai.frequencyPenalty ?? 0);
+      set("ai-pres-penalty", ai.presencePenalty ?? 0);
+      set("ai-max-tokens", ai.maxTokens ?? 800);
       set("ai-instruction", ai.systemInstruction || "");
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
@@ -299,6 +390,11 @@
     async save() {
       if (!state.sessionId) return;
       const value = (id) => document.getElementById(id)?.value?.trim() ?? "";
+      const num = (id, fallback) => {
+        const raw = value(id);
+        const parsed = Number(raw);
+        return raw !== "" && Number.isFinite(parsed) ? parsed : fallback;
+      };
 
       let endpoints;
       try {
@@ -343,8 +439,12 @@
           driver: value("ai-driver"),
           model: value("ai-model"),
           baseUrl: value("ai-base-url"),
-          temperature: Number(value("ai-temperature")) || 0.4,
-          maxTokens: Number(value("ai-max-tokens")) || 800,
+          temperature: num("ai-temperature", 0.4),
+          topP: num("ai-top-p", 1),
+          minP: num("ai-min-p", 0),
+          frequencyPenalty: num("ai-freq-penalty", 0),
+          presencePenalty: num("ai-pres-penalty", 0),
+          maxTokens: num("ai-max-tokens", 800),
           systemInstruction: value("ai-instruction"),
           ragEndpoints: endpoints,
           ...(apiKey ? { apiKey } : {}),
@@ -415,7 +515,7 @@
           }
           </tbody></table></div>
 
-        <div class="card-header"><h3>Recent decisions</h3></div>
+        <div class="card-header" style="margin-top:1.5rem"><h3>Recent decisions</h3></div>
         <div class="table-wrapper"><table>
           <thead><tr><th>Time</th><th>Route</th><th>Conversation</th><th>Reason</th><th>Latency</th></tr></thead>
           <tbody>${
@@ -436,48 +536,33 @@
           </tbody></table></div>`;
     },
 
-    async fillExample() {
-      const example = [
-        {
-          name: "cari_lokasi",
-          description:
-            "Cari koordinat kota/kecamatan berdasarkan nama. Panggil ini dulu sebelum cek cuaca.",
-          method: "GET",
-          url: "https://geocoding-api.open-meteo.com/v1/search",
-          params: [
-            {
-              name: "name",
-              type: "string",
-              description: "Nama kota, mis. Jakarta",
-              required: true,
-            },
-            { name: "count", type: "integer", description: "Jumlah hasil", default: 1 },
-          ],
-          timeoutMs: 6000,
-          maxResponseChars: 1200,
-        },
-        {
-          name: "cek_cuaca",
-          description: "Cuaca saat ini untuk koordinat hasil cari_lokasi.",
-          method: "GET",
-          url: "https://api.open-meteo.com/v1/forecast",
-          params: [
-            { name: "latitude", type: "number", description: "Latitude", required: true },
-            { name: "longitude", type: "number", description: "Longitude", required: true },
-            {
-              name: "current_weather",
-              type: "string",
-              description: "Set true untuk cuaca saat ini",
-              default: "true",
-            },
-          ],
-          timeoutMs: 6000,
-          maxResponseChars: 1200,
-        },
-      ];
-      const field = document.getElementById("ai-endpoints");
-      if (field) field.value = JSON.stringify(example, null, 2);
-      Toast.success("Weather example loaded — free public APIs, no key needed");
+    showExample() {
+      const json = JSON.stringify(EXAMPLE_ENDPOINTS, null, 2);
+      Modal.show(
+        "Knowledge endpoint example",
+        `<p class="text-muted text-xs">
+           Structured example: two placeholders to replace and one live free endpoint
+           (DuckDuckGo). Copy the JSON, then paste it into <strong>Knowledge endpoints</strong>.
+         </p>
+         <pre class="example-json">${escapeHtml(json)}</pre>
+         <div class="flex gap-1" style="justify-content:flex-end;margin-top:1rem">
+           <button type="button" class="btn btn-outline btn-sm" id="ai-example-use">Use example</button>
+           <button type="button" class="btn btn-primary btn-sm" id="ai-example-copy">Copy JSON</button>
+         </div>`,
+      );
+
+      document.getElementById("ai-example-use").addEventListener("click", () => {
+        const field = document.getElementById("ai-endpoints");
+        if (field) field.value = json;
+        Modal.hide();
+        Toast.success("Example loaded into the form");
+      });
+
+      document.getElementById("ai-example-copy").addEventListener("click", async () => {
+        const copied = await copyText(json);
+        if (copied) Toast.success("JSON copied to clipboard");
+        else Toast.error("Copy failed — select the text manually");
+      });
     },
 
     async resetMetrics() {

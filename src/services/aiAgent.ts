@@ -35,6 +35,10 @@ export interface ResolvedAiConfig {
   model: string;
   apiKey: string;
   temperature: number;
+  topP: number;
+  minP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
   maxTokens: number;
   timeoutMs: number;
   toolMaxRounds: number;
@@ -119,6 +123,10 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
     model: stored.model || config.ai.model,
     apiKey: credentials.apiKey ?? "",
     temperature: stored.temperature ?? config.ai.temperature,
+    topP: stored.topP ?? config.ai.topP,
+    minP: stored.minP ?? config.ai.minP,
+    frequencyPenalty: stored.frequencyPenalty ?? config.ai.frequencyPenalty,
+    presencePenalty: stored.presencePenalty ?? config.ai.presencePenalty,
     maxTokens: stored.maxTokens ?? config.ai.maxTokens,
     timeoutMs: stored.timeoutMs ?? config.ai.timeoutMs,
     toolMaxRounds: stored.toolMaxRounds ?? config.ai.toolMaxRounds,
@@ -270,6 +278,11 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         model: ai.model,
         messages,
         temperature: ai.temperature,
+        top_p: ai.topP,
+        frequency_penalty: ai.frequencyPenalty,
+        presence_penalty: ai.presencePenalty,
+        // min_p is an OpenRouter/llama.cpp extension: only send it when asked.
+        ...(ai.minP > 0 ? { min_p: ai.minP } : {}),
         max_tokens: ai.maxTokens,
         ...(allowTools ? { tools, tool_choice: "auto" } : {}),
       },

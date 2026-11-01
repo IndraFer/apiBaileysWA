@@ -84,6 +84,12 @@ export interface AiAgentConfig {
   /** Model slug, e.g. openai/gpt-4o-mini */
   model?: string;
   temperature?: number;
+  /** Nucleus sampling; standard default 1. */
+  topP?: number;
+  /** Min-p sampling (OpenRouter / llama.cpp style); 0 = off. */
+  minP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   maxTokens?: number;
   /** Max tool-calling rounds per reply (guards loops). */
   toolMaxRounds?: number;

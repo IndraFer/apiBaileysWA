@@ -350,6 +350,12 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           agentUrl: ai.agentUrl || config.ai.agentUrl,
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
+          temperature: ai.temperature ?? config.ai.temperature,
+          topP: ai.topP ?? config.ai.topP,
+          minP: ai.minP ?? config.ai.minP,
+          frequencyPenalty: ai.frequencyPenalty ?? config.ai.frequencyPenalty,
+          presencePenalty: ai.presencePenalty ?? config.ai.presencePenalty,
+          maxTokens: ai.maxTokens ?? config.ai.maxTokens,
           apiKeySet: Boolean(stored.apiKey),
           apiKeyHint: stored.apiKey ? maskSecret(stored.apiKey) : "",
           credentialsSet: Object.keys(endpointCredentials).length > 0,
@@ -431,6 +437,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       JSON.stringify(redactCredentials({ routing, ai })),
     );
 
+    const saved = readStoredCredentials(ai.credentials);
     return c.json({
       success: true,
       message: "AI configuration updated",
@@ -442,7 +449,14 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
           agentUrl: ai.agentUrl || "",
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
-          credentialsSet: Boolean(ai.credentials),
+          temperature: ai.temperature ?? config.ai.temperature,
+          topP: ai.topP ?? config.ai.topP,
+          minP: ai.minP ?? config.ai.minP,
+          frequencyPenalty: ai.frequencyPenalty ?? config.ai.frequencyPenalty,
+          presencePenalty: ai.presencePenalty ?? config.ai.presencePenalty,
+          maxTokens: ai.maxTokens ?? config.ai.maxTokens,
+          apiKeySet: Boolean(saved.apiKey),
+          credentialsSet: Object.keys(saved.endpoints ?? {}).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
         },
       },

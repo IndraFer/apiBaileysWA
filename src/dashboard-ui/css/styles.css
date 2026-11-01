@@ -586,21 +586,78 @@ a:active {
   margin-bottom: 1.5rem;
 }
 
-/* Fixed 4-column variant so 7 metric cards render as 4 + 3. */
+/* 12-column variant: 7 metric cards fill two complete rows (4 + 3). */
 .stats-grid.cols-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.stats-grid.cols-4 > .stat-card {
+  grid-column: span 3;
+}
+
+.stats-grid.cols-4 > .stat-card:nth-child(n + 5) {
+  grid-column: span 4;
 }
 
 @media (max-width: 768px) {
-  .stats-grid.cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .stats-grid.cols-4 > .stat-card,
+  .stats-grid.cols-4 > .stat-card:nth-child(n + 5) {
+    grid-column: span 6;
   }
 }
 
 @media (max-width: 480px) {
-  .stats-grid.cols-4 {
-    grid-template-columns: 1fr;
+  .stats-grid.cols-4 > .stat-card,
+  .stats-grid.cols-4 > .stat-card:nth-child(n + 5) {
+    grid-column: span 12;
   }
+}
+
+/* Compact one-line form rows (e.g. the AI window and sampling fields). */
+.form-row {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-row.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-row.cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .form-row.cols-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .form-row.cols-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Readable JSON preview inside modals. */
+.example-json {
+  max-height: 340px;
+  overflow: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* Compact variant for inline hints under textareas. */
+.example-json-sm {
+  max-height: 170px;
+  margin: 0.5rem 0 0;
 }
 
 .stat-card {
