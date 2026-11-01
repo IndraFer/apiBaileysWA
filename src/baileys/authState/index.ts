@@ -3,6 +3,12 @@ import config from "@/config";
 import logger from "@/lib/logger";
 import { isRedisAvailable } from "@/lib/redis";
 import {
+  type AuthBackend,
+  type AuthBackendRecord,
+  readAuthBackendRecord,
+  writeAuthBackendRecord,
+} from "./backendRecord";
+import {
   deleteFileAuthState,
   getFileSavedSessionIds,
   getFileSavedSessionsWithMetadata,
@@ -22,33 +28,78 @@ export interface AuthStateResult {
   clearState?: () => Promise<void>;
 }
 
-type AuthBackend = "file" | "redis";
-
 interface BackendDecision {
   backend: AuthBackend;
   reason: string;
 }
 
 let decision: BackendDecision | null = null;
+let pendingRecord: AuthBackendRecord | null = null;
+
+const SWITCH_HINT =
+  "Sessions are not migrated and the old store is kept untouched. Re-run with AUTH_STATE_SWITCH_CONFIRM=true to switch: the app then starts on the new store (empty until you re-link by QR).";
 
 /**
  * Resolve the auth-store backend once per process.
  *
- * "auto" (default) prefers Redis when reachable, but never abandons sessions
- * that only exist on disk: it falls back to files with a warning. Explicit
- * "file"/"redis" is honoured, and an unreachable Redis fails loudly instead of
- * silently starting with an empty store.
+ * The first successful start records the choice in data/auth-state-backend.json
+ * and later starts stick to it. That is what stops "auto" from moving the store
+ * when Redis becomes reachable again: sessions written during an outage stay in
+ * the recorded store instead of disappearing from view.
  */
 async function resolveBackend(): Promise<AuthBackend> {
   if (decision) return decision.backend;
 
   const configured = config.authState.backend;
+  const record = readAuthBackendRecord();
+
+  if (record) {
+    if (configured !== "auto" && configured !== record.backend) {
+      if (!config.authState.switchConfirm) {
+        throw new Error(
+          `Auth backend switch requested (configured=${configured}, recorded=${record.backend}). ${SWITCH_HINT}`,
+        );
+      }
+
+      if (configured === "redis" && !isRedisAvailable()) {
+        throw new Error(
+          "AUTH_STATE_BACKEND=redis but Redis is not available (check REDIS_ENABLED / REDIS_URL). Fix Redis before switching; the recorded store was left untouched.",
+        );
+      }
+
+      const reason = `confirmed switch from ${record.backend} to ${configured}`;
+      writeAuthBackendRecord({
+        backend: configured,
+        chosenAt: new Date().toISOString(),
+        reason,
+      });
+      logger.warn(
+        "[AuthState] %s — unset AUTH_STATE_SWITCH_CONFIRM. Sessions in %s were not deleted.",
+        reason,
+        record.backend,
+      );
+      decision = { backend: configured, reason };
+      logger.info("[AuthState] backend=%s (%s)", configured, reason);
+      return configured;
+    }
+
+    if (record.backend === "redis" && !isRedisAvailable()) {
+      throw new Error(
+        "Recorded auth backend is redis but Redis is unreachable. Refusing to fall back to files: sessions written while Redis is down would diverge from the recorded store. Restore Redis, or switch deliberately with AUTH_STATE_BACKEND=file and AUTH_STATE_SWITCH_CONFIRM=true.",
+      );
+    }
+
+    decision = { backend: record.backend, reason: `recorded backend (chosen ${record.chosenAt})` };
+    logger.info("[AuthState] backend=%s (%s)", record.backend, decision.reason);
+    return record.backend;
+  }
+
   let backend: AuthBackend;
   let reason: string;
 
   if (configured === "file") {
     backend = "file";
-    reason = "explicit AUTH_STATE_BACKEND=file";
+    reason = "first run: explicit AUTH_STATE_BACKEND=file";
   } else if (configured === "redis") {
     if (!isRedisAvailable()) {
       throw new Error(
@@ -56,63 +107,80 @@ async function resolveBackend(): Promise<AuthBackend> {
       );
     }
     backend = "redis";
-    reason = "explicit AUTH_STATE_BACKEND=redis";
+    reason = "first run: explicit AUTH_STATE_BACKEND=redis";
   } else if (!isRedisAvailable()) {
     backend = "file";
-    reason = "auto: Redis unreachable";
+    reason = "first run: auto, Redis unreachable";
   } else {
     const redisSessions = await getRedisSavedSessionIds();
-    const redisIds = redisSessions.map((row) => row.id);
     const fileIds = getFileSavedSessionIds();
 
-    if (redisIds.length === 0 && fileIds.length > 0) {
+    if (redisSessions.length === 0 && fileIds.length > 0) {
       backend = "file";
-      reason = `auto: Redis is empty but ${fileIds.length} session(s) exist on disk; using files so they stay reachable`;
-      logger.warn("[AuthState] %s", reason);
-    } else if (redisIds.length > 0 && fileIds.length > 0) {
+      reason = `first run: auto, Redis empty but ${fileIds.length} session(s) on disk`;
+      logger.warn("[AuthState] %s — pinning files so those sessions stay reachable", reason);
+    } else if (redisSessions.length > 0 && fileIds.length > 0) {
       backend = "redis";
-      reason = `auto: sessions exist in both stores (redis=${redisIds.length}, file=${fileIds.length}); preferring Redis, set AUTH_STATE_BACKEND explicitly to make this deliberate`;
+      reason = `first run: auto, sessions in both stores (redis=${redisSessions.length}, file=${fileIds.length}); pinning Redis, set AUTH_STATE_BACKEND explicitly to make it deliberate`;
       logger.warn("[AuthState] %s", reason);
     } else {
       backend = "redis";
-      reason = `auto: Redis reachable (${redisIds.length} session(s))`;
+      reason = `first run: auto, Redis reachable (${redisSessions.length} session(s))`;
     }
   }
 
+  pendingRecord = { backend, chosenAt: new Date().toISOString(), reason };
   decision = { backend, reason };
-  logger.info("[AuthState] backend=%s (%s)", backend, reason);
   return backend;
 }
 
 /**
- * Guard for explicit backends: refuse to start when the configured store
- * disagrees with where sessions actually live. Sessions are never migrated
- * automatically, so the message explains how to keep them.
+ * Persist a first-run decision only after the consistency guard passed, so a
+ * refused start cannot leave a record that lets the next start through.
+ */
+function persistBackendDecision(): void {
+  if (!pendingRecord) return;
+  writeAuthBackendRecord(pendingRecord);
+  logger.info(
+    "[AuthState] backend=%s recorded for future starts (%s)",
+    pendingRecord.backend,
+    pendingRecord.reason,
+  );
+  pendingRecord = null;
+}
+
+/**
+ * Guard for first-run explicit choices: refuse to start when the configured
+ * store disagrees with where sessions already live. Recorded installations are
+ * skipped because their backend is deliberate; switching them needs the
+ * confirmed override.
  */
 export async function assertAuthStateBackendConsistency(): Promise<void> {
+  const hadRecord = readAuthBackendRecord() !== null;
   const backend = await resolveBackend();
-  if (config.authState.backend === "auto") return;
 
-  const fileIds = getFileSavedSessionIds();
-  const redisSessions = backend === "redis" ? await getRedisSavedSessionIds() : [];
-  const redisIds = redisSessions.map((row) => row.id);
+  if (!hadRecord && config.authState.backend !== "auto") {
+    const fileIds = getFileSavedSessionIds();
+    const redisSessions = backend === "redis" ? await getRedisSavedSessionIds() : [];
+    const redisIds = redisSessions.map((row) => row.id);
 
-  if (backend === "redis" && redisIds.length === 0 && fileIds.length > 0) {
-    throw new Error(
-      `Auth backend mismatch: AUTH_STATE_BACKEND=redis, but ${fileIds.length} session(s) exist on disk and Redis holds none. ` +
-        "Sessions are not migrated automatically: set AUTH_STATE_BACKEND=file to keep them, or re-link (QR) after switching. Nothing was deleted.",
-    );
-  }
-
-  if (backend === "file" && fileIds.length === 0 && isRedisAvailable()) {
-    const redisSessions = await getRedisSavedSessionIds();
-    if (redisSessions.length > 0) {
+    if (backend === "redis" && redisIds.length === 0 && fileIds.length > 0) {
       throw new Error(
-        `Auth backend mismatch: AUTH_STATE_BACKEND=file, but Redis holds ${redisSessions.length} session(s) and the filesystem has none. ` +
-          "Sessions are not migrated automatically: set AUTH_STATE_BACKEND=redis to keep them, or re-link (QR) after switching. Nothing was deleted.",
+        `Auth backend mismatch: AUTH_STATE_BACKEND=redis, but ${fileIds.length} session(s) exist on disk and Redis holds none. ${SWITCH_HINT}`,
       );
     }
+
+    if (backend === "file" && fileIds.length === 0 && isRedisAvailable()) {
+      const redisList = await getRedisSavedSessionIds();
+      if (redisList.length > 0) {
+        throw new Error(
+          `Auth backend mismatch: AUTH_STATE_BACKEND=file, but Redis holds ${redisList.length} session(s) and the filesystem has none. ${SWITCH_HINT}`,
+        );
+      }
+    }
   }
+
+  persistBackendDecision();
 }
 
 /**

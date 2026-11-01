@@ -387,17 +387,18 @@ allowlist at the proxy, and expose only `/status` + the REST API publicly.
 
 ## 🧱 Auth-state backend, Redis limits and broadcast persistence
 
-**Backend selection.** `AUTH_STATE_BACKEND` accepts `auto` (default), `file`
-or `redis`. `auto` prefers Redis when reachable but never abandons sessions that
-only exist on disk: it falls back to files and logs the reason. Explicit values
-are honoured, and startup fails when the chosen backend disagrees with where
-sessions actually exist, so an "empty dashboard" cannot be mistaken for lost
-logins.
+**Backend selection is sticky.** `AUTH_STATE_BACKEND` accepts `auto` (default),
+`file` or `redis`. The first successful start records the choice in
+`data/auth-state-backend.json`; later starts reuse it. That is what stops `auto`
+from moving the store when Redis comes back: sessions written during an outage
+stay where they were written. If the recorded backend is `redis` and Redis is
+unreachable, startup fails instead of falling back to files.
 
-**Switching backends does not migrate sessions.** The two stores are separate;
-nothing is copied and nothing is deleted. To move, either keep the current
-backend or re-link the device (QR) after switching. The startup message tells
-you which store still holds the sessions.
+**Switching backends requires confirmation.** Change `AUTH_STATE_BACKEND` to the
+new value and set `AUTH_STATE_SWITCH_CONFIRM=true` for one start. The app then
+records the new backend and starts with the (empty) new store so you can re-link
+by QR; the old store is left untouched and nothing is deleted. Remove the
+confirmation afterwards — it is a one-shot override, not a setting.
 
 **Redis must not evict.** The bundled Redis runs with
 `--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap

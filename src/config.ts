@@ -10,6 +10,7 @@ const {
   REDIS_URL,
   REDIS_PASSWORD,
   AUTH_STATE_BACKEND,
+  AUTH_STATE_SWITCH_CONFIRM,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -183,6 +184,11 @@ const config = {
         : AUTH_STATE_BACKEND === "redis"
           ? ("redis" as const)
           : ("auto" as const),
+    /**
+     * One-shot escape hatch for switching an existing installation to another
+     * store. Sessions are never migrated, and the old store is kept untouched.
+     */
+    switchConfirm: AUTH_STATE_SWITCH_CONFIRM === "true" || AUTH_STATE_SWITCH_CONFIRM === "1",
   },
 
   baileys: {
