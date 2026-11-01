@@ -55,12 +55,19 @@ export class MemoryStore extends EventEmitter {
           const jid = jidNormalizedUser(msg.key.remoteJid);
           this.addMessage(jid, msg);
 
-          if (type === "notify" && !this.chats.has(jid)) {
-            this.chats.set(jid, {
-              id: jid,
-              conversationTimestamp: toNumber(msg.messageTimestamp || 0),
-              unreadCount: 1,
-            });
+          if (type === "notify") {
+            const existing = this.chats.get(jid);
+            if (!existing) {
+              this.chats.set(jid, {
+                id: jid,
+                name: msg.pushName || undefined,
+                conversationTimestamp: toNumber(msg.messageTimestamp || 0),
+                unreadCount: 1,
+              });
+            } else {
+              existing.conversationTimestamp = toNumber(msg.messageTimestamp || 0);
+              if (!existing.name && msg.pushName) existing.name = msg.pushName;
+            }
           }
         } catch {
           // Ignore individual message errors
@@ -176,8 +183,19 @@ export class MemoryStore extends EventEmitter {
   }
 
   getChatList(isGroup = false): Record<string, unknown>[] {
-    const filter = isGroup ? "@g.us" : "@s.whatsapp.net";
-    return [...this.chats.values()].filter((chat) => (chat.id as string)?.endsWith(filter));
+    if (isGroup) {
+      return [...this.chats.values()].filter((chat) => String(chat.id ?? "").endsWith("@g.us"));
+    }
+    // Individual chats use either the classic JID (@s.whatsapp.net) or the
+    // newer LID addressing (@lid). Both are 1:1 conversations; groups,
+    // broadcasts, status and newsletters are excluded.
+    return [...this.chats.values()].filter((chat) => {
+      const id = String(chat.id ?? "");
+      if (id.endsWith("@g.us") || id.endsWith("@broadcast") || id.endsWith("@newsletter")) {
+        return false;
+      }
+      return id.endsWith("@s.whatsapp.net") || id.endsWith("@lid");
+    });
   }
 
   getContactList(): string[] {

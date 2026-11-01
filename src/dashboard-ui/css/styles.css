@@ -1176,6 +1176,23 @@ tr:hover td {
   margin-bottom: 1rem;
 }
 
+/* Toolbars mix selects/inputs with (small) buttons; force one control height
+ * so rows read as a single line instead of ragged boxes. */
+.toolbar .form-group {
+  margin-bottom: 0;
+}
+
+.toolbar .form-group select,
+.toolbar .form-group input:not([type="checkbox"]) {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.toolbar .btn-sm {
+  height: 2.25rem;
+}
+
 .toolbar-spacer {
   flex: 1;
 }

@@ -111,7 +111,10 @@
       chat.subject ||
       chat.notify ||
       chat.pushName ||
-      (chat.id || "").replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "") ||
+      (chat.id || "")
+        .replace(/@s\.whatsapp\.net$/, "")
+        .replace(/@lid$/, "")
+        .replace(/@g\.us$/, "") ||
       "Unknown"
     );
   }
