@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-01
+
+### Added
+
+- unified send endpoint for third-party integrations
+
 ## [1.6.2] - 2026-11-01
 
 ### Changed
