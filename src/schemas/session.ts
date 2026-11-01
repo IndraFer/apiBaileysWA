@@ -109,6 +109,7 @@ export const ragEndpointSchema = z
 export const aiConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
+    mode: z.enum(["off", "window", "always"]).optional(),
     driver: z.enum(["openai", "webhook"]).optional(),
     baseUrl: httpUrl.optional().or(z.literal("")),
     model: z.string().max(128).optional(),

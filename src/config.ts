@@ -90,6 +90,7 @@ const {
   AI_AGENT_URL,
   AI_SERVICE_TOKEN,
   AI_DRIVER,
+  AI_MODE,
   AI_BASE_URL,
   AI_MODEL,
   AI_TEMPERATURE,
@@ -276,6 +277,11 @@ const config = {
   ai: {
     /** "openai" calls an OpenAI-compatible API directly, "webhook" posts to a gateway. */
     driver: (AI_DRIVER === "webhook" ? "webhook" : "openai") as "openai" | "webhook",
+    /** Default answering window mode; per number override: ai.mode */
+    mode: (AI_MODE === "always" ? "always" : AI_MODE === "off" ? "off" : "window") as
+      | "off"
+      | "window"
+      | "always",
     baseUrl: AI_BASE_URL || "https://openrouter.ai/api/v1",
     model: AI_MODEL || "",
     temperature: AI_TEMPERATURE ? Number(AI_TEMPERATURE) : 0.4,

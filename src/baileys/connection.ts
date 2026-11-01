@@ -722,12 +722,15 @@ export class BaileysConnection {
     return true;
   }
 
-  /** True when the AI may answer right now (enabled, window open, configured). */
+  /** True when the AI may answer right now (enabled, mode, window, configured). */
   private isAiEligible(): boolean {
     const ai = resolveAiConfig(this.options.ai);
     if (!ai.enabled || !ai.model) return false;
     if (ai.driver === "openai" && !ai.apiKey) return false;
     if (ai.driver === "webhook" && !ai.agentUrl) return false;
+    if (ai.mode === "off") return false;
+    // "always" = full handling around the clock; human replies still pause it.
+    if (ai.mode === "always") return true;
     return isAiWindowActive(resolveRoutingConfig(this.options.routing));
   }
 

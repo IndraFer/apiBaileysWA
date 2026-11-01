@@ -213,7 +213,7 @@ export class ConversationRouter {
           conversationId,
           result.error ?? "unknown error",
         );
-        if (this.options.onFailure) {
+        if (this.options.onFailure && lastMessage) {
           try {
             await this.options.onFailure(conversationId, lastMessage);
           } catch (error) {

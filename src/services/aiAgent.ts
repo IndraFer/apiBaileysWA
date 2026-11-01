@@ -29,6 +29,7 @@ export interface StoredAiCredentials {
 
 export interface ResolvedAiConfig {
   enabled: boolean;
+  mode: "off" | "window" | "always";
   driver: "openai" | "webhook";
   baseUrl: string;
   model: string;
@@ -84,6 +85,7 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
   const credentials = readCredentials(stored.credentials);
   return {
     enabled: stored.enabled ?? false,
+    mode: stored.mode ?? config.ai.mode,
     driver: stored.driver ?? config.ai.driver,
     baseUrl: stored.baseUrl || config.ai.baseUrl,
     model: stored.model || config.ai.model,

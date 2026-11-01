@@ -70,6 +70,13 @@ export interface RagEndpointConfig {
  */
 export interface AiAgentConfig {
   enabled?: boolean;
+  /**
+   * When the AI may answer:
+   * - "off"     — never (use the static auto-reply instead)
+   * - "window"  — only inside aiWindowStart..aiWindowEnd (default)
+   * - "always"  — 24/7 full handling; a human reply still pauses it
+   */
+  mode?: "off" | "window" | "always";
   /** "openai" = OpenAI-compatible (OpenRouter/OpenAI/Groq/Ollama); "webhook" = external gateway. */
   driver?: "openai" | "webhook";
   /** OpenAI-compatible base URL, e.g. https://openrouter.ai/api/v1 */

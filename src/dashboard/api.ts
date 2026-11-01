@@ -337,6 +337,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
         routing: { ...config.routing, ...(options.routing ?? {}) },
         ai: {
           enabled: ai.enabled ?? false,
+          mode: ai.mode ?? config.ai.mode,
           agentUrl: ai.agentUrl || config.ai.agentUrl,
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],
@@ -413,6 +414,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
         routing,
         ai: {
           enabled: ai.enabled ?? false,
+          mode: ai.mode ?? config.ai.mode,
           agentUrl: ai.agentUrl || "",
           systemInstruction: ai.systemInstruction || "",
           ragEndpoints: ai.ragEndpoints ?? [],

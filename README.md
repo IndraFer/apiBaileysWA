@@ -104,6 +104,23 @@ its own window, model, instruction and knowledge endpoints.
 If a call fails, the static away message (`AUTO_REPLY_*`) is used instead, so
 the customer is never left without an answer.
 
+#### Response modes: static vs LLM
+
+The static auto-reply and the LLM coexist; the mode decides who answers.
+
+| Setting | Behaviour |
+|---|---|
+| `ai.mode = "off"` (or `ai.enabled = false`) | Static rules (`AUTO_REPLY_*`) own the conversation |
+| `ai.mode = "window"` (default) | LLM inside the window; outside it the static rules apply |
+| `ai.mode = "always"` | LLM answers 24/7 — “full handle” |
+
+Humans win in every mode: a reply typed from the phone, WhatsApp Web or the
+dashboard pauses the AI for `ROUTING_HUMAN_IDLE_MS`, and
+`POST /chats/:id/handoff` pauses it longer — including in `always` mode.
+
+Precedence: **AI path → static rules → nothing**. If the AI call fails, the
+static away message is sent instead, so the customer always gets an answer.
+
 #### Drivers
 
 | `AI_DRIVER` | Talks to | Needs |
