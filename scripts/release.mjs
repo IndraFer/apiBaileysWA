@@ -66,7 +66,7 @@ const subjects = run(`git log ${range} --format=%s`)
   .map((line) => line.trim())
   .filter(Boolean);
 
-const commits = subjects.filter((subject) => !/^chore\(release\)/.test(subject));
+const commits = subjects.filter((subject) => !/^chore\(release\):\s*v?\d+\.\d+\.\d+/.test(subject));
 if (commits.length === 0) {
   fail(`No commits since ${lastTag || "the beginning"}; nothing to release.`);
 }
