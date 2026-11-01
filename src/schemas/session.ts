@@ -95,7 +95,11 @@ export const ragEndpointSchema = z
     description: z.string().min(1).max(500),
     method: z.enum(["GET", "POST"]),
     url: httpUrl,
-    params: z.array(ragParamSchema).max(20).optional(),
+    params: z
+      .union([z.array(ragParamSchema).max(20), z.record(z.string(), z.unknown())])
+      .optional(),
+    /** Raw JSON Schema, forwarded to the model unchanged. */
+    parameters: z.record(z.string(), z.unknown()).optional(),
     timeoutMs: z.number().int().min(500).max(30000).optional(),
     maxResponseChars: z.number().int().min(100).max(8000).optional(),
   })

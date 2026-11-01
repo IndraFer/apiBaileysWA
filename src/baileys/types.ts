@@ -58,8 +58,13 @@ export interface RagEndpointConfig {
   description: string;
   method: "GET" | "POST";
   url: string;
-  /** Declared parameters; unset values fall back to each default. */
-  params?: RagEndpointParam[];
+  /**
+   * Structured parameter list (convenience form). A raw JSON Schema may be
+   * supplied instead — either here as an object or via `parameters`.
+   */
+  params?: RagEndpointParam[] | Record<string, unknown>;
+  /** Raw JSON Schema (OpenAI tool schema), forwarded to the model unchanged. */
+  parameters?: Record<string, unknown>;
   timeoutMs?: number;
   maxResponseChars?: number;
 }

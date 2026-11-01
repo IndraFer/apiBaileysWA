@@ -8,7 +8,7 @@
  * This is intentionally generic: any REST endpoint can be exposed — a member
  * lookup, an article search, a search engine, etc.
  */
-import type { RagEndpointConfig } from "@/baileys/types";
+import type { RagEndpointConfig, RagEndpointParam } from "@/baileys/types";
 import config from "@/config";
 import { validateOutboundUrl } from "@/lib/urlGuard";
 import { errorToString } from "@/utils/validation";
@@ -35,18 +35,26 @@ export interface OpenAiToolSchema {
   function: {
     name: string;
     description: string;
-    parameters: {
-      type: "object";
-      properties: Record<string, OpenAiToolProperty>;
-      required: string[];
-      additionalProperties: false;
-    };
+    /** JSON Schema: either generated from `params` or forwarded raw. */
+    parameters: Record<string, unknown>;
   };
 }
 
 export interface ToolExecution {
   ok: boolean;
   content: string;
+}
+
+/** Raw JSON Schema supplied by the operator (takes precedence). */
+function rawSchemaOf(endpoint: RagEndpointConfig): Record<string, unknown> | undefined {
+  if (endpoint.parameters) return endpoint.parameters;
+  const params = endpoint.params;
+  return params && !Array.isArray(params) ? params : undefined;
+}
+
+/** Structured parameter list, when the convenience form is used. */
+function structuredParamsOf(endpoint: RagEndpointConfig): RagEndpointParam[] {
+  return Array.isArray(endpoint.params) ? endpoint.params : [];
 }
 
 /**
@@ -58,7 +66,21 @@ export interface ToolExecution {
 export function buildToolSchemas(endpoints: RagEndpointConfig[] | undefined): OpenAiToolSchema[] {
   if (!endpoints || endpoints.length === 0) return [];
   return endpoints.map((endpoint) => {
-    const params = endpoint.params ?? [];
+    // A raw schema is forwarded untouched, so any third-party API contract
+    // (OpenAPI/JSON Schema) can be pasted without translation.
+    const raw = rawSchemaOf(endpoint);
+    if (raw) {
+      return {
+        type: "function",
+        function: {
+          name: endpoint.name,
+          description: endpoint.description,
+          parameters: raw,
+        },
+      };
+    }
+
+    const params = structuredParamsOf(endpoint);
     const properties: Record<string, OpenAiToolProperty> = {};
     for (const param of params) {
       properties[param.name] = {
@@ -105,27 +127,41 @@ export async function executeTool(
   args: Record<string, unknown>,
   credential?: ToolCredential,
 ): Promise<ToolExecution> {
-  const params = endpoint.params ?? [];
+  const raw = rawSchemaOf(endpoint);
+  const params = structuredParamsOf(endpoint);
   const query: Record<string, string> = { ...(credential?.query ?? {}) };
   const body: Record<string, unknown> = {};
   const pathValues: Record<string, string> = {};
 
-  for (const param of params) {
-    const raw = args[param.name] ?? param.default;
-    const missing = raw === undefined || raw === null || raw === "";
-    if (missing) {
-      if (param.required) {
-        return { ok: false, content: `Tool error: missing required parameter "${param.name}"` };
+  if (raw) {
+    // Raw schema: no per-parameter metadata, so pass through what the model
+    // produced — query string for GET, JSON body otherwise.
+    if (endpoint.method === "GET") {
+      for (const [key, value] of Object.entries(args)) {
+        if (value === undefined || value === null || value === "") continue;
+        query[key] = String(value);
       }
-      continue;
-    }
-    const location = param.in ?? (endpoint.method === "GET" ? "query" : "body");
-    if (location === "path") {
-      pathValues[param.name] = encodeURIComponent(String(raw));
-    } else if (location === "query") {
-      query[param.name] = String(raw);
     } else {
-      body[param.name] = raw;
+      Object.assign(body, args);
+    }
+  } else {
+    for (const param of params) {
+      const value = args[param.name] ?? param.default;
+      const missing = value === undefined || value === null || value === "";
+      if (missing) {
+        if (param.required) {
+          return { ok: false, content: `Tool error: missing required parameter "${param.name}"` };
+        }
+        continue;
+      }
+      const location = param.in ?? (endpoint.method === "GET" ? "query" : "body");
+      if (location === "path") {
+        pathValues[param.name] = encodeURIComponent(String(value));
+      } else if (location === "query") {
+        query[param.name] = String(value);
+      } else {
+        body[param.name] = value;
+      }
     }
   }
 

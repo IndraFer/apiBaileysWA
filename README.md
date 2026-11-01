@@ -223,6 +223,27 @@ converted into tool schemas, so the model decides when to call them.
 Parameter can target `query`, `body` or `path` (`in`). Path placeholders use
 `{name}`, e.g. `/api/members/{member_number}/detail`.
 
+Prefer the provider's own contract? Pass a raw JSON Schema instead of the
+`params` list — it is forwarded to the model untouched:
+
+```jsonc
+{
+  "name": "search_members",
+  "method": "GET",
+  "url": "https://api.example.com/v1/members/search",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "q": { "type": "string", "description": "Nama atau nomor anggota" }
+    },
+    "required": ["q"]
+  }
+}
+```
+
+With `parameters`, every argument the model produces is sent as a query string
+for GET and as the JSON body otherwise — no per-parameter metadata is needed.
+
 Credentials per endpoint live in the encrypted blob, never in the prompt:
 
 ```jsonc

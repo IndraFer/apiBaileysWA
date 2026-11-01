@@ -53,6 +53,22 @@
       timeoutMs: 6000,
       maxResponseChars: 1500,
     },
+    {
+      name: "search_members",
+      description:
+        "Cek status anggota memakai JSON Schema dari dokumentasi API (paste apa adanya).",
+      method: "GET",
+      url: "https://api.example.com/v1/members/search",
+      parameters: {
+        type: "object",
+        properties: {
+          q: { type: "string", description: "Nama lengkap atau nomor anggota" },
+        },
+        required: ["q"],
+      },
+      timeoutMs: 6000,
+      maxResponseChars: 1500,
+    },
   ];
 
   /** Clipboard copy with a fallback for non-secure contexts. */
@@ -90,10 +106,24 @@
       if (!endpoint.name) return `${label}: "name" is required.`;
       if (!endpoint.method) return `${endpoint.name}: "method" is required (GET or POST).`;
       if (!endpoint.url) return `${endpoint.name}: "url" is required.`;
+
+      // A raw JSON Schema is forwarded untouched, so nothing to validate here.
+      if (endpoint.parameters !== undefined) {
+        const schema = endpoint.parameters;
+        if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+          return `${endpoint.name}: "parameters" must be a JSON Schema object.`;
+        }
+        continue;
+      }
+
       if (endpoint.params === undefined) continue;
       if (!Array.isArray(endpoint.params)) {
-        return `${endpoint.name}: "params" must be an array of { name, type, description }.`;
+        if (typeof endpoint.params !== "object") {
+          return `${endpoint.name}: "params" must be a list or a JSON Schema object.`;
+        }
+        continue; // params supplied as a raw schema
       }
+
       for (let j = 0; j < endpoint.params.length; j += 1) {
         const param = endpoint.params[j];
         const where = `${endpoint.name} param #${j + 1}`;
@@ -101,9 +131,9 @@
           return `${where}: must be an object.`;
         }
         if (param.properties) {
-          return `${where}: JSON-Schema "properties" is not supported. Use one entry per parameter, e.g. { "name": "q", "type": "string", "description": "..." }.`;
+          return `${where}: this looks like a JSON Schema. Move it to "parameters": { "type": "object", "properties": { ... } } instead of listing it in "params".`;
         }
-        if (!param.name) return `${where}: "name" is required.`;
+        if (!param.name) return `${where}: "name" is required (the API's parameter key, e.g. "q").`;
         if (!param.type) {
           return `${where}: "type" is required (string | number | integer | boolean).`;
         }
@@ -324,9 +354,10 @@
   }
 ]</pre>
             <small class="text-muted">
-              <strong>What to call.</strong> Each entry declares an endpoint: name, URL, and
-              its parameters as a list of <code>{ name, type, description }</code> (plus
-              <code>enum</code>, <code>default</code>, <code>required</code>, <code>in</code>).
+              <strong>What to call.</strong> Two shapes are accepted:
+              <code>params</code> as a list of <code>{ name, type, description }</code>, or
+              <code>parameters</code> as a raw JSON Schema (paste a third-party schema
+              untouched). GET arguments become query params; POST arguments become the JSON body.
             </small>
           </div>
 
