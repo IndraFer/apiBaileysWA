@@ -400,6 +400,13 @@ records the new backend and starts with the (empty) new store so you can re-link
 by QR; the old store is left untouched and nothing is deleted. Remove the
 confirmation afterwards — it is a one-shot override, not a setting.
 
+**Session ownership and quotas.** Sessions created from the dashboard record the
+creating user in `ownerId`. Non-admin users see their own sessions plus any
+assigned by an admin; legacy sessions without an owner keep the old assignment
+semantics. `MAX_SESSIONS_PER_USER` (default 3) and `MAX_SESSIONS_PER_MANAGER`
+(default 5) cap how many sessions a non-admin may create; admins are unlimited.
+Deleting a user can revoke every session they own (logout + credentials).
+
 **Dashboard markup is sanitized before insertion.** The dashboard never assigns
 `innerHTML`; `UI.setHtml` runs markup through a vendored DOMPurify build
 (`src/dashboard-ui/js/vendor/purify.min.js`) and fails closed to text when the

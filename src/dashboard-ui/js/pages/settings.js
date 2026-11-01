@@ -467,6 +467,31 @@
         "Users, Approvals & Roles",
         `
                 <p class="text-muted text-sm mb-2">Manage dashboard users, approve pending registrations, assign roles, and scope session access.</p>
+                <div class="card u-mb-1">
+                    <h4 class="u-mt-0">Add user</h4>
+                    <div class="u-grid-3-gap">
+                        <div class="form-group u-mb-0">
+                            <label for="new-user-username">Username</label>
+                            <input id="new-user-username" class="input" autocomplete="off" placeholder="e.g. manager_ops">
+                        </div>
+                        <div class="form-group u-mb-0">
+                            <label for="new-user-password">Password</label>
+                            <input id="new-user-password" type="password" class="input" autocomplete="new-password" placeholder="Temporary password">
+                        </div>
+                        <div class="form-group u-mb-0">
+                            <label for="new-user-role">Role</label>
+                            <select id="new-user-role" class="input">
+                                <option value="assistant">ASSISTANT</option>
+                                <option value="manager">MANAGER</option>
+                                <option value="admin">ADMIN</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="u-mt-075-between">
+                        <span class="text-muted text-xs">Non-admin users are limited per role; admin accounts are unlimited.</span>
+                        <button class="btn btn-primary btn-sm" id="btn-create-user">Add user</button>
+                    </div>
+                </div>
                 <div class="table-wrapper">
                     <table id="modal-users-table">
                         <tr><td class="u-text-center"><span class="loader u-spinner-20"></span></td></tr>
@@ -477,6 +502,28 @@
 
       // Allow wider modal for table
       document.getElementById("modal").style.maxWidth = "700px";
+
+      document.getElementById("btn-create-user").addEventListener("click", async () => {
+        const username = document.getElementById("new-user-username").value.trim();
+        const password = document.getElementById("new-user-password").value;
+        const role = document.getElementById("new-user-role").value;
+        const button = document.getElementById("btn-create-user");
+
+        button.disabled = true;
+        button.textContent = "Creating...";
+        const res = await window.API.post("/auth/users", { username, password, role });
+        button.disabled = false;
+        button.textContent = "Add user";
+
+        if (res.success) {
+          Toast.success(`User @${username} created`);
+          document.getElementById("new-user-username").value = "";
+          document.getElementById("new-user-password").value = "";
+          this.loadUsers();
+        } else {
+          Toast.error(res.message);
+        }
+      });
 
       this.loadUsers();
     },
@@ -534,7 +581,7 @@
 
         html += `
                 <tr>
-                    <td><strong>${escapeHtml(u.username)}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}</td>
+                    <td><strong>${escapeHtml(u.username)}</strong> ${isCurrentUser ? '<span class="text-muted text-xs ml-1">(You)</span>' : ""}<div class="text-muted text-xs">${Number(u.sessionCount || 0)} owned session(s)</div></td>
 					<td>
 						${u.status === "pending" ? '<span class="badge badge-warning">PENDING</span>' : '<span class="badge badge-success">ACTIVE</span>'}
 					</td>
@@ -552,7 +599,7 @@
 								<span class="text-muted">${isCurrentUser ? "Locked" : "Edit"}</span>
 							</summary>
 							<div class="u-settings-popover">
-								<p class="text-muted text-xs u-m-0-045">Empty selection means this user can access all sessions.</p>
+								<p class="text-muted text-xs u-m-0-045">Own sessions are always visible. This list only adds access to sessions owned by someone else.</p>
 								<div class="u-scroll-170">${sessionSelector}</div>
 								<div class="flex gap-1 u-mt-065-end">
 									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${escapeHtml(u.id)}">Use All</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${escapeHtml(u.id)}">Save</button>`}
@@ -597,14 +644,23 @@
           const id = e.target.dataset.id;
           const username = e.target.dataset.username;
 
-          if (confirm(`Are you sure you want to delete user @${username}?`)) {
-            const res = await window.API.del(`/auth/users/${id}`);
-            if (res.success) {
-              Toast.success(`User @${username} deleted`);
-              this.loadUsers();
-            } else {
-              Toast.error(res.message);
-            }
+          if (!confirm(`Are you sure you want to delete user @${username}?`)) return;
+
+          const revoke = confirm(
+            `Also revoke every session owned by @${username}?\n\nOK = delete user and revoke sessions (logs out WhatsApp, deletes credentials, irreversible)\nCancel = delete the login only`,
+          );
+          const res = await window.API.del(
+            `/auth/users/${id}${revoke ? "?revokeSessions=true" : ""}`,
+          );
+          if (res.success) {
+            Toast.success(
+              res.data?.revokedSessions
+                ? `User @${username} deleted; ${res.data.revokedSessions} session(s) revoked`
+                : `User @${username} deleted`,
+            );
+            this.loadUsers();
+          } else {
+            Toast.error(res.message);
           }
         });
       });

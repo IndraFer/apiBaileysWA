@@ -74,9 +74,20 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "manageGroups",
     "manageEvents",
   ]),
-  manager: new Set(["viewSessions", "viewChats", "sendOutbound", "replyIncoming", "manageGroups"]),
+  manager: new Set([
+    "manageSessions",
+    "viewSessions",
+    "viewChats",
+    "sendOutbound",
+    "replyIncoming",
+    "manageGroups",
+  ]),
   assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
 };
+
+function getDashboardUserPayload(c: Context): DashboardUserPayload {
+  return c.get("dashboardUser") as DashboardUserPayload;
+}
 
 function getDashboardRole(c: Context): DashboardRole {
   const userPayload = c.get("dashboardUser") as DashboardUserPayload;
@@ -101,9 +112,19 @@ function hasSessionAccess(c: Context, sessionId: string): boolean {
 
   const userPayload = c.get("dashboardUser") as DashboardUserPayload;
   const user = findDashboardUserById(String(userPayload?.sub || ""));
+  const ownerId = connectionManager
+    .listSessions()
+    .find((session) => session.sessionId === sessionId)?.ownerId;
+
+  // Owned sessions belong to their creator unless explicitly assigned.
+  if (ownerId) {
+    if (ownerId === user?.id) return true;
+    return (user?.assignedSessions || []).includes(sessionId);
+  }
+
+  // Legacy sessions have no owner: keep the previous assignment semantics.
   const assignedSessions = user?.assignedSessions || [];
-  if (assignedSessions.length === 0) return true;
-  return assignedSessions.includes(sessionId);
+  return assignedSessions.length === 0 || assignedSessions.includes(sessionId);
 }
 
 function requireSessionAccess(c: Context, sessionId: string) {
@@ -222,6 +243,28 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
+  const userPayload = getDashboardUserPayload(c);
+  const ownerId = String(userPayload?.sub || "");
+  const role = getDashboardRole(c);
+  if (role !== "admin") {
+    const limit = role === "manager" ? config.maxSessionsPerManager : config.maxSessionsPerUser;
+    if (limit > 0) {
+      const owned = connectionManager
+        .listSessions()
+        .filter((session) => session.ownerId === ownerId).length;
+      if (owned >= limit) {
+        return c.json(
+          {
+            success: false,
+            message: `Session limit reached: ${limit} for role ${role}. Delete an unused session or ask an admin to raise the limit.`,
+          },
+          403,
+        );
+      }
+    }
+  }
+
   const body = await c.req.json().catch(() => ({}));
 
   try {
@@ -231,6 +274,7 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
     }
 
     const result = await connectionManager.createSession(sessionId, {
+      ownerId,
       clientName: body.clientName,
       webhookUrl: body.webhookUrl,
       webhookSecret: body.webhookSecret,
@@ -293,6 +337,7 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
   const body = await c.req.json().catch(() => ({}));
   const webhookUrl = String(body.webhookUrl || "").trim();
   // Use undefined (not empty string) when secret is blank so sendToWebhook
@@ -519,6 +564,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
   const body = await c.req.json().catch(() => ({}));
 
   try {
@@ -946,6 +992,7 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
   const body = await c.req.json().catch(() => ({}));
   const type = String(body.type || "").trim();
   const rawJid = String(body.jid || "").trim();
@@ -1089,6 +1136,7 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
   const body = await c.req.json().catch(() => ({}));
   const groupName = String(body.groupName || "").trim();
   const participants = Array.isArray(body.participants)

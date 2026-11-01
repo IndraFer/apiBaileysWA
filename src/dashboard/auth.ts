@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { type Context, Hono, type Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
+import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import logger from "@/lib/logger";
 import { isSecureRequest } from "@/lib/request";
@@ -406,6 +407,76 @@ dashboardAuth.put("/password", dashboardAuthMiddleware, async (c) => {
 });
 
 /**
+ * POST /dashboard/api/auth/users
+ * Create a user directly (Admin only). Ignores the public registration flags.
+ */
+dashboardAuth.post("/users", dashboardAuthMiddleware, async (c) => {
+  const userPayload = c.get("dashboardUser") as DashboardUserPayload;
+  if (userPayload.role !== "admin")
+    return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const username = String(body.username || "")
+    .toLowerCase()
+    .trim();
+  const password = String(body.password || "");
+  const role = body.role;
+  const minLength = getPasswordMinLength();
+
+  if (!/^[a-z][a-z0-9_]{2,29}$/.test(username)) {
+    return c.json(
+      {
+        success: false,
+        message:
+          "Username must be 3-30 characters, start with a letter, and use only a-z, 0-9 and _",
+      },
+      400,
+    );
+  }
+  if (password.length < minLength) {
+    return c.json(
+      { success: false, message: `Password must be at least ${minLength} characters` },
+      400,
+    );
+  }
+  if (role !== "admin" && role !== "manager" && role !== "assistant") {
+    return c.json(
+      { success: false, message: "Invalid role (must be admin, manager, or assistant)" },
+      400,
+    );
+  }
+
+  const users = loadUsers();
+  if (users.some((u) => u.username === username)) {
+    return c.json({ success: false, message: "Username already exists" }, 409);
+  }
+
+  const newUser: DashboardUser = {
+    id: generateId(),
+    username,
+    passwordHash: await hashPassword(password),
+    role,
+    status: "active",
+    assignedSessions: [],
+    createdAt: new Date().toISOString(),
+  };
+
+  users.push(newUser);
+  saveUsers(users);
+  logger.info(
+    "[Dashboard] Admin %s created user %s (role: %s)",
+    userPayload.username,
+    username,
+    role,
+  );
+
+  return c.json(
+    { success: true, data: { id: newUser.id, username, role }, message: "User created" },
+    201,
+  );
+});
+
+/**
  * GET /dashboard/api/auth/users
  * List all users (Admin only)
  */
@@ -414,12 +485,19 @@ dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
   if (userPayload.role !== "admin")
     return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
 
+  const ownedCounts = new Map<string, number>();
+  for (const session of connectionManager.listSessions()) {
+    if (!session.ownerId) continue;
+    ownedCounts.set(session.ownerId, (ownedCounts.get(session.ownerId) || 0) + 1);
+  }
+
   const users = loadUsers().map((u) => ({
     id: u.id,
     username: u.username,
     role: u.role,
     status: getUserStatus(u),
     assignedSessions: u.assignedSessions || [],
+    sessionCount: ownedCounts.get(u.id) || 0,
     createdAt: u.createdAt,
   }));
   return c.json({ success: true, data: users });
@@ -510,7 +588,7 @@ dashboardAuth.put("/users/:id/role", dashboardAuthMiddleware, async (c) => {
  * DELETE /dashboard/api/auth/users/:id
  * Delete a user (Admin only)
  */
-dashboardAuth.delete("/users/:id", dashboardAuthMiddleware, (c) => {
+dashboardAuth.delete("/users/:id", dashboardAuthMiddleware, async (c) => {
   const userPayload = c.get("dashboardUser") as DashboardUserPayload;
   if (userPayload.role !== "admin")
     return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
@@ -533,6 +611,14 @@ dashboardAuth.delete("/users/:id", dashboardAuthMiddleware, (c) => {
     }
   }
 
+  const revokeSessions = c.req.query("revokeSessions") === "true";
+  const ownedSessions = revokeSessions
+    ? connectionManager
+        .listSessions()
+        .filter((session) => session.ownerId === targetId)
+        .map((session) => session.sessionId)
+    : [];
+
   const initialCount = users.length;
   users = users.filter((u) => u.id !== targetId);
 
@@ -541,7 +627,35 @@ dashboardAuth.delete("/users/:id", dashboardAuthMiddleware, (c) => {
   }
 
   saveUsers(users);
-  return c.json({ success: true, message: "User deleted" });
+
+  let revoked = 0;
+  for (const sessionId of ownedSessions) {
+    try {
+      // Logs out, deletes the auth credentials and the stored metadata.
+      await connectionManager.deleteSession(sessionId);
+      revoked += 1;
+    } catch (error) {
+      logger.warn(
+        "[Dashboard] Failed to revoke session %s of deleted user %s: %s",
+        sessionId,
+        targetId,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  logger.info(
+    "[Dashboard] Admin %s deleted user %s (revoked sessions: %d)",
+    userPayload.username,
+    targetId,
+    revoked,
+  );
+
+  return c.json({
+    success: true,
+    message: revoked > 0 ? `User deleted; ${revoked} session(s) revoked` : "User deleted",
+    data: { revokedSessions: revoked },
+  });
 });
 
 export default dashboardAuth;

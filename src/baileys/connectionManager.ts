@@ -139,6 +139,7 @@ class ConnectionManager {
    */
   listSessions(): Array<{
     sessionId: string;
+    ownerId: string;
     connected: boolean;
     user: unknown;
     webhookUrl: string;
@@ -148,6 +149,7 @@ class ConnectionManager {
   }> {
     return [...this.connections.entries()].map(([id, conn]) => ({
       sessionId: id,
+      ownerId: conn.getOptions().ownerId || "",
       connected: conn.isConnected,
       user: conn.user,
       webhookUrl: conn.getOptions().webhookUrl || "",

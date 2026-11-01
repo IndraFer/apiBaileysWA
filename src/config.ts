@@ -63,6 +63,8 @@ const {
   AUTO_READ_DELAY_MAX_MS,
   AUTO_MARK_ONLINE,
   MAX_SESSIONS,
+  MAX_SESSIONS_PER_USER,
+  MAX_SESSIONS_PER_MANAGER,
   REJECT_CALLS,
   // Humanized interaction (WA-Web-like pacing)
   HUMANIZE_READ_BEFORE_REPLY,
@@ -394,6 +396,9 @@ const config = {
 
   /** Maximum concurrent sessions allowed */
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
+  /** Per-role session quotas for non-admin dashboard users (0 = unlimited). */
+  maxSessionsPerUser: MAX_SESSIONS_PER_USER ? Number(MAX_SESSIONS_PER_USER) : 3,
+  maxSessionsPerManager: MAX_SESSIONS_PER_MANAGER ? Number(MAX_SESSIONS_PER_MANAGER) : 5,
 
   dashboard: {
     enabled: DASHBOARD_ENABLED ? DASHBOARD_ENABLED === "true" : true,

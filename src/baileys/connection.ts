@@ -265,6 +265,7 @@ export class BaileysConnection {
 
   getSessionMetadata(): SessionMetadata {
     return {
+      ownerId: this.options.ownerId,
       clientName: this.options.clientName,
       webhookUrl: this.options.webhookUrl,
       webhookSecret: this.options.webhookSecret,
