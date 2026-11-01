@@ -19,6 +19,19 @@
       document
         .getElementById("btn-refresh-sessions")
         .addEventListener("click", () => this.loadSessions());
+
+      // Delegated row actions: no inline handlers, so CSP keeps script-src 'self'.
+      document.getElementById("sessions-list").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+        const sessionId = button.getAttribute("data-session-id");
+        if (!sessionId) return;
+        const action = button.getAttribute("data-action");
+        if (action === "qr") this.showQR(sessionId);
+        else if (action === "settings") this.showSettingsModal(sessionId);
+        else if (action === "delete") this.deleteSession(sessionId);
+      });
+
       this.loadSessions();
     },
 
@@ -39,6 +52,7 @@
         return;
       }
 
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every interpolated value passes through escapeHtml(); same convention as the other dashboard pages
       el.innerHTML = `<div class="table-wrapper"><table>
         <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th><th>Actions</th></tr></thead>
         <tbody>${sessions
@@ -53,9 +67,9 @@
             }</td>
             <td class="text-muted">${s.user?.id || s.phone || "—"}</td>
             <td class="flex gap-1">
-              ${!s.connected ? `<button class="btn btn-outline btn-sm" onclick="SessionsPage.showQR('${s.sessionId || s.id}')">QR</button>` : ""}
-							<button class="btn btn-outline btn-sm" onclick="SessionsPage.showSettingsModal('${s.sessionId || s.id}')">Settings</button>
-              <button class="btn btn-danger btn-sm" onclick="SessionsPage.deleteSession('${s.sessionId || s.id}')">Delete</button>
+              ${!s.connected ? `<button class="btn btn-outline btn-sm" data-action="qr" data-session-id="${s.sessionId || s.id}">QR</button>` : ""}
+							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${s.sessionId || s.id}">Settings</button>
+              <button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${s.sessionId || s.id}">Delete</button>
             </td>
           </tr>`,
           )

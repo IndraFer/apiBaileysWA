@@ -78,6 +78,8 @@
     };
   }
 
+  let pageListeners = null;
+
   window.WebhooksPage = {
     async render() {
       const sessions = await this.getSessions();
@@ -221,6 +223,30 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
           btn.textContent = shouldShow ? "Hide" : "Show";
         });
       });
+
+      // Delegated handlers kept out of the markup so CSP can keep script-src 'self'.
+      pageListeners?.abort();
+      pageListeners = new AbortController();
+      const pageContent = document.getElementById("page-content");
+      pageContent.addEventListener(
+        "submit",
+        (event) => {
+          const form = event.target.closest("form[data-session-id]");
+          if (!form) return;
+          event.preventDefault();
+          this.saveWebhook(event, form.getAttribute("data-session-id"));
+        },
+        { signal: pageListeners.signal },
+      );
+      pageContent.addEventListener(
+        "click",
+        (event) => {
+          const button = event.target.closest("button[data-action='test-webhook']");
+          if (!button) return;
+          this.testWebhook(button.getAttribute("data-session-id"));
+        },
+        { signal: pageListeners.signal },
+      );
     },
 
     renderSessionWebhook(session) {
@@ -241,7 +267,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
               }
             </div>
           </div>
-		  <form id="wh-form-${sid}" onsubmit="WebhooksPage.saveWebhook(event, '${sid}')">
+		  <form id="wh-form-${sid}" data-session-id="${sid}">
             <div class="form-group">
               <label>Webhook URL</label>
               <input type="url" id="wh-url-${sid}" placeholder="https://your-server.com/webhook" value="${session.webhookUrl || ""}" />
@@ -266,7 +292,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
             </div>
             <div class="flex gap-1">
               <button type="submit" class="btn btn-primary btn-sm">Save Webhook</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="WebhooksPage.testWebhook('${sid}')">Test Connection</button>
+              <button type="button" class="btn btn-outline btn-sm" data-action="test-webhook" data-session-id="${sid}">Test Connection</button>
             </div>
           </form>
         </div>`;
@@ -392,6 +418,11 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
     async getWebhookMeta() {
       const r = await API.get("/webhooks/meta");
       return r.success ? r.data || null : null;
+    },
+
+    destroy() {
+      pageListeners?.abort();
+      pageListeners = null;
     },
   };
 })();

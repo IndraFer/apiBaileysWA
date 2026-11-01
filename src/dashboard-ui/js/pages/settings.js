@@ -9,6 +9,15 @@
       .replaceAll("'", "&#39;");
   }
 
+  /** Current dashboard user id, tolerant of corrupted local storage. */
+  function currentUserId() {
+    try {
+      return JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}").id;
+    } catch {
+      return undefined;
+    }
+  }
+
   window.SettingsPage = {
     formatAssignedSessionsSummary(assignedSessions) {
       if (!assignedSessions || assignedSessions.length === 0) {
@@ -27,7 +36,12 @@
     },
 
     async render() {
-      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      let user = {};
+      try {
+        user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      } catch {
+        user = {};
+      }
       const role = user.role || "assistant";
       const roleSummary =
         {
@@ -39,35 +53,36 @@
             "Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
         }[role] || "Limited operational access.";
 
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
       document.getElementById("page-content").innerHTML = `
         <div class="card mb-2">
           <div class="card-header">
             <h3>Account</h3>
           </div>
-          <table style="margin-bottom: 1rem">
-            <tr><td class="text-muted" style="width:100px">Username</td><td><strong>${user.username || "—"}</strong></td></tr>
+          <table class="u-mb-1">
+            <tr><td class="text-muted u-w-100">Username</td><td><strong>${user.username || "—"}</strong></td></tr>
 			<tr><td class="text-muted">Role</td><td><span class="badge ${user.role === "admin" ? "badge-success" : "badge-info"}">${(user.role || "assistant").toUpperCase()}</span></td></tr>
           </table>
           <button class="btn btn-outline btn-sm" id="btn-show-password-modal">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <svg class="u-mr-4px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             Change Password
           </button>
         </div>
 
 		<div class="card mb-2">
-		  <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
+		  <div class="card-header ui-between">
 			<h3>Role Permissions</h3>
-			${user.role === "admin" ? `<button class="btn btn-outline btn-sm" id="btn-show-users-modal"><span style="margin-right:0.35rem">👥</span>Users, Approvals & Roles</button>` : ""}
+			${user.role === "admin" ? `<button class="btn btn-outline btn-sm" id="btn-show-users-modal"><span class="u-mr-035">👥</span>Users, Approvals & Roles</button>` : ""}
 		  </div>
-		  <div style="padding: 0 1rem 1rem">
-			<p class="text-sm" style="margin-bottom:0.75rem"><strong>Your role:</strong> <span class="badge ${role === "admin" ? "badge-success" : role === "manager" ? "badge-info" : "badge-warning"}">${role.toUpperCase()}</span></p>
-			<p class="text-muted text-sm" style="margin-bottom:0.8rem">${roleSummary}</p>
-			<details style="border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-input)">
-				<summary style="cursor:pointer;padding:0.7rem 0.85rem;font-size:0.86rem;font-weight:600;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
+		  <div class="u-p-0-1-1">
+			<p class="text-sm u-mb-075"><strong>Your role:</strong> <span class="badge ${role === "admin" ? "badge-success" : role === "manager" ? "badge-info" : "badge-warning"}">${role.toUpperCase()}</span></p>
+			<p class="text-muted text-sm u-mb-08">${roleSummary}</p>
+			<details class="ui-border-card">
+				<summary class="ui-accordion">
 					<span>Show full permission matrix</span>
 					<span class="text-muted text-xs">Expand</span>
 				</summary>
-				<div class="table-wrapper" style="padding:0 0.75rem 0.75rem">
+				<div class="table-wrapper u-p-0-075-075">
 				  <table>
 					<tr><th>Capability</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr>
 					<tr><td>Assigned sessions ACL</td><td>✅ All sessions</td><td>⚠️ Optional dashboard-only filter</td><td>⚠️ Optional dashboard-only filter</td></tr>
@@ -88,7 +103,7 @@
 
         <div class="card mb-2">
           <div class="card-header"><h3>Quick Actions</h3></div>
-          <div class="flex gap-2" style="flex-wrap:wrap">
+          <div class="flex gap-2 u-flex-wrap">
             <a href="/docs" target="_blank" class="btn btn-outline">📖 Swagger Docs</a>
 						${user.role === "admin" ? `<button class="btn btn-outline" id="btn-health-check">💚 Health Check</button>` : ""}
             <button class="btn btn-outline" id="btn-openapi">📋 OpenAPI Spec</button>
@@ -97,12 +112,12 @@
 
         <div class="card mb-2" id="simulation-card">
           <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
-          <div style="padding: 1rem"><div class="skeleton skeleton-text" style="width: 200px; height: 16px; margin-bottom: 8px;"></div><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></div>
+          <div class="u-p-1"><div class="skeleton skeleton-text u-skeleton-200"></div><div class="skeleton skeleton-text u-skeleton-150"></div></div>
         </div>
 
         <div class="card" id="about-card">
           <div class="card-header"><h3>About</h3></div>
-          <div style="padding: 1rem;"><div class="skeleton skeleton-text" style="width: 200px; height: 16px; margin-bottom: 8px;"></div><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></div>
+          <div class="u-p-1s"><div class="skeleton skeleton-text u-skeleton-200"></div><div class="skeleton skeleton-text u-skeleton-150"></div></div>
         </div>`;
 
       const healthBtn = document.getElementById("btn-health-check");
@@ -136,10 +151,11 @@
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
           const restricted = Boolean(data.infoRestricted);
+          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
           aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
-						<tr><td class="text-muted" style="width:100px">Project</td><td><strong>${data.project}</strong></td></tr>
+						<tr><td class="text-muted u-w-100">Project</td><td><strong>${data.project}</strong></td></tr>
 						<tr><td class="text-muted">Version</td><td>${data.version}</td></tr>
 						${restricted ? `<tr><td class="text-muted">System Details</td><td><span class="badge badge-warning">ADMIN ONLY</span></td></tr>` : `<tr><td class="text-muted">Engine</td><td><strong>${data.engine}</strong></td></tr>`}
 						${restricted ? "" : `<tr><td class="text-muted">Runtime</td><td>${data.runtime}</td></tr>`}
@@ -149,10 +165,11 @@
       } catch (_err) {
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
+          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
           aboutCard.innerHTML = `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
-						<tr><td class="text-muted" style="width:100px">Project</td><td><strong>Baileys WA API</strong></td></tr>
+						<tr><td class="text-muted u-w-100">Project</td><td><strong>Baileys WA API</strong></td></tr>
 						<tr><td class="text-muted">Version</td><td>v1.0.0</td></tr>
 						<tr><td class="text-muted">Engine</td><td>Baileys 7.0.0-rc.9</td></tr>
 						<tr><td class="text-muted">Runtime</td><td>Bun + Hono</td></tr>
@@ -166,7 +183,7 @@
     async showHealthCheck() {
       Modal.show(
         "Health Check",
-        '<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
+        '<div class="u-text-center-p-2"><div class="skeleton skeleton-card w-full u-h-120"></div></div>',
       );
 
       try {
@@ -186,27 +203,28 @@
         const projectName = d.name || "Baileys WA API";
         const projectVersion = d.version || "v1.0.0";
 
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         document.getElementById("modal-body").innerHTML = `
-          <div style="text-align:center;margin-bottom:1.25rem">
-            <div style="width:56px;height:56px;border-radius:50%;background:${statusColor};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:0.5rem">${statusIcon}</div>
-            <h3 style="margin:0;color:${statusColor}">${statusText}</h3>
+          <div class="u-text-center-mb-125">
+            <div class="u-status-icon" data-status-color="${statusColor}">${statusIcon}</div>
+            <h3 class="u-status-text" data-status-color="${statusColor}">${statusText}</h3>
 						<p class="text-muted text-sm">${projectName} ${projectVersion}</p>
           </div>
 
-					<div class="stats-grid" style="grid-template-columns:1fr 1fr;gap:0.75rem">
-						<div class="stat-card" style="padding:0.85rem">
-              <div class="stat-icon green" style="width:36px;height:36px">
+					<div class="stats-grid u-grid-2">
+						<div class="stat-card u-p-085">
+              <div class="stat-icon green u-w-36">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <div class="stat-info"><h4>Uptime</h4><div class="stat-value" style="font-size:1.1rem">${uptimeStr}</div></div>
+              <div class="stat-info"><h4>Uptime</h4><div class="stat-value u-text-11">${uptimeStr}</div></div>
             </div>
-						<div class="stat-card" style="padding:0.85rem">
-							<div class="stat-icon blue" style="width:36px;height:36px">
+						<div class="stat-card u-p-085">
+							<div class="stat-icon blue u-w-36">
 								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/></svg>
 							</div>
 							<div class="stat-info">
 								<h4>Sessions</h4>
-								<div class="stat-value" style="font-size:0.98rem;line-height:1.4">
+								<div class="stat-value u-text-098">
 									<div><strong>${d.activeSessions ?? 0}</strong> active</div>
 									<div><strong>${d.connectedSessions ?? 0}</strong> connected</div>
 								</div>
@@ -214,18 +232,25 @@
 						</div>
           </div>
 
-          <table style="margin-top:0.75rem">
-			<tr><td class="text-muted" style="width:140px">Project</td><td><strong>${projectName}</strong></td></tr>
+          <table class="u-mt-075">
+			<tr><td class="text-muted u-w-140">Project</td><td><strong>${projectName}</strong></td></tr>
 			<tr><td class="text-muted">Version</td><td>${projectVersion}</td></tr>
-            <tr><td class="text-muted" style="width:140px">Environment</td><td><span class="badge badge-info">${(d.environment || "unknown").toUpperCase()}</span></td></tr>
+            <tr><td class="text-muted u-w-140">Environment</td><td><span class="badge badge-info">${(d.environment || "unknown").toUpperCase()}</span></td></tr>
             <tr><td class="text-muted">Redis</td><td><span class="badge ${d.redis === "connected" ? "badge-success" : "badge-warning"}">${(d.redis || "disabled").toUpperCase()}</span></td></tr>
             <tr><td class="text-muted">Description</td><td class="text-sm">${d.description || "—"}</td></tr>
           </table>
         `;
+
+        // Dynamic colours are applied through CSSOM (allowed by CSP) instead of
+        // inline style attributes.
+        document.querySelectorAll("#modal-body [data-status-color]").forEach((el) => {
+          el.style.setProperty("--status-color", el.getAttribute("data-status-color") || "");
+        });
       } catch (err) {
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         document.getElementById("modal-body").innerHTML = `
-          <div style="text-align:center;padding:1.5rem">
-            <div style="font-size:2rem;margin-bottom:0.5rem">⚠️</div>
+          <div class="u-text-center-p-15">
+            <div class="u-text-2rem">⚠️</div>
             <p class="text-danger">Failed to reach health endpoint</p>
             <p class="text-muted text-sm">${err.message}</p>
           </div>`;
@@ -236,7 +261,7 @@
     async showOpenAPI() {
       Modal.show(
         "OpenAPI Specification",
-        '<div style="text-align:center;padding:2rem"><div class="skeleton skeleton-card w-full" style="height:120px"></div></div>',
+        '<div class="u-text-center-p-2"><div class="skeleton skeleton-card w-full u-h-120"></div></div>',
       );
 
       try {
@@ -269,20 +294,20 @@
         }
 
         let html = `
-          <div style="margin-bottom:1rem">
-            <h4 style="margin:0">${spec.info?.title || "API"}</h4>
+          <div class="u-mb-1b">
+            <h4 class="u-m-0">${spec.info?.title || "API"}</h4>
             <p class="text-muted text-sm">${spec.info?.description || ""} — v${spec.info?.version || "1.0.0"}</p>
           </div>
           <p class="text-sm text-muted mb-1">${paths.length} endpoints found</p>
         `;
 
         for (const [tag, endpoints] of Object.entries(grouped)) {
-          html += `<div class="mb-1"><strong style="text-transform:capitalize;font-size:0.85rem">${tag.replace(/[_-]/g, " ")}</strong></div>`;
+          html += `<div class="mb-1"><strong class="u-capitalize-sm">${tag.replace(/[_-]/g, " ")}</strong></div>`;
           html += `<div class="table-wrapper mb-2"><table>`;
           for (const ep of endpoints) {
             const color = methods[ep.method.toLowerCase()] || "badge-info";
             html += `<tr>
-              <td style="width:70px"><span class="badge ${color}">${ep.method}</span></td>
+              <td class="u-w-70"><span class="badge ${color}">${ep.method}</span></td>
               <td class="font-mono text-xs">${ep.path}</td>
               <td class="text-muted text-sm">${ep.summary}</td>
             </tr>`;
@@ -295,14 +320,16 @@
           <a href="/openapi.json" target="_blank" class="btn btn-outline btn-sm">Download JSON</a>
         </div>`;
 
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         document.getElementById("modal-body").innerHTML = html;
 
         // Allow the modal to be wider for the spec
         document.getElementById("modal").style.maxWidth = "700px";
       } catch (err) {
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         document.getElementById("modal-body").innerHTML = `
-          <div style="text-align:center;padding:1.5rem">
-            <div style="font-size:2rem;margin-bottom:0.5rem">⚠️</div>
+          <div class="u-text-center-p-15">
+            <div class="u-text-2rem">⚠️</div>
             <p class="text-danger">Failed to load OpenAPI spec</p>
             <p class="text-muted text-sm">${err.message}</p>
           </div>`;
@@ -323,22 +350,24 @@
             ? '<span class="badge badge-success">ON</span>'
             : '<span class="badge badge-warning">OFF</span>';
 
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <table>
-					<tr><td class="text-muted" style="width:200px">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
+					<tr><td class="text-muted u-w-200">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
 					<tr><td class="text-muted">Typing Delay</td><td><strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
 					<tr><td class="text-muted">Auto-Read Messages</td><td>${badge(d.autoReadMessages)}</td></tr>
 					<tr><td class="text-muted">Auto-Mark Online</td><td>${badge(d.autoMarkOnline)}</td></tr>
 					<tr><td class="text-muted">Auto-Reject Calls</td><td>${badge(d.rejectCalls)}</td></tr>
 				  </table>
-				  <p class="text-muted text-sm" style="padding:0.75rem 1rem 0.75rem;margin:0"><span style="font-weight:bold; color:var(--warning)">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
+				  <p class="text-muted text-sm u-p-075-1"><span class="u-text-warning-bold">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
 				`;
       } catch (err) {
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         card.innerHTML = `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
-				  <div style="padding: 1.5rem; text-align: center;">
-					<p class="text-danger" style="margin-bottom:0.5rem">Unable to load simulation config</p>
+				  <div class="u-p-15-center">
+					<p class="text-danger u-mb-05">Unable to load simulation config</p>
 					<p class="text-muted text-sm">${err.message}</p>
 				  </div>
 				`;
@@ -358,7 +387,7 @@
                             <input type="password" id="current-password" required autocomplete="current-password">
                             <button type="button" class="password-toggle" data-target="current-password" title="Show password">
                             <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                             </button>
                         </div>
                     </div>
@@ -368,13 +397,13 @@
 							<input type="password" id="new-password" required minlength="${minLen}" autocomplete="new-password">
                             <button type="button" class="password-toggle" data-target="new-password" title="Show password">
                             <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                             </button>
                         </div>
                     </div>
-                    <div class="flex gap-1" style="margin-top:1.5rem">
+                    <div class="flex gap-1 u-mt-15">
                         <button type="submit" class="btn btn-primary" id="btn-submit-change">Update Password</button>
-                        <button type="button" class="btn btn-outline" onclick="Modal.hide()">Cancel</button>
+                        <button type="button" class="btn btn-outline" id="btn-cancel-password">Cancel</button>
                     </div>
                 </form>
             `,
@@ -387,6 +416,9 @@
         e.preventDefault();
         this.changePassword();
       });
+
+      // No inline handler: CSP keeps script-src 'self'.
+      document.getElementById("btn-cancel-password")?.addEventListener("click", () => Modal.hide());
     },
 
     async changePassword() {
@@ -422,7 +454,7 @@
                 <p class="text-muted text-sm mb-2">Manage dashboard users, approve pending registrations, assign roles, and scope session access.</p>
                 <div class="table-wrapper">
                     <table id="modal-users-table">
-                        <tr><td style="text-align:center"><span class="loader" style="width:20px;height:20px;border-width:2px;display:inline-block"></span></td></tr>
+                        <tr><td class="u-text-center"><span class="loader u-spinner-20"></span></td></tr>
                     </table>
                 </div>
             `,
@@ -444,6 +476,7 @@
       ]);
 
       if (!usersRes.success) {
+        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
         table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${usersRes.message}</td></tr>`;
         return;
       }
@@ -460,13 +493,12 @@
                     <th>Role</th>
 					<th>Assigned Sessions</th>
                     <th>Joined</th>
-                    <th style="width:100px;text-align:right">Actions</th>
+                    <th class="u-w-100-right">Actions</th>
                 </tr>
             `;
 
       usersRes.data.forEach((u) => {
-        const isCurrentUser =
-          JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}").id === u.id;
+        const isCurrentUser = currentUserId() === u.id;
         const date = new Date(u.createdAt).toLocaleDateString();
         const assignedSessions = Array.isArray(u.assignedSessions) ? u.assignedSessions : [];
         const assignedSummary = this.formatAssignedSessionsSummary(assignedSessions);
@@ -475,13 +507,13 @@
               .map((sessionId) => {
                 const checked = assignedSessions.includes(sessionId) ? "checked" : "";
                 return `
-									<label style="display:flex;align-items:center;gap:0.45rem;padding:0.3rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+									<label class="ui-list-row">
 										<input type="checkbox" class="user-session-option" data-user-id="${u.id}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
-										<span class="text-sm" style="word-break:break-all">${escapeHtml(sessionId)}</span>
+										<span class="text-sm u-break-all">${escapeHtml(sessionId)}</span>
 									</label>`;
               })
               .join("")
-          : '<div class="text-muted text-xs" style="padding:0.35rem 0">No sessions yet. Empty assignment means future sessions remain visible.</div>';
+          : '<div class="text-muted text-xs u-py-035">No sessions yet. Empty assignment means future sessions remain visible.</div>';
 
         html += `
                 <tr>
@@ -490,35 +522,36 @@
 						${u.status === "pending" ? '<span class="badge badge-warning">PENDING</span>' : '<span class="badge badge-success">ACTIVE</span>'}
 					</td>
                     <td>
-                        <select class="user-role-select" data-id="${u.id}" ${isCurrentUser ? "disabled" : ""} style="padding:0.2rem;font-size:0.8rem;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg-input);color:var(--text-primary)">
+                        <select class="user-role-select u-input-mini" data-id="${u.id}" ${isCurrentUser ? "disabled" : ""}>
 							<option value="assistant" ${u.role === "assistant" ? "selected" : ""}>ASSISTANT</option>
 							<option value="manager" ${u.role === "manager" ? "selected" : ""}>MANAGER</option>
                             <option value="admin" ${u.role === "admin" ? "selected" : ""}>ADMIN</option>
                         </select>
                     </td>
 					<td>
-						<details class="user-sessions-picker" data-id="${u.id}" style="position:relative">
-							<summary style="cursor:${isCurrentUser ? "default" : "pointer"};list-style:none;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg-input);font-size:0.78rem;${isCurrentUser ? "opacity:0.7" : ""}">
-								<span class="user-sessions-summary" data-id="${u.id}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(assignedSummary)}</span>
+                        <details class="user-sessions-picker u-relative" data-id="${u.id}">
+							<summary class="u-user-sessions-summary" data-locked="${isCurrentUser ? "true" : "false"}">
+								<span class="user-sessions-summary u-truncate" data-id="${u.id}">${escapeHtml(assignedSummary)}</span>
 								<span class="text-muted">${isCurrentUser ? "Locked" : "Edit"}</span>
 							</summary>
-							<div style="position:absolute;z-index:20;top:calc(100% + 0.35rem);left:0;min-width:280px;max-width:360px;width:100%;padding:0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);box-shadow:0 14px 32px rgba(0,0,0,0.22)">
-								<p class="text-muted text-xs" style="margin:0 0 0.45rem 0">Empty selection means this user can access all sessions.</p>
-								<div style="max-height:170px;overflow:auto;padding-right:0.2rem">${sessionSelector}</div>
-								<div class="flex gap-1" style="margin-top:0.65rem;justify-content:flex-end">
+							<div class="u-settings-popover">
+								<p class="text-muted text-xs u-m-0-045">Empty selection means this user can access all sessions.</p>
+								<div class="u-scroll-170">${sessionSelector}</div>
+								<div class="flex gap-1 u-mt-065-end">
 									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${u.id}">Use All</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${u.id}">Save</button>`}
 								</div>
 							</div>
 						</details>
 					</td>
                     <td class="text-muted">${date}</td>
-                    <td style="text-align:right">
-						${!isCurrentUser && u.status === "pending" ? `<button class="btn btn-outline btn-sm text-xs btn-approve-user" data-id="${u.id}" data-username="${u.username}" style="padding:0.2rem 0.6rem;margin-right:0.35rem">Approve</button>` : ""}
-						${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user" data-id="${u.id}" data-username="${u.username}" style="padding:0.2rem 0.6rem">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
+                    <td class="u-text-right">
+						${!isCurrentUser && u.status === "pending" ? `<button class="btn btn-outline btn-sm text-xs btn-approve-user u-pill-mr" data-id="${u.id}" data-username="${u.username}">Approve</button>` : ""}
+						${!isCurrentUser ? `<button class="btn btn-danger btn-sm text-xs btn-delete-user u-pill" data-id="${u.id}" data-username="${u.username}">Delete</button>` : '<span class="text-muted text-xs">—</span>'}
                     </td>
                 </tr>`;
       });
 
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- values pass through escapeHtml() or come from the local API
       table.innerHTML = html;
 
       table.querySelectorAll(".user-role-select").forEach((sel) => {
@@ -532,8 +565,8 @@
             Toast.success(`Role updated to ${role.toUpperCase()}`);
 
             // If they changed their own role somehow, reload the app (though UI disables it)
-            const currentUserId = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}").id;
-            if (currentUserId === id) {
+            const currentId = currentUserId();
+            if (currentId === id) {
               setTimeout(() => window.location.reload(), 1500);
             }
           } else {

@@ -66,7 +66,7 @@ app.use("*", async (c, next) => {
 // form hijacking are blocked outright.
 const DASHBOARD_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self' data:",

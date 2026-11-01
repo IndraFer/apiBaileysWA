@@ -53,6 +53,7 @@
       requires: "manageWebhooks",
       needsSession: true,
       render: () => WebhooksPage.render(),
+      destroy: () => WebhooksPage.destroy?.(),
     },
     events: {
       title: "Event Monitor",
