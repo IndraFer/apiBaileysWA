@@ -1,6 +1,7 @@
 # === Custom Project Files ===
 *.md
 !README.md
+!CHANGELOG.md
 REFERENCES/
 memorypedia/
 data/
