@@ -924,6 +924,31 @@ Content-Type: application/json
 }
 \`\`\`
 
+#### Full tool definition (download)
+
+The dashboard can also emit one combined object (`Download .json`, saved as
+`whatsapp-tool-<session>.json`) that a tool-import UI can consume directly:
+
+```json
+{
+  "name": "send_whatsapp_message",
+  "description": "Send a WhatsApp message from a connected session.",
+  "method": "POST",
+  "url": "https://your-domain.com/api/v1/messages",
+  "headers": {
+    "Authorization": "Bearer <API_KEY>",
+    "Content-Type": "application/json"
+  },
+  "parameters": { "...": "the schema block above" },
+  "example": {
+    "from": "ROG8",
+    "receiver": "628123456789",
+    "type": "text",
+    "messages": "Halo, ini pesan dari bot."
+  }
+}
+```
+
 For validators that want the stricter contract, the full draft-07 schema
 (`oneOf` rules per type) is served at `GET /api/v1/messages/schema`.
 

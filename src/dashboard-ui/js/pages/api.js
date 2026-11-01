@@ -276,6 +276,19 @@
       messages: "Halo, ini pesan dari bot.",
     };
 
+    const tool = {
+      name: "send_whatsapp_message",
+      description: schema.description,
+      method: "POST",
+      url: endpoint,
+      headers: {
+        Authorization: "Bearer <API_KEY>",
+        "Content-Type": "application/json",
+      },
+      parameters: schema,
+      example,
+    };
+
     window.Modal.show(
       "Integration snippet",
       `<p class="text-sm text-muted">Copy each block into your chatbot's external tool configuration. Replace <code>&lt;API_KEY&gt;</code> with a key created below.</p>
@@ -290,7 +303,13 @@
        <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-schema">Copy schema</button></div>
        <h4>Example body</h4>
        <pre class="webhook-ref-code" id="snippet-body"></pre>
-       <div><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-body">Copy body</button></div>`,
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-body">Copy body</button></div>
+       <h4>Full tool definition</h4>
+       <pre class="webhook-ref-code" id="snippet-tool"></pre>
+       <div>
+         <button class="btn btn-outline btn-sm" data-copy-snippet="snippet-tool">Copy full JSON</button>
+         <button class="btn btn-primary btn-sm" id="btn-download-tool">Download .json</button>
+       </div>`,
     );
 
     const setText = (id, text) => {
@@ -301,6 +320,22 @@
     setText("snippet-headers", "Authorization: Bearer <API_KEY>\nContent-Type: application/json");
     setText("snippet-schema", JSON.stringify(schema, null, 2));
     setText("snippet-body", JSON.stringify(example, null, 2));
+    setText("snippet-tool", JSON.stringify(tool, null, 2));
+
+    document.getElementById("btn-download-tool")?.addEventListener("click", () => {
+      const source = document.getElementById("snippet-tool");
+      if (!source) return;
+      const blob = new Blob([source.textContent || ""], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `whatsapp-tool${prefillFrom ? `-${prefillFrom}` : ""}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      window.Toast.success("Tool definition downloaded");
+    });
 
     document.querySelectorAll("[data-copy-snippet]").forEach((button) => {
       button.addEventListener("click", async () => {
