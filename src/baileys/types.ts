@@ -6,6 +6,13 @@ export interface AutoReplyConfig {
   type: "always" | "time_range" | "on_webhook_fail";
   timeStart?: string; // HH:mm
   timeEnd?: string; // HH:mm
+  /**
+   * Role inside the responder chain:
+   * - "primary"  answers when the AI is off or outside its window
+   * - "fallback" answers only when the AI fails (credits, API error, guard)
+   * - "both"     both of the above (default, backwards compatible)
+   */
+  role?: "primary" | "fallback" | "both";
 }
 
 /**
@@ -158,6 +165,17 @@ export interface WebhookPayload {
   event: string;
   data: unknown;
   extra?: Record<string, unknown>;
+  /**
+   * Responder-chain context, so an external system knows the AI/static setup
+   * and does not reply a second time.
+   */
+  routing?: {
+    aiEnabled: boolean;
+    aiMode: "off" | "window" | "always";
+    window: string;
+    timezone: string;
+    staticRole: "primary" | "fallback" | "both";
+  };
 }
 
 export interface BroadcastMessage {

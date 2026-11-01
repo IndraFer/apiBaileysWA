@@ -437,6 +437,10 @@ const config = {
     type: (process.env.AUTO_REPLY_TYPE || "always") as "always" | "time_range" | "on_webhook_fail",
     timeStart: process.env.AUTO_REPLY_TIME_START || "18:00",
     timeEnd: process.env.AUTO_REPLY_TIME_END || "08:00",
+    /** Default role in the responder chain (per-session override available). */
+    role: (process.env.AUTO_REPLY_ROLE === "primary" || process.env.AUTO_REPLY_ROLE === "fallback"
+      ? process.env.AUTO_REPLY_ROLE
+      : "both") as "primary" | "fallback" | "both",
   },
 };
 

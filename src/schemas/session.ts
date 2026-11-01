@@ -8,6 +8,7 @@ export const autoReplySchema = z
     enabled: z.boolean(),
     message: z.string().min(1, "Auto reply message cannot be empty"),
     type: z.enum(["always", "time_range", "on_webhook_fail"]),
+    role: z.enum(["primary", "fallback", "both"]).optional(),
     timeStart: z
       .string()
       .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid start time format (HH:mm)")

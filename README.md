@@ -104,6 +104,28 @@ its own window, model, instruction and knowledge endpoints.
 If a call fails, the static away message (`AUTO_REPLY_*`) is used instead, so
 the customer is never left without an answer.
 
+#### Responder chain (one owner per message)
+
+Replies are decided by a single chain, not three independent switches:
+
+1. **AI & Routing** — answers when enabled and eligible (`mode`: window/always),
+   unless a human is active or the conversation is muted.
+2. **Static auto-reply** — its `role` decides when it steps in:
+
+   | `role` | Behaviour |
+   |---|---|
+   | `both` (default) | primary when the AI is off/outside its window, fallback when the AI call fails |
+   | `primary` | answers whenever it is enabled; the AI only runs when static is off |
+   | `fallback` | answers only when the AI fails (no credit, API error, guard block) |
+
+3. **Webhook** — never answers; it delivers events. Every `messages.upsert`
+   payload carries a `routing` block (`aiEnabled`, `aiMode`, `window`,
+   `timezone`, `staticRole`) so an external system can skip replying.
+
+The ordering is intentional: the AI is the most capable but most fragile layer,
+static is the cheap always-available net, and the webhook observes rather than
+competes.
+
 #### Response modes: static vs LLM
 
 The static auto-reply and the LLM coexist; the mode decides who answers.

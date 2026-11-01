@@ -220,6 +220,11 @@
       </div>
 
       <div class="card">
+        <div class="card-header"><h3>Effective chain for this number</h3></div>
+        <div id="ai-chain"><p class="text-muted text-xs" style="margin:0">Loading…</p></div>
+      </div>
+
+      <div class="card">
         <div class="card-header"><h3>Responder</h3></div>
           <div class="form-row cols-2">
             <div class="form-group">
@@ -476,6 +481,44 @@
 
       const modeHint = document.getElementById("ai-mode-hint");
       if (modeHint) modeHint.textContent = MODE_HINTS[ai.mode || "window"] || "";
+      this.renderChain();
+    },
+
+    /** Show the responder chain that will actually run for this number. */
+    renderChain() {
+      const target = document.getElementById("ai-chain");
+      if (!target) return;
+      const ai = state.config?.ai ?? {};
+      const routing = state.config?.routing ?? {};
+      const session = state.sessions.find((item) => item.sessionId === state.sessionId);
+      const autoReply = session?.autoReply ?? {};
+      const mode = ai.mode ?? "window";
+
+      let aiText;
+      if (!ai.enabled) {
+        aiText = "off";
+      } else if (mode === "always") {
+        aiText = "answers 24/7";
+      } else if (mode === "window") {
+        aiText = `answers ${routing.aiWindowStart}–${routing.aiWindowEnd} (${routing.timezone})`;
+      } else {
+        aiText = "off";
+      }
+
+      const staticText = autoReply.enabled
+        ? `role ${autoReply.role || "both"} · trigger ${autoReply.type}`
+        : "not enabled";
+
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every interpolated value passes through escapeHtml()
+      target.innerHTML = `
+        <div class="table-wrapper"><table>
+          <thead><tr><th>#</th><th>Layer</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><span class="badge badge-success">AI</span></td><td class="text-xs">${escapeHtml(aiText)}</td></tr>
+            <tr><td>2</td><td><span class="badge badge-info">Static</span></td><td class="text-xs">${escapeHtml(staticText)}</td></tr>
+            <tr><td>3</td><td><span class="badge">Webhook</span></td><td class="text-xs">event delivery only — never answers</td></tr>
+          </tbody>
+        </table></div>`;
     },
 
     async save() {

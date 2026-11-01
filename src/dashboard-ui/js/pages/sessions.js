@@ -105,6 +105,17 @@
 									<option value="on_webhook_fail">On Webhook Failure</option>
 								</select>
 							</div>
+							<div class="form-group">
+								<label for="session-autoreply-role">Role when AI Routing is on</label>
+								<select id="session-autoreply-role">
+									<option value="both">Both — primary when AI is off / out of window, fallback when AI fails</option>
+									<option value="primary">Primary only — static answers first</option>
+									<option value="fallback">Fallback only — static answers only when AI fails</option>
+								</select>
+								<small class="text-muted" style="display:block;margin-top:0.35rem">
+									AI &amp; Routing overrides this whenever it is enabled and eligible.
+								</small>
+							</div>
 							<div id="autoreply-time-group" class="hidden" style="display:flex; gap:1rem; margin-bottom:1rem">
 								<div style="flex:1">
 									<label style="font-size:0.8rem">Start Time</label>
@@ -168,6 +179,7 @@
           body.autoReply = {
             enabled: true,
             type: autoReplyType.value,
+            role: document.getElementById("session-autoreply-role").value,
             message: document.getElementById("session-autoreply-msg").value.trim() || "Halo!",
             timeStart: document.getElementById("session-autoreply-start").value,
             timeEnd: document.getElementById("session-autoreply-end").value,
@@ -334,6 +346,17 @@
 									<option value="on_webhook_fail" ${ar.type === "on_webhook_fail" ? "selected" : ""}>On Webhook Failure</option>
 								</select>
 							</div>
+							<div class="form-group">
+								<label for="update-autoreply-role">Role when AI Routing is on</label>
+								<select id="update-autoreply-role">
+									<option value="both" ${(ar.role || "both") === "both" ? "selected" : ""}>Both — primary when AI is off / out of window, fallback when AI fails</option>
+									<option value="primary" ${ar.role === "primary" ? "selected" : ""}>Primary only — static answers first</option>
+									<option value="fallback" ${ar.role === "fallback" ? "selected" : ""}>Fallback only — static answers only when AI fails</option>
+								</select>
+								<small class="text-muted" style="display:block;margin-top:0.35rem">
+									AI &amp; Routing overrides this whenever it is enabled and eligible.
+								</small>
+							</div>
 							<div id="update-autoreply-time-group" class="${ar.type === "time_range" ? "" : "hidden"}" style="display:${ar.type === "time_range" ? "flex" : "none"}; gap:1rem; margin-bottom:1rem">
 								<div style="flex:1">
 									<label style="font-size:0.8rem">Start Time</label>
@@ -387,6 +410,7 @@
           body.autoReply = {
             enabled: true,
             type: autoReplyType.value,
+            role: document.getElementById("update-autoreply-role").value,
             message:
               document.getElementById("update-autoreply-msg").value.trim() ||
               "Hello, we're currently away...",
@@ -398,6 +422,7 @@
             enabled: false,
             message: "",
             type: "always",
+            role: document.getElementById("update-autoreply-role").value,
           };
         }
 

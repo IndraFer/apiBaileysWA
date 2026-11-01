@@ -98,7 +98,23 @@
         2,
       );
 
+      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- interpolated values are escaped by renderSessionWebhook/renderLogs; same convention as the other dashboard pages
       document.getElementById("page-content").innerHTML = `
+        <div class="card mb-2">
+          <div class="card-header"><h3>Where webhooks fit</h3></div>
+          <p class="text-sm text-muted mb-2">
+            Webhooks only <strong>deliver events</strong> to your endpoint — they never answer
+            messages. Replies come from the responder chain:
+          </p>
+          <ol class="text-sm text-muted" style="margin:0;padding-left:1.2rem">
+            <li><strong>AI &amp; Routing</strong> — answers when enabled and eligible.</li>
+            <li><strong>Static auto-reply</strong> (session settings) — primary when the AI is off
+              or outside its window, fallback when the AI call fails.</li>
+            <li><strong>Webhook</strong> — observes only; each payload carries a <code>routing</code>
+              block so your endpoint knows the AI/static setup and can skip replying.</li>
+          </ol>
+        </div>
+
         <div class="card mb-2">
           <div class="card-header"><h3>Webhook Configuration</h3></div>
           <p class="text-sm text-muted mb-2">Configure webhook URL and event subscriptions per session.</p>

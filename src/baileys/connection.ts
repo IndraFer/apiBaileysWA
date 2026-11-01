@@ -216,7 +216,9 @@ export class BaileysConnection {
       },
       onFailure: async (conversationId, lastMessage) => {
         const autoReply = this.options.autoReply ?? config.autoReply;
-        if (!autoReply.enabled) return;
+        const role = autoReply.role ?? "both";
+        // Static answers a failed AI call only when it plays the fallback role.
+        if (!autoReply.enabled || (role !== "fallback" && role !== "both")) return;
         await this.sendMessage(
           conversationId,
           { text: autoReply.message },
@@ -606,6 +608,20 @@ export class BaileysConnection {
       sessionId: this.sessionId,
       event: "messages.upsert",
       data,
+      // Responder-chain context: tells external systems that the AI (or the
+      // static rules) own replies, so they do not answer a second time.
+      routing: (() => {
+        const aiCfg = resolveAiConfig(this.options.ai);
+        const routingCfg = resolveRoutingConfig(this.options.routing);
+        const staticCfg = this.options.autoReply ?? config.autoReply;
+        return {
+          aiEnabled: aiCfg.enabled,
+          aiMode: aiCfg.mode,
+          window: `${routingCfg.aiWindowStart}-${routingCfg.aiWindowEnd}`,
+          timezone: routingCfg.timezone,
+          staticRole: staticCfg.role ?? "both",
+        };
+      })(),
     };
 
     // Download media if configured
@@ -651,6 +667,9 @@ export class BaileysConnection {
     if (this.enqueueForAi(messages, routing)) return;
 
     if (!autoReply.enabled) return;
+    const autoRole = autoReply.role ?? "both";
+    // "fallback" means static never competes as the primary responder.
+    if (autoRole !== "primary" && autoRole !== "both") return;
 
     let shouldReply = false;
     if (autoReply.type === "always") {
