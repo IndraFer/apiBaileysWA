@@ -1207,6 +1207,26 @@ tr:hover td {
   flex: 1;
 }
 
+/* Collapsible informational blocks (e.g. the effective responder chain). */
+details > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--accent);
+  width: fit-content;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::before {
+  content: "▸ ";
+}
+
+details[open] > summary::before {
+  content: "▾ ";
+}
+
 @media (max-width: 768px) {
   .events-feed-shell {
     min-height: 320px;
