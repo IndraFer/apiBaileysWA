@@ -390,8 +390,17 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
 
   const parsed = aiConfigPatchSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const where = issue && issue.path.length > 0 ? issue.path.join(".") : "payload";
     return c.json(
-      { success: false, message: parsed.error.issues[0]?.message ?? "Invalid payload" },
+      {
+        success: false,
+        message: issue ? `${where}: ${issue.message}` : "Invalid payload",
+        issues: parsed.error.issues.slice(0, 10).map((entry) => ({
+          path: entry.path.join("."),
+          message: entry.message,
+        })),
+      },
       400,
     );
   }

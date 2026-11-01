@@ -75,6 +75,44 @@
 
   const state = { sessions: [], sessionId: "", config: null, metrics: null };
 
+  /**
+   * Pre-flight validation so the operator gets a precise, actionable message
+   * before the request hits the API (which would only report one field).
+   */
+  function validateEndpoints(endpoints) {
+    if (!Array.isArray(endpoints)) return "Knowledge endpoints must be a JSON array.";
+    for (let i = 0; i < endpoints.length; i += 1) {
+      const endpoint = endpoints[i];
+      const label = `Endpoint #${i + 1}`;
+      if (!endpoint || typeof endpoint !== "object" || Array.isArray(endpoint)) {
+        return `${label} must be an object.`;
+      }
+      if (!endpoint.name) return `${label}: "name" is required.`;
+      if (!endpoint.method) return `${endpoint.name}: "method" is required (GET or POST).`;
+      if (!endpoint.url) return `${endpoint.name}: "url" is required.`;
+      if (endpoint.params === undefined) continue;
+      if (!Array.isArray(endpoint.params)) {
+        return `${endpoint.name}: "params" must be an array of { name, type, description }.`;
+      }
+      for (let j = 0; j < endpoint.params.length; j += 1) {
+        const param = endpoint.params[j];
+        const where = `${endpoint.name} param #${j + 1}`;
+        if (!param || typeof param !== "object" || Array.isArray(param)) {
+          return `${where}: must be an object.`;
+        }
+        if (param.properties) {
+          return `${where}: JSON-Schema "properties" is not supported. Use one entry per parameter, e.g. { "name": "q", "type": "string", "description": "..." }.`;
+        }
+        if (!param.name) return `${where}: "name" is required.`;
+        if (!param.type) {
+          return `${where}: "type" is required (string | number | integer | boolean).`;
+        }
+        if (!param.description) return `${where}: "description" is required.`;
+      }
+    }
+    return null;
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -287,7 +325,8 @@
 ]</pre>
             <small class="text-muted">
               <strong>What to call.</strong> Each entry declares an endpoint: name, URL, and
-              its parameters (type, enum, default, required, in: query|body|path).
+              its parameters as a list of <code>{ name, type, description }</code> (plus
+              <code>enum</code>, <code>default</code>, <code>required</code>, <code>in</code>).
             </small>
           </div>
 
@@ -420,6 +459,12 @@
         endpoints = JSON.parse(value("ai-endpoints") || "[]");
       } catch {
         Toast.error("Knowledge endpoints must be valid JSON");
+        return;
+      }
+
+      const endpointError = validateEndpoints(endpoints);
+      if (endpointError) {
+        Toast.error(endpointError);
         return;
       }
 
