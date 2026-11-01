@@ -143,7 +143,9 @@
       });
 
       // Logout
-      document.getElementById("btn-logout").addEventListener("click", () => {
+      document.getElementById("btn-logout").addEventListener("click", async () => {
+        // Clear the HttpOnly cookie server-side, then forget local state.
+        await API.post("/auth/logout", {});
         API.clearToken();
         localStorage.removeItem("wa-dashboard-user");
         this.showAuth();

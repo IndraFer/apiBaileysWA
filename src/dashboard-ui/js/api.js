@@ -2,26 +2,40 @@
 (() => {
   const BASE = "/dashboard/api";
 
+  // Sessions live in an HttpOnly cookie. The token is kept in memory only for
+  // backward compatibility (a proxy that strips cookies) and is never written to
+  // localStorage, where XSS could read it.
+  const LEGACY_TOKEN_KEY = "wa-dashboard-token";
+  let memoryToken = null;
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    // Storage unavailable (private mode): cookie auth still works.
+  }
+
   window.API = {
     getToken() {
-      return localStorage.getItem("wa-dashboard-token");
+      return memoryToken;
     },
     setToken(token) {
-      localStorage.setItem("wa-dashboard-token", token);
+      memoryToken = token || null;
     },
     clearToken() {
-      localStorage.removeItem("wa-dashboard-token");
+      memoryToken = null;
     },
 
     async request(path, options = {}) {
-      const token = this.getToken();
       const headers = {
         "Content-Type": "application/json",
         ...(options.headers || {}),
       };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      if (memoryToken) headers.Authorization = `Bearer ${memoryToken}`;
 
-      const res = await fetch(`${BASE}${path}`, { ...options, headers });
+      const res = await fetch(`${BASE}${path}`, {
+        ...options,
+        headers,
+        credentials: "same-origin",
+      });
       const data = await res.json().catch(() => ({ success: false, message: "Network error" }));
 
       if (

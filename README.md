@@ -349,6 +349,41 @@ buckets and the most recent decisions. They are visible while the app is
 running and reset on restart. Redis-backed persistence can be added later
 without changing the endpoints.
 
+## 🔐 Deployment security (TLS & reverse proxy)
+
+The API speaks plain HTTP; **terminate TLS in front of it** (Caddy, nginx,
+Cloudflare, an ALB). Never publish port 3000 to the internet.
+
+```
+Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose network only)
+```
+
+**Required settings behind a proxy**
+
+| Variable | Value | Why |
+|---|---|---|
+| `NODE_ENV` | `production` | enables fail-closed JWT and rate limits |
+| `TRUST_PROXY` | `true` | per-IP rate limiting from `X-Forwarded-For`; enables HTTPS detection (`X-Forwarded-Proto`) for the Secure cookie, HSTS and the HTTP→HTTPS redirect for `/dashboard` |
+| `DASHBOARD_JWT_SECRET` | long random value | dashboard auth is disabled when this is missing/default |
+| `CORS_ORIGIN` | explicit origin(s) | with `*` only same-origin browser requests are reflected |
+
+**What the app enforces once TLS is in front**
+
+- Dashboard session lives in an **HttpOnly, SameSite=Strict, Path=/dashboard**
+  cookie (plus `Secure` over HTTPS). Nothing is stored in localStorage, so XSS
+  cannot read the token. Bearer auth is still accepted for API/agent clients.
+- SSE (`/dashboard/api/events/stream`) authenticates by cookie; no token in the
+  query string (those end up in proxy access logs).
+- `Content-Security-Policy` (same-origin, inline script/style only), HSTS over
+  HTTPS, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, restrictive
+  `Permissions-Policy`.
+- Cross-origin requests to `/dashboard/*` are rejected with 403.
+- Plain-HTTP dashboard requests are redirected to HTTPS when `TRUST_PROXY=true`
+  in production.
+
+Optional hardening: restrict the dashboard to a VPN/Tailscale network or an IP
+allowlist at the proxy, and expose only `/status` + the REST API publicly.
+
 ## 🐳 Docker Deployment
 
 The project provides configurations for both runtimes. Everything runs in a single

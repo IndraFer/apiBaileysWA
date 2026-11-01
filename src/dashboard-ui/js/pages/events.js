@@ -44,19 +44,11 @@
       this.startSSE();
     },
 
-    async startSSE() {
+    startSSE() {
       if (eventSource) eventSource.close();
-      const token = await API.getStreamToken();
-      if (!token) {
-        const status = document.getElementById("sse-status");
-        if (status) {
-          status.className = "badge badge-danger";
-          status.innerHTML = "AUTH REQUIRED";
-        }
-        return;
-      }
-      // EventSource cannot send custom headers, so use a short-lived stream-scoped token.
-      eventSource = new EventSource(`/dashboard/api/events/stream?token=${token}`);
+      // The HttpOnly session cookie authenticates the stream: EventSource cannot
+      // set headers, and no token belongs in the URL (proxy access logs).
+      eventSource = new EventSource("/dashboard/api/events/stream");
 
       eventSource.addEventListener("baileys-event", (e) => {
         if (paused) return;

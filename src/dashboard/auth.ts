@@ -5,14 +5,35 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Context, Hono, type Next } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
 import config from "@/config";
 import logger from "@/lib/logger";
+import { isSecureRequest } from "@/lib/request";
 import { hashPassword, verifyPassword } from "@/lib/runtime";
 import { authRateLimit } from "@/middleware/rateLimit";
 
 const DATA_DIR = join(process.cwd(), "data");
 const USERS_FILE = join(DATA_DIR, "dashboard-users.json");
+
+/** HttpOnly session cookie: the token never touches localStorage. */
+const SESSION_COOKIE = "wa_dashboard_session";
+const SESSION_TTL_SECONDS = 86400;
+
+function setSessionCookie(c: Context, token: string): void {
+  setCookie(c, SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "Strict",
+    path: "/dashboard",
+    maxAge: SESSION_TTL_SECONDS,
+    // Secure only over HTTPS so local http development still works.
+    secure: isSecureRequest(c),
+  });
+}
+
+function clearSessionCookie(c: Context): void {
+  deleteCookie(c, SESSION_COOKIE, { path: "/dashboard" });
+}
 
 /** Response used when the dashboard JWT secret is not configured in production. */
 function jwtMisconfiguredResponse(c: Context) {
@@ -150,6 +171,7 @@ dashboardAuth.post("/login", authRateLimit, async (c) => {
     config.dashboard.jwtSecret,
   );
 
+  setSessionCookie(c, token);
   return c.json({
     success: true,
     data: {
@@ -244,6 +266,7 @@ dashboardAuth.post("/register", authRateLimit, async (c) => {
     config.dashboard.jwtSecret,
   );
 
+  setSessionCookie(c, token);
   return c.json({
     success: true,
     message: users.length === 1 ? "Admin account created" : "Account registered",
@@ -259,7 +282,7 @@ dashboardAuth.post("/register", authRateLimit, async (c) => {
  */
 dashboardAuth.get("/me", async (c) => {
   const authHeader = c.req.header("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
+  const token = getCookie(c, SESSION_COOKIE) || authHeader?.replace("Bearer ", "");
   if (!token) return c.json({ success: false, message: "Not authenticated" }, 401);
 
   try {
@@ -272,6 +295,15 @@ dashboardAuth.get("/me", async (c) => {
   } catch {
     return c.json({ success: false, message: "Invalid or expired token" }, 401);
   }
+});
+
+/**
+ * POST /dashboard/api/auth/logout
+ * Clears the HttpOnly session cookie.
+ */
+dashboardAuth.post("/logout", (c) => {
+  clearSessionCookie(c);
+  return c.json({ success: true, message: "Logged out" });
 });
 
 /**
@@ -319,9 +351,10 @@ export async function dashboardAuthMiddleware(c: Context, next: Next) {
 
   const authHeader = c.req.header("Authorization");
   const tokenFromHeader = authHeader?.replace(/^Bearer\s+/i, "").trim();
+  const tokenFromCookie = getCookie(c, SESSION_COOKIE);
   const tokenFromQuery =
     c.req.path === "/dashboard/api/events/stream" ? c.req.query("token") : undefined;
-  const token = tokenFromHeader || tokenFromQuery;
+  const token = tokenFromCookie || tokenFromHeader || tokenFromQuery;
   if (!token) return c.json({ success: false, message: "Not authenticated" }, 401);
 
   try {

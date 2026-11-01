@@ -646,14 +646,10 @@
       }
     },
 
-    async startPresenceStream() {
+    startPresenceStream() {
       this.stopPresenceStream();
-      const token = await API.getStreamToken();
-      if (!token) return;
-
-      eventSource = new EventSource(
-        `/dashboard/api/events/stream?token=${encodeURIComponent(token)}`,
-      );
+      // Cookie-authenticated stream (no token in the URL).
+      eventSource = new EventSource("/dashboard/api/events/stream");
 
       eventSource.addEventListener("baileys-event", (e) => {
         try {
