@@ -1,4 +1,7 @@
 {
+  "files": {
+    "includes": ["**", "!**/vendor/**"]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

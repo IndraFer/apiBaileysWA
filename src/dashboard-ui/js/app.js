@@ -262,7 +262,7 @@
     },
 
     navigate(pageName) {
-      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      const user = readStoredUser();
       // Destroy previous page if has cleanup
       if (currentPage && pages[currentPage]?.destroy) {
         pages[currentPage].destroy();

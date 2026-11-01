@@ -400,6 +400,12 @@ records the new backend and starts with the (empty) new store so you can re-link
 by QR; the old store is left untouched and nothing is deleted. Remove the
 confirmation afterwards — it is a one-shot override, not a setting.
 
+**Dashboard markup is sanitized before insertion.** The dashboard never assigns
+`innerHTML`; `UI.setHtml` runs markup through a vendored DOMPurify build
+(`src/dashboard-ui/js/vendor/purify.min.js`) and fails closed to text when the
+sanitizer is absent. Refresh that file when upgrading the `dompurify`
+dependency.
+
 **Redis must not evict.** The bundled Redis runs with
 `--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap
 silently drops arbitrary keys, including session credentials, which logs the

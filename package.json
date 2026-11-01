@@ -24,6 +24,7 @@
 		"@hono/zod-openapi": "^1.6.3",
 		"@whiskeysockets/baileys": "7.0.0-rc14",
 		"bcryptjs": "^3.0.3",
+		"dompurify": "^3.4.17",
 		"hono": "^4.13.16",
 		"lru-cache": "^11.5.3",
 		"node-cache": "^5.1.2",
