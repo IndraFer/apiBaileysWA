@@ -857,60 +857,75 @@ POST https://your-domain.com/api/v1/messages
 }
 ```
 
-### Request schema (JSON Schema)
+### Copy-paste integration snippet
 
-Fetch the contract at runtime (public, no key needed):
+Four separate blocks, ready for a chatbot tool definition (the dashboard shows
+the same text in **REST API → Integration snippet**).
 
-```bash
-GET https://your-domain.com/api/v1/messages/schema
-```
+**Method & URL**
 
-Or copy it into an LLM tool definition:
+\`\`\`
+POST https://your-domain.com/api/v1/messages
+\`\`\`
 
-```json
+**Headers**
+
+\`\`\`
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+\`\`\`
+
+**JSON Schema (tool parameters)**
+
+\`\`\`json
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "UnifiedSendRequest",
+  "description": "Send a WhatsApp message from a connected session. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
   "type": "object",
-  "additionalProperties": false,
   "required": ["from", "receiver"],
   "properties": {
-    "from": { "type": "string" },
-    "receiver": { "type": "string" },
-    "type": { "type": "string", "enum": ["text", "image", "document", "location"], "default": "text" },
-    "messages": { "type": "string", "maxLength": 65536 },
+    "from": { "type": "string", "description": "Session id (e.g. ROG8) or the phone number bound to it." },
+    "receiver": { "type": "string", "description": "Recipient in international digits (e.g. 628123456789), a JID, or a group id ending with @g.us." },
+    "type": { "type": "string", "enum": ["text", "image", "document", "location"], "description": "Message kind. Defaults to text." },
+    "messages": { "type": "string", "description": "Text body, or the caption for image and document." },
     "media": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["url"],
+      "description": "Required for image and document.",
       "properties": {
-        "url": { "type": "string", "format": "uri" },
-        "filename": { "type": "string" },
-        "mimetype": { "type": "string" }
+        "url": { "type": "string", "description": "Public file URL." },
+        "filename": { "type": "string", "description": "Displayed file name." },
+        "mimetype": { "type": "string", "description": "MIME type, e.g. application/pdf." }
       }
     },
     "location": {
       "type": "object",
-      "additionalProperties": false,
       "required": ["latitude", "longitude"],
+      "description": "Required for location.",
       "properties": {
-        "latitude": { "type": "number" },
-        "longitude": { "type": "number" },
-        "name": { "type": "string" },
-        "address": { "type": "string" }
+        "latitude": { "type": "number", "description": "Decimal degrees." },
+        "longitude": { "type": "number", "description": "Decimal degrees." },
+        "name": { "type": "string", "description": "Place name." },
+        "address": { "type": "string", "description": "Street address." }
       }
     },
-    "isGroup": { "type": "boolean", "default": false }
-  },
-  "oneOf": [
-    { "not": { "required": ["type"] }, "required": ["messages"] },
-    { "properties": { "type": { "const": "text" } }, "required": ["type", "messages"] },
-    { "properties": { "type": { "const": "image" } }, "required": ["type", "media"] },
-    { "properties": { "type": { "const": "document" } }, "required": ["type", "media"] },
-    { "properties": { "type": { "const": "location" } }, "required": ["type", "location"] }
-  ]
+    "isGroup": { "type": "boolean", "description": "Force group semantics when receiver is not an @g.us JID." }
+  }
 }
-```
+\`\`\`
+
+**Example body**
+
+\`\`\`json
+{
+  "from": "ROG8",
+  "receiver": "628123456789",
+  "type": "text",
+  "messages": "Halo, ini pesan dari bot."
+}
+\`\`\`
+
+For validators that want the stricter contract, the full draft-07 schema
+(`oneOf` rules per type) is served at `GET /api/v1/messages/schema`.
 
 Success response:
 

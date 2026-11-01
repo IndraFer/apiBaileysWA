@@ -84,6 +84,7 @@
           <td class="text-muted text-sm">${formatTime(key.createdAt)}</td>
           <td class="text-muted text-sm">${formatTime(key.lastUsedAt)}</td>
           <td class="u-text-right">
+            <button class="btn btn-outline btn-sm btn-key-snippet" data-session="${esc(key.sessions?.[0] || "")}">Snippet</button>
             <button class="btn btn-danger btn-sm" data-revoke-key="${esc(key.id)}">Revoke</button>
           </td>
         </tr>`,
@@ -94,6 +95,10 @@
       table,
       `<tr><th>Label</th><th>Session</th><th>Created</th><th>Last used</th><th class="u-text-right">Actions</th></tr>${rows}`,
     );
+
+    table.querySelectorAll(".btn-key-snippet").forEach((button) => {
+      button.addEventListener("click", () => openIntegrationSnippet(button.dataset.session));
+    });
 
     table.querySelectorAll("[data-revoke-key]").forEach((button) => {
       button.addEventListener("click", async () => {
@@ -210,6 +215,107 @@
     loadKeys();
   }
 
+  /** Copy-paste blocks for a third-party chatbot tool configuration. */
+  function openIntegrationSnippet(prefillFrom) {
+    const endpoint = `${window.location.origin}/api/v1/messages`;
+    const schema = {
+      description:
+        "Send a WhatsApp message from a connected session. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
+      type: "object",
+      properties: {
+        from: {
+          type: "string",
+          description: "Session id (e.g. ROG8) or the phone number bound to it.",
+        },
+        receiver: {
+          type: "string",
+          description:
+            "Recipient in international digits (e.g. 628123456789), a JID, or a group id ending with @g.us.",
+        },
+        type: {
+          type: "string",
+          enum: ["text", "image", "document", "location"],
+          description: "Message kind. Defaults to text.",
+        },
+        messages: {
+          type: "string",
+          description: "Text body, or the caption for image and document.",
+        },
+        media: {
+          type: "object",
+          required: ["url"],
+          description: "Required for image and document.",
+          properties: {
+            url: { type: "string", description: "Public file URL." },
+            filename: { type: "string", description: "Displayed file name." },
+            mimetype: { type: "string", description: "MIME type, e.g. application/pdf." },
+          },
+        },
+        location: {
+          type: "object",
+          required: ["latitude", "longitude"],
+          description: "Required for location.",
+          properties: {
+            latitude: { type: "number", description: "Decimal degrees." },
+            longitude: { type: "number", description: "Decimal degrees." },
+            name: { type: "string", description: "Place name." },
+            address: { type: "string", description: "Street address." },
+          },
+        },
+        isGroup: {
+          type: "boolean",
+          description: "Force group semantics when receiver is not an @g.us JID.",
+        },
+      },
+      required: ["from", "receiver"],
+    };
+    const example = {
+      from: prefillFrom || "ROG8",
+      receiver: "628123456789",
+      type: "text",
+      messages: "Halo, ini pesan dari bot.",
+    };
+
+    window.Modal.show(
+      "Integration snippet",
+      `<p class="text-sm text-muted">Copy each block into your chatbot's external tool configuration. Replace <code>&lt;API_KEY&gt;</code> with a key created below.</p>
+       <h4>Method &amp; URL</h4>
+       <pre class="webhook-ref-code" id="snippet-url"></pre>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-url">Copy URL</button></div>
+       <h4>Headers</h4>
+       <pre class="webhook-ref-code" id="snippet-headers"></pre>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-headers">Copy headers</button></div>
+       <h4>JSON Schema (tool parameters)</h4>
+       <pre class="webhook-ref-code" id="snippet-schema"></pre>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-schema">Copy schema</button></div>
+       <h4>Example body</h4>
+       <pre class="webhook-ref-code" id="snippet-body"></pre>
+       <div><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-body">Copy body</button></div>`,
+    );
+
+    const setText = (id, text) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = text;
+    };
+    setText("snippet-url", `POST ${endpoint}`);
+    setText("snippet-headers", "Authorization: Bearer <API_KEY>\nContent-Type: application/json");
+    setText("snippet-schema", JSON.stringify(schema, null, 2));
+    setText("snippet-body", JSON.stringify(example, null, 2));
+
+    document.querySelectorAll("[data-copy-snippet]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const source = document.getElementById(button.dataset.copySnippet);
+        if (!source) return;
+        try {
+          await navigator.clipboard.writeText(source.textContent || "");
+          window.Toast.success("Copied");
+        } catch {
+          window.Toast.error("Copy failed — select the text manually");
+        }
+      });
+    });
+  }
+
   window.ApiPage = {
     async render() {
       const container = document.getElementById("page-content");
@@ -221,6 +327,7 @@
             <h1>REST API</h1>
             <p class="text-muted">Send WhatsApp messages from widgets, chatbots and other services. Keys are scoped per session and every call is audited.</p>
           </div>
+          <button class="btn btn-outline btn-sm" id="btn-integration">Integration snippet</button>
         </div>
 
         <div class="card">
@@ -273,6 +380,9 @@
       );
 
       document.getElementById("btn-create-key").addEventListener("click", createKey);
+      document
+        .getElementById("btn-integration")
+        .addEventListener("click", () => openIntegrationSnippet());
       document.getElementById("btn-refresh-keys").addEventListener("click", loadKeys);
       document.getElementById("btn-refresh-logs").addEventListener("click", loadLogs);
       document.getElementById("log-filter-status").addEventListener("change", loadLogs);
