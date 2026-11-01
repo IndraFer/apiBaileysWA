@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-01
+
+### Added
+
+- full tool definition export from the integration snippet
+
 ## [1.11.0] - 2026-11-01
 
 ### Added
