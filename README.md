@@ -477,6 +477,30 @@ WhatsApp session out. Failing writes loudly is the safer failure mode; raise
 used for auth state, API keys and the broadcast *result* cache only. If restart
 durability for broadcasts matters, it has to be implemented separately.
 
+## 🏷️ Versioning & releases
+
+Versions follow [Semantic Versioning](https://semver.org/), decided by the
+Conventional Commit that introduced the change:
+
+| Commit | Bump |
+|---|---|
+| `feat:` | minor |
+| `fix:`, `perf:`, `security:` | patch |
+| `feat!:`, `refactor!:`, `BREAKING CHANGE` | major |
+
+Every release is tagged `vX.Y.Z` and recorded in [CHANGELOG.md](CHANGELOG.md).
+Create the next one with:
+
+```bash
+bun run release:patch   # or release:minor / release:major
+git push origin HEAD --follow-tags
+```
+
+The helper refuses a dirty tree, generates the changelog entry from commits
+since the previous tag, bumps `package.json`, commits `chore(release): x.y.z`
+and creates the annotated tag. It never pushes; the command above is the final
+manual step. Use `node scripts/release.mjs patch --dry-run` to preview.
+
 ## 🐳 Docker Deployment
 
 The project provides configurations for both runtimes. Everything runs in a single

@@ -16,7 +16,10 @@
 		"lint:all": "bunx @biomejs/biome check src/",
 		"format": "bunx @biomejs/biome check --write src/",
 		"manage-api-keys": "LOG_LEVEL=warn bun scripts/manage-api-keys.ts",
-		"manage-api-keys:node": "LOG_LEVEL=warn tsx scripts/manage-api-keys.ts"
+		"manage-api-keys:node": "LOG_LEVEL=warn tsx scripts/manage-api-keys.ts",
+		"release:patch": "node scripts/release.mjs patch",
+		"release:minor": "node scripts/release.mjs minor",
+		"release:major": "node scripts/release.mjs major"
 	},
 	"dependencies": {
 		"@hono/node-server": "^2.1.5",
