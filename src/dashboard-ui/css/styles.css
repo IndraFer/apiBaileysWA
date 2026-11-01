@@ -466,9 +466,6 @@ a:active {
 
 .theme-toggle,
 .btn-logout {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
   width: 36px;
   height: 36px;
   border-radius: var(--radius-xs);
@@ -478,10 +475,28 @@ a:active {
   cursor: pointer;
   transition: all var(--transition);
 }
-.theme-toggle:hover,
-.btn-logout:hover {
+
+.theme-toggle {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.theme-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Logout is destructive: tint it so it is obvious at the bottom of the sidebar. */
+.btn-logout {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.btn-logout:hover {
+  background: var(--danger);
+  color: #ffffff;
 }
 
 [data-theme="dark"] .icon-sun {
