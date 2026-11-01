@@ -272,6 +272,8 @@ app.post("/dashboard/csp-report", async (c) => {
 });
 
 app.route("/sessions", sessionRoutes);
+// Canonical versioned path, with the original /messages kept as an alias.
+app.route("/api/v1/messages", messageRoutes);
 app.route("/messages", messageRoutes);
 app.route("/chats", chatRoutes);
 app.route("/groups", groupRoutes);

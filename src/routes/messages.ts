@@ -15,12 +15,16 @@ import config from "@/config";
 import { success } from "@/lib/response";
 import { type AuthData, authMiddleware } from "@/middleware/auth";
 import { sendRateLimit } from "@/middleware/rateLimit";
-import { unifiedSendSchema } from "@/schemas/message";
+import { unifiedSendJsonSchema, unifiedSendSchema } from "@/schemas/message";
 import { maskReceiver, recordApiCall } from "@/services/apiAuditLog";
 import { keyAllowsSession } from "@/services/apiKeys";
 import { MessageSendError, resolveSessionId, sendUnifiedMessage } from "@/services/messageSender";
 
 const messageRoutes = new Hono();
+
+// Public schema discovery for LLM tool definitions. Registered before the auth
+// middleware so an integrator can fetch the contract without a key.
+messageRoutes.get("/schema", (c) => c.json(unifiedSendJsonSchema));
 
 /** Context accessor keeps the route independent of Hono env generics. */
 function authPayload(c: Context): AuthData | undefined {

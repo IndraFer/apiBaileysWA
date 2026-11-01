@@ -708,14 +708,21 @@ CLI. Each key stores:
 | Field | Meaning |
 |---|---|
 | Label | Human name (`chatbot-widget`) |
-| Role | `user` or `admin` |
-| Session scope | Sessions the key may send from; empty means all |
+| Session | The single session this key may send from |
 | Last used | Updated on every authenticated call |
 
+There is no role selector: REST keys are send-only (`user`). Admin-only
+operations stay behind the dashboard session. **One key belongs to one
+session**, so create a separate key per number you expose; the page only appears
+while at least one session is connected.
+
 The token is shown **once** at creation and stored only as a SHA-256 hash. A
-leaked database dump does not expose usable keys. Legacy plaintext keys are
-migrated automatically on first use. Session scope is enforced on `/messages`:
-a key restricted to `ROG8` gets `403` when `from` resolves to another session.
+leaked dump does not expose usable keys. Storage is flexible: every record is
+written to `data/api-keys.json`, and mirrored into Redis when it is available
+(reads merge both, deletes remove both) — Redis is not required. Legacy
+plaintext keys are migrated automatically on first use. Scope is enforced on
+`/api/v1/messages`: a key bound to `ROG8` gets `403` when `from` resolves to
+another session.
 
 Every call is written to the audit log (Dashboard → REST API → Request log):
 time, key id/label, session, masked receiver, type, status, latency and IP. The
@@ -724,11 +731,11 @@ appear in the log. Entries also append to `logs/api-audit-YYYY-MM-DD.jsonl` and
 are pruned after `AUDIT_LOG_RETENTION_DAYS`.
 
 ```bash
-# Create a scoped key with the REST API itself (admin session cookie required)
-curl -X POST https://api.your-domain.com/dashboard/api/api-keys \
+# Create a key bound to one session (admin session cookie required)
+curl -X POST https://your-domain.com/dashboard/api/api-keys \
   -H "Content-Type: application/json" \
   -b "wa_dashboard_session=<cookie>" \
-  -d '{"label":"chatbot-widget","role":"user","sessions":["ROG8"]}'
+  -d '{"label":"chatbot-widget","session":"ROG8"}'
 ```
 
 ## 📱 API Usage Examples
@@ -768,15 +775,16 @@ Base URL depends on where the API runs:
 | Environment | Base URL |
 |---|---|
 | Local / development | `http://localhost:3000` |
-| Production (VPS) | `https://api.your-domain.com` (or whatever your reverse proxy exposes) |
+| Production (VPS) | `https://your-domain.com` (or whatever your reverse proxy exposes) |
 
-So the endpoint is `<BASE_URL>/messages`. One endpoint for widgets, chatbots
-and LLM tools. Authenticate with the same API
+So the canonical endpoint is `<BASE_URL>/api/v1/messages`; the older
+`<BASE_URL>/messages` stays available as an alias. One endpoint for widgets,
+chatbots and LLM tools. Authenticate with the same API
 key as the rest of the REST API (`Authorization: Bearer <API_KEY>` or
 `x-api-key`). `from` accepts a session id or the WhatsApp number bound to it.
 
 ```bash
-POST https://api.your-domain.com/messages
+POST https://your-domain.com/api/v1/messages
 Content-Type: application/json
 Authorization: Bearer <API_KEY>
 
@@ -797,7 +805,7 @@ Authorization: Bearer <API_KEY>
 
 ```bash
 # Image with caption
-POST https://api.your-domain.com/messages
+POST https://your-domain.com/api/v1/messages
 {
   "from": "62812xxxxxxx",
   "receiver": "62813xxxxxxx",
@@ -829,6 +837,61 @@ POST https://api.your-domain.com/messages
     "name": "Kantor",
     "address": "Jl. Contoh 1"
   }
+}
+```
+
+### Request schema (JSON Schema)
+
+Fetch the contract at runtime (public, no key needed):
+
+```bash
+GET https://your-domain.com/api/v1/messages/schema
+```
+
+Or copy it into an LLM tool definition:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UnifiedSendRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from", "receiver"],
+  "properties": {
+    "from": { "type": "string" },
+    "receiver": { "type": "string" },
+    "type": { "type": "string", "enum": ["text", "image", "document", "location"], "default": "text" },
+    "messages": { "type": "string", "maxLength": 65536 },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "filename": { "type": "string" },
+        "mimetype": { "type": "string" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude"],
+      "properties": {
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "name": { "type": "string" },
+        "address": { "type": "string" }
+      }
+    },
+    "isGroup": { "type": "boolean", "default": false }
+  },
+  "oneOf": [
+    { "not": { "required": ["type"] }, "required": ["messages"] },
+    { "properties": { "type": { "const": "text" } }, "required": ["type", "messages"] },
+    { "properties": { "type": { "const": "image" } }, "required": ["type", "media"] },
+    { "properties": { "type": { "const": "document" } }, "required": ["type", "media"] },
+    { "properties": { "type": { "const": "location" } }, "required": ["type", "location"] }
+  ]
 }
 ```
 

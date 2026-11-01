@@ -71,6 +71,7 @@
     api: {
       title: "REST API",
       requiresRole: "admin",
+      needsSession: true,
       render: () => ApiPage.render(),
       destroy: () => ApiPage.destroy?.(),
     },

@@ -1,25 +1,35 @@
 /**
  * API key registry.
  *
- * Keys are stored hashed (SHA-256) so a leaked Redis dump does not expose
- * usable tokens. Each record carries a label, a role, an optional session scope
- * and usage timestamps. Legacy plaintext keys written by the old CLI are
- * migrated on first listing/lookup.
+ * Keys are stored hashed (SHA-256) so a leaked dump does not expose usable
+ * tokens. Storage is intentionally flexible:
+ *
+ * - `data/api-keys.json` is always written, so keys work without Redis and
+ *   survive a Redis outage or a later switch to Redis.
+ * - When Redis is available the same records are mirrored to a hash, so multiple
+ *   instances share them. Reads merge both stores; deletes remove both.
+ *
+ * Records carry a label, a role, a single-session scope and usage timestamps.
+ * Legacy plaintext keys are migrated on first lookup or listing.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import logger from "@/lib/logger";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
 
 const HASHED_STORE = "@baileys-wa-api:api-keys-v2";
 const LEGACY_PREFIX = "@baileys-wa-api:api-keys";
+const FILE_PATH = join(process.cwd(), "data", "api-keys.json");
 
 export type ApiKeyRole = "user" | "admin";
 
 export interface ApiKeyRecord {
-  /** SHA-256 of the token; also the Redis field name. */
+  /** SHA-256 of the token; also the Redis field name and the file key. */
   hash: string;
   label: string;
   role: ApiKeyRole;
-  /** Session ids this key may use, or ["*"] for every session. */
+  /** Sessions this key may use; new keys always hold exactly one id. */
   sessions: string[];
   createdAt: string;
   lastUsedAt: string | null;
@@ -41,18 +51,36 @@ export interface ApiKeyAuth {
   sessions: string[];
 }
 
-export class ApiKeyStoreUnavailable extends Error {
-  constructor() {
-    super("API key store requires Redis (REDIS_ENABLED=true).");
-    this.name = "ApiKeyStoreUnavailable";
+interface FileStore {
+  version: 1;
+  keys: Record<string, ApiKeyRecord>;
+}
+
+function emptyFileStore(): FileStore {
+  return { version: 1, keys: {} };
+}
+
+function readFileStore(): FileStore {
+  if (!existsSync(FILE_PATH)) return emptyFileStore();
+  try {
+    const parsed = JSON.parse(readFileSync(FILE_PATH, "utf8")) as Partial<FileStore>;
+    if (!parsed || typeof parsed !== "object" || !parsed.keys) return emptyFileStore();
+    const keys: Record<string, ApiKeyRecord> = {};
+    for (const [hash, value] of Object.entries(parsed.keys)) {
+      const record = parseRecord(hash, JSON.stringify(value));
+      if (record) keys[hash] = record;
+    }
+    return { version: 1, keys };
+  } catch {
+    return emptyFileStore();
   }
 }
 
-function redisOrThrow() {
-  if (!isRedisAvailable()) throw new ApiKeyStoreUnavailable();
-  const redis = getRedis();
-  if (!redis) throw new ApiKeyStoreUnavailable();
-  return redis;
+function writeFileStore(store: FileStore): void {
+  mkdirSync(dirname(FILE_PATH), { recursive: true });
+  const tmp = `${FILE_PATH}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  renameSync(tmp, FILE_PATH);
 }
 
 export function hashToken(token: string): string {
@@ -92,15 +120,65 @@ function toSummary(record: ApiKeyRecord): ApiKeySummary {
   };
 }
 
-function normalizeSessions(value: unknown): string[] {
-  if (!Array.isArray(value)) return ["*"];
-  const sessions = value.filter(
-    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-  );
-  return sessions.length > 0 ? [...new Set(sessions)] : ["*"];
+/** Merge file and Redis records; Redis wins when both exist. */
+async function readAllRecords(): Promise<Map<string, ApiKeyRecord>> {
+  const merged = new Map<string, ApiKeyRecord>();
+
+  for (const [hash, record] of Object.entries(readFileStore().keys)) {
+    merged.set(hash, record);
+  }
+
+  if (isRedisAvailable()) {
+    const redis = getRedis();
+    if (redis) {
+      try {
+        const all = await redis.hGetAll(HASHED_STORE);
+        for (const [hash, raw] of Object.entries(all)) {
+          const record = parseRecord(hash, raw);
+          if (record) merged.set(hash, record);
+        }
+      } catch (error) {
+        logger.warn("[ApiKeys] Redis read failed, using file store: %s", (error as Error).message);
+      }
+    }
+  }
+
+  return merged;
 }
 
-/** Move plaintext legacy keys into the hashed store. Best effort. */
+async function persistRecord(record: ApiKeyRecord): Promise<void> {
+  const store = readFileStore();
+  store.keys[record.hash] = record;
+  writeFileStore(store);
+
+  if (!isRedisAvailable()) return;
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.hSet(HASHED_STORE, record.hash, JSON.stringify(record));
+  } catch (error) {
+    logger.warn("[ApiKeys] Redis write failed, kept file copy: %s", (error as Error).message);
+  }
+}
+
+async function deleteRecord(hash: string): Promise<void> {
+  const store = readFileStore();
+  if (store.keys[hash]) {
+    delete store.keys[hash];
+    writeFileStore(store);
+  }
+
+  if (!isRedisAvailable()) return;
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.hDel(HASHED_STORE, hash);
+  } catch (error) {
+    logger.warn("[ApiKeys] Redis delete failed: %s", (error as Error).message);
+  }
+}
+
+/** Move plaintext legacy keys into the hashed stores. Best effort. */
 async function migrateLegacyKeys(): Promise<void> {
   if (!isRedisAvailable()) return;
   const redis = getRedis();
@@ -111,45 +189,39 @@ async function migrateLegacyKeys(): Promise<void> {
     for (const key of legacy) {
       const token = key.slice(`${LEGACY_PREFIX}:`.length);
       if (!token) continue;
-      const hash = hashToken(token);
-      const exists = await redis.hExists(HASHED_STORE, hash);
-      if (!exists) {
-        const raw = await redis.get(key);
-        const parsed = raw ? (JSON.parse(raw) as { role?: string; createdAt?: string }) : {};
-        const record: ApiKeyRecord = {
-          hash,
-          label: "legacy key",
-          role: parsed.role === "admin" ? "admin" : "user",
-          sessions: ["*"],
-          createdAt: parsed.createdAt ?? new Date().toISOString(),
-          lastUsedAt: null,
-        };
-        await redis.hSet(HASHED_STORE, hash, JSON.stringify(record));
-      }
+      const raw = await redis.get(key);
+      const parsed = raw ? (JSON.parse(raw) as { role?: string; createdAt?: string }) : {};
+      const record: ApiKeyRecord = {
+        hash: hashToken(token),
+        label: "legacy key",
+        role: parsed.role === "admin" ? "admin" : "user",
+        sessions: ["*"],
+        createdAt: parsed.createdAt ?? new Date().toISOString(),
+        lastUsedAt: null,
+      };
+      await persistRecord(record);
       await redis.del(key);
     }
   } catch {
-    // Migration is opportunistic; authentication still works for v2 records.
+    // Migration is opportunistic; existing records keep working.
   }
 }
 
 export async function listApiKeys(): Promise<ApiKeySummary[]> {
-  const redis = redisOrThrow();
   await migrateLegacyKeys();
-  const all = await redis.hGetAll(HASHED_STORE);
-  return Object.entries(all)
-    .map(([hash, raw]) => parseRecord(hash, raw))
-    .filter((record): record is ApiKeyRecord => record !== null)
+  const merged = await readAllRecords();
+  return [...merged.values()]
     .map(toSummary)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
 export async function createApiKey(input: {
   label: string;
-  role: ApiKeyRole;
-  sessions?: string[];
+  /** Exactly one session: a key is bound to the number it may send from. */
+  session: string;
+  /** Reserved for legacy callers; dashboard keys are always "user". */
+  role?: ApiKeyRole;
 }): Promise<{ token: string; key: ApiKeySummary }> {
-  const redis = redisOrThrow();
   await migrateLegacyKeys();
 
   // 32 random bytes as base64url: no padding, URL-safe, 256 bits of entropy.
@@ -158,71 +230,52 @@ export async function createApiKey(input: {
     hash: hashToken(token),
     label: input.label.trim() || "unnamed",
     role: input.role === "admin" ? "admin" : "user",
-    sessions: normalizeSessions(input.sessions),
+    sessions: [input.session.trim()],
     createdAt: new Date().toISOString(),
     lastUsedAt: null,
   };
 
-  await redis.hSet(HASHED_STORE, record.hash, JSON.stringify(record));
+  await persistRecord(record);
   return { token, key: toSummary(record) };
 }
 
 export async function revokeApiKey(idPrefix: string): Promise<boolean> {
-  const redis = redisOrThrow();
-  const hashes = await redis.hKeys(HASHED_STORE);
-  const target = hashes.find((hash) => shortId(hash) === idPrefix || hash === idPrefix);
-  if (!target) return false;
-  await redis.hDel(HASHED_STORE, target);
+  const merged = await readAllRecords();
+  const record = [...merged.values()].find(
+    (entry) => shortId(entry.hash) === idPrefix || entry.hash === idPrefix,
+  );
+  if (!record) return false;
+  await deleteRecord(record.hash);
   return true;
 }
 
 /** Resolve a presented token. Legacy plaintext keys are migrated on the way. */
 export async function findApiKeyByToken(token: string): Promise<ApiKeyAuth | null> {
-  if (!isRedisAvailable()) return null;
-  const redis = getRedis();
-  if (!redis) return null;
-
   const hash = hashToken(token);
-  const raw = await redis.hGet(HASHED_STORE, hash).catch(() => null);
-  if (raw) {
-    const record = parseRecord(hash, raw);
-    if (!record) return null;
-    await redis
-      .hSet(HASHED_STORE, hash, JSON.stringify({ ...record, lastUsedAt: new Date().toISOString() }))
-      .catch(() => undefined);
-    return {
-      id: shortId(record.hash),
-      label: record.label,
-      role: record.role,
-      sessions: record.sessions,
-    };
+  const merged = await readAllRecords();
+  const record = merged.get(hash);
+
+  if (!record) {
+    // Legacy plaintext key: accept once, then migrate.
+    await migrateLegacyKeys();
+    const retried = (await readAllRecords()).get(hash);
+    if (!retried) return null;
+    return touch(retried);
   }
 
-  // Legacy plaintext key: accept once, then migrate.
-  const legacy = await redis.get(`${LEGACY_PREFIX}:${token}`).catch(() => null);
-  if (!legacy) return null;
+  return touch(record);
+}
 
-  try {
-    const parsed = JSON.parse(legacy) as { role?: string; createdAt?: string };
-    const record: ApiKeyRecord = {
-      hash,
-      label: "legacy key",
-      role: parsed.role === "admin" ? "admin" : "user",
-      sessions: ["*"],
-      createdAt: parsed.createdAt ?? new Date().toISOString(),
-      lastUsedAt: new Date().toISOString(),
-    };
-    await redis.hSet(HASHED_STORE, hash, JSON.stringify(record));
-    await redis.del(`${LEGACY_PREFIX}:${token}`);
-    return {
-      id: shortId(hash),
-      label: record.label,
-      role: record.role,
-      sessions: record.sessions,
-    };
-  } catch {
-    return null;
-  }
+async function touch(record: ApiKeyRecord): Promise<ApiKeyAuth> {
+  const updated: ApiKeyRecord = { ...record, lastUsedAt: new Date().toISOString() };
+  // Best effort: a failed touch must never reject a valid request.
+  await persistRecord(updated).catch(() => undefined);
+  return {
+    id: shortId(updated.hash),
+    label: updated.label,
+    role: updated.role,
+    sessions: updated.sessions,
+  };
 }
 
 /** True when a key may act on a session (["*"] means every session). */

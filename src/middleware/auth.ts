@@ -75,24 +75,23 @@ export async function authMiddleware(c: Context, next: Next) {
     }
   }
 
-  // Try hashed Redis API keys (legacy plaintext keys migrate on use)
-  if (isRedisAvailable()) {
-    for (const apiKey of authCandidates) {
-      try {
-        const record = await findApiKeyByToken(apiKey);
-        if (record) {
-          const auth: AuthData = {
-            role: record.role,
-            keyId: record.id,
-            label: record.label,
-            sessions: record.sessions,
-          };
-          c.set("auth", auth);
-          return next();
-        }
-      } catch (error) {
-        logger.error("Auth middleware error: %s", (error as Error).message);
+  // Hashed keys live in Redis and/or the file store; the latter works without
+  // Redis, so the lookup is not gated on availability.
+  for (const apiKey of authCandidates) {
+    try {
+      const record = await findApiKeyByToken(apiKey);
+      if (record) {
+        const auth: AuthData = {
+          role: record.role,
+          keyId: record.id,
+          label: record.label,
+          sessions: record.sessions,
+        };
+        c.set("auth", auth);
+        return next();
       }
+    } catch (error) {
+      logger.error("Auth middleware error: %s", (error as Error).message);
     }
   }
 

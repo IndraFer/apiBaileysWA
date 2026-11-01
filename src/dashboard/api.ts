@@ -35,12 +35,7 @@ import {
 } from "@/services/aiAgent";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
-import {
-  ApiKeyStoreUnavailable,
-  createApiKey,
-  listApiKeys,
-  revokeApiKey,
-} from "@/services/apiKeys";
+import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -1270,9 +1265,6 @@ dashboardApi.get("/api-keys", async (c) => {
   try {
     return c.json({ success: true, data: await listApiKeys() });
   } catch (err) {
-    if (err instanceof ApiKeyStoreUnavailable) {
-      return c.json({ success: false, message: err.message }, 503);
-    }
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
 });
@@ -1290,15 +1282,32 @@ dashboardApi.post("/api-keys", async (c) => {
     return c.json({ success: false, message: "label must be 2-64 characters" }, 400);
   }
 
-  const role = body.role === "admin" ? "admin" : "user";
-  const sessions = Array.isArray(body.sessions)
-    ? body.sessions.filter(
-        (value: unknown): value is string => typeof value === "string" && value.length > 0,
-      )
-    : ["*"];
+  const session = String(body.session ?? "").trim();
+  if (!session) {
+    return c.json(
+      {
+        success: false,
+        message: "session is required",
+        field: "session",
+        hint: "Pick the connected session this key may send from.",
+      },
+      400,
+    );
+  }
+  if (!connectionManager.listSessions().some((entry) => entry.sessionId === session)) {
+    return c.json(
+      {
+        success: false,
+        message: `Session "${session}" is not connected`,
+        field: "session",
+        hint: "Connect the session first (Dashboard → Sessions), then create the key.",
+      },
+      400,
+    );
+  }
 
   try {
-    const created = await createApiKey({ label, role, sessions });
+    const created = await createApiKey({ label, session, role: "user" });
     return c.json(
       {
         success: true,
@@ -1308,9 +1317,6 @@ dashboardApi.post("/api-keys", async (c) => {
       201,
     );
   } catch (err) {
-    if (err instanceof ApiKeyStoreUnavailable) {
-      return c.json({ success: false, message: err.message }, 503);
-    }
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
 });
@@ -1326,9 +1332,6 @@ dashboardApi.delete("/api-keys/:id", async (c) => {
     if (!revoked) return c.json({ success: false, message: "API key not found" }, 404);
     return c.json({ success: true, message: "API key revoked" });
   } catch (err) {
-    if (err instanceof ApiKeyStoreUnavailable) {
-      return c.json({ success: false, message: err.message }, 503);
-    }
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
 });

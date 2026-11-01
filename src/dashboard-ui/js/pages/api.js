@@ -36,11 +36,20 @@
     state.sessions = (result.success ? result.data : []).map((session) =>
       String(session.sessionId),
     );
-    const select = document.getElementById("key-sessions");
+    const select = document.getElementById("key-session");
+    const button = document.getElementById("btn-create-key");
+    if (button) button.disabled = state.sessions.length === 0;
+
     if (!select) return;
+    if (state.sessions.length === 0) {
+      window.UI.setHtml(select, '<option value="">No connected session</option>');
+      return;
+    }
     window.UI.setHtml(
       select,
-      state.sessions.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join(""),
+      ['<option value="">Select a session…</option>']
+        .concat(state.sessions.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`))
+        .join(""),
     );
   }
 
@@ -71,7 +80,6 @@
         (key) => `
         <tr>
           <td><strong>${esc(key.label)}</strong><div class="text-muted text-xs font-mono">${esc(key.id)}</div></td>
-          <td><span class="badge ${key.role === "admin" ? "badge-success" : "badge-info"}">${esc(key.role.toUpperCase())}</span></td>
           <td class="text-sm">${esc(scopeLabel(key.sessions))}</td>
           <td class="text-muted text-sm">${formatTime(key.createdAt)}</td>
           <td class="text-muted text-sm">${formatTime(key.lastUsedAt)}</td>
@@ -84,7 +92,7 @@
 
     window.UI.setHtml(
       table,
-      `<tr><th>Label</th><th>Role</th><th>Scope</th><th>Created</th><th>Last used</th><th class="u-text-right">Actions</th></tr>${rows}`,
+      `<tr><th>Label</th><th>Session</th><th>Created</th><th>Last used</th><th class="u-text-right">Actions</th></tr>${rows}`,
     );
 
     table.querySelectorAll("[data-revoke-key]").forEach((button) => {
@@ -152,13 +160,14 @@
 
   async function createKey() {
     const label = document.getElementById("key-label").value.trim();
-    const role = document.getElementById("key-role").value;
-    const selected = Array.from(document.getElementById("key-sessions").selectedOptions).map(
-      (option) => option.value,
-    );
+    const session = document.getElementById("key-session").value;
 
     if (label.length < 2) {
       window.Toast.error("Label must be at least 2 characters");
+      return;
+    }
+    if (!session) {
+      window.Toast.error("Select the session this key may send from");
       return;
     }
 
@@ -166,11 +175,7 @@
     button.disabled = true;
     button.textContent = "Creating...";
 
-    const result = await window.API.post("/api-keys", {
-      label,
-      role,
-      sessions: selected.length > 0 ? selected : ["*"],
-    });
+    const result = await window.API.post("/api-keys", { label, session });
 
     button.disabled = false;
     button.textContent = "Create key";
@@ -220,25 +225,18 @@
 
         <div class="card">
           <h3 class="u-mt-0">Create API key</h3>
-          <div class="u-grid-3-gap">
+          <div class="u-grid-2-gap">
             <div class="form-group u-mb-0">
               <label for="key-label">Label</label>
               <input id="key-label" class="input" placeholder="chatbot-widget" autocomplete="off">
             </div>
             <div class="form-group u-mb-0">
-              <label for="key-role">Role</label>
-              <select id="key-role" class="input">
-                <option value="user">USER</option>
-                <option value="admin">ADMIN</option>
-              </select>
-            </div>
-            <div class="form-group u-mb-0">
-              <label for="key-sessions">Session scope</label>
-              <select id="key-sessions" class="input" multiple size="3"></select>
+              <label for="key-session">Session</label>
+              <select id="key-session" class="input"></select>
             </div>
           </div>
           <div class="u-mt-075-between">
-            <span class="text-muted text-xs">No selection means every session. Scope restricts which <code>from</code> values the key may use.</span>
+            <span class="text-muted text-xs">One key is bound to one session. Create a separate key per number you expose.</span>
             <button class="btn btn-primary btn-sm" id="btn-create-key">Create key</button>
           </div>
         </div>

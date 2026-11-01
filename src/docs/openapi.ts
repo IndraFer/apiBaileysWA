@@ -260,12 +260,12 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
           responses: { 200: { description: "QR code data URL" } },
         },
       },
-      "/messages": {
+      "/api/v1/messages": {
         post: {
           tags: ["Messages"],
           summary: "Send text, image, document or location (unified)",
           description:
-            "Third-party friendly endpoint. from accepts a session id or its bound phone number. Group targets require ALLOW_GROUP_SEND=true (and ALLOWED_GROUP_JIDS when set).",
+            "Canonical path. /messages remains as an alias. from accepts a session id or its bound phone number (a key is bound to one session). Group targets require ALLOW_GROUP_SEND=true (and ALLOWED_GROUP_JIDS when set). A public JSON Schema is available at /api/v1/messages/schema.",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
           requestBody: {
             required: true,
@@ -367,6 +367,14 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
               },
             },
           },
+        },
+      },
+      "/api/v1/messages/schema": {
+        get: {
+          tags: ["Messages"],
+          summary: "Request JSON Schema for the unified send endpoint",
+          description: "Public contract for LLM tool definitions and external validators.",
+          responses: { 200: { description: "JSON Schema (draft-07)" } },
         },
       },
       "/chats/{sessionId}/send": {
