@@ -1,6 +1,6 @@
 {
   "files": {
-    "includes": ["**", "!**/vendor/**"]
+    "includes": ["**", "!**/vendor/**", "!**/*.min.js"]
   },
   "formatter": {
     "enabled": true,
