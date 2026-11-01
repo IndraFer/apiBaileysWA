@@ -12,6 +12,9 @@ const {
   AUTH_STATE_BACKEND,
   AUTH_STATE_SWITCH_CONFIRM,
   CSP_REPORT_ONLY,
+  AI_HISTORY_MAX_MESSAGES,
+  AI_HISTORY_MAX_AGE_MS,
+  AI_HISTORY_MAX_CHARS,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -399,6 +402,13 @@ const config = {
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
+
+  /** Prompt history limits: count, age window and character budget. */
+  aiHistory: {
+    maxMessages: AI_HISTORY_MAX_MESSAGES ? Number(AI_HISTORY_MAX_MESSAGES) : 12,
+    maxAgeMs: AI_HISTORY_MAX_AGE_MS ? Number(AI_HISTORY_MAX_AGE_MS) : 6 * 60 * 60 * 1000,
+    maxChars: AI_HISTORY_MAX_CHARS ? Number(AI_HISTORY_MAX_CHARS) : 8000,
+  },
   /** Per-role session quotas for non-admin dashboard users (0 = unlimited). */
   maxSessionsPerUser: MAX_SESSIONS_PER_USER ? Number(MAX_SESSIONS_PER_USER) : 3,
   maxSessionsPerManager: MAX_SESSIONS_PER_MANAGER ? Number(MAX_SESSIONS_PER_MANAGER) : 5,

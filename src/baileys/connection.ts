@@ -31,6 +31,7 @@ import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
+import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
@@ -924,10 +925,14 @@ export class BaileysConnection {
     currentTexts: string[],
   ): Array<{ role: "user" | "assistant"; content: string }> {
     const pending = [...currentTexts];
-    const entries = this.store
-      .loadMessages(conversationId, 20)
-      .map((m) => ({ text: extractMessageText(m), fromMe: Boolean(m.key.fromMe) }))
-      .filter((entry): entry is { text: string; fromMe: boolean } => Boolean(entry.text));
+    const entries: HistoryEntry[] = this.store
+      .loadMessages(conversationId, 50)
+      .map((m) => ({
+        text: extractMessageText(m) ?? "",
+        fromMe: Boolean(m.key.fromMe),
+        timestamp: Number(m.messageTimestamp || 0) * 1000,
+      }))
+      .filter((entry) => entry.text.length > 0);
 
     // Drop the trailing inbound entries that belong to the current batch.
     for (let index = entries.length - 1; index >= 0 && pending.length > 0; index -= 1) {
@@ -938,10 +943,7 @@ export class BaileysConnection {
       }
     }
 
-    return entries.slice(-12).map((entry) => ({
-      role: entry.fromMe ? ("assistant" as const) : ("user" as const),
-      content: entry.text,
-    }));
+    return selectHistory(entries, config.aiHistory);
   }
 
   /** Timestamp (ms) of the last human message, or null when there is none. */

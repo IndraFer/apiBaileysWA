@@ -170,6 +170,9 @@ static away message is sent instead, so the customer always gets an answer.
 | `AI_MAX_TOKENS` | `1024` | Reply budget |
 | `AI_TIMEOUT_MS` | `25000` | Provider request timeout |
 | `AI_TOOL_MAX_ROUNDS` | `2` | Tool-call rounds per reply |
+| `AI_HISTORY_MAX_MESSAGES` | `12` | Prior messages sent as context |
+| `AI_HISTORY_MAX_AGE_MS` | `21600000` | Ignore history older than 6 hours |
+| `AI_HISTORY_MAX_CHARS` | `8000` | Character budget for the history block |
 | `AI_GUARD_ENABLED` | `true` | Prompt-injection guard on/off |
 | `AI_GUARD_MAX_INPUT_CHARS` | `4000` | Input cap before refusal |
 | `ROUTING_BATCH_IDLE_MS` | `20000` | Debounce window per conversation |
