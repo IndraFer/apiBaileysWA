@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-01
+
+### Added
+
+- versioned path, public schema, per-session keys and file-backed storage
+
 ## [1.8.1] - 2026-11-01
 
 ### Added
