@@ -61,9 +61,9 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// The dashboard ships inline handlers/styles, hence 'unsafe-inline' for those two
-// directives only. Everything else stays same-origin; clickjacking, base-uri and
-// form hijacking are blocked outright.
+// Strict CSP: the dashboard ships no inline scripts or styles, so both
+// directives stay at 'self'. Violations are reported to /dashboard/csp-report so
+// the real source can be read from server logs instead of guessed.
 const DASHBOARD_CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -75,7 +75,12 @@ const DASHBOARD_CSP = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
+  "report-uri /dashboard/csp-report",
+  "report-to csp",
 ].join("; ");
+
+const CSP_REPORT_TO =
+  '{"group":"csp","max_age":10800,"endpoints":[{"url":"/dashboard/csp-report"}]}';
 
 app.use("*", async (c, next) => {
   const applyHeaders = (target: Headers) => {
@@ -84,6 +89,7 @@ app.use("*", async (c, next) => {
     target.set("Referrer-Policy", "no-referrer");
     target.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     target.set("Content-Security-Policy", DASHBOARD_CSP);
+    target.set("Report-To", CSP_REPORT_TO);
     if (isSecureRequest(c)) {
       target.set("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
     }
@@ -96,6 +102,7 @@ app.use("*", async (c, next) => {
   c.header("Referrer-Policy", "no-referrer");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   c.header("Content-Security-Policy", DASHBOARD_CSP);
+  c.header("Report-To", CSP_REPORT_TO);
   if (isSecureRequest(c)) {
     c.header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
   }
@@ -182,6 +189,66 @@ app.get("/openapi.json", (_c) => {
 
 // ── Routes ──────────────────────────────────────────
 app.route("/status", statusRoutes);
+// CSP violation reports. Browsers POST here for report-uri (Safari/legacy) and
+// report-to (Chrome). The log line carries the directive, source file, line and
+// sample, which is what identifies the real source of a violation.
+const cspReportCounts = new Map<string, { count: number; resetAt: number }>();
+
+app.post("/dashboard/csp-report", async (c) => {
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const now = Date.now();
+  const entry = cspReportCounts.get(ip);
+  if (!entry || entry.resetAt < now) {
+    cspReportCounts.set(ip, { count: 1, resetAt: now + 60_000 });
+  } else if (entry.count >= 120) {
+    return c.body(null, 204);
+  } else {
+    entry.count += 1;
+  }
+
+  const raw = await c.req.text().catch(() => "");
+  if (!raw || raw.length > 8192) return c.body(null, 204);
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return c.body(null, 204);
+  }
+
+  const reports: Array<Record<string, unknown>> = [];
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const body = (item as Record<string, unknown>)?.body;
+      if (body && typeof body === "object") reports.push(body as Record<string, unknown>);
+    }
+  } else if (payload && typeof payload === "object") {
+    const legacy = (payload as Record<string, unknown>)["csp-report"];
+    if (legacy && typeof legacy === "object") reports.push(legacy as Record<string, unknown>);
+  }
+
+  for (const report of reports.slice(0, 5)) {
+    appLogger.warn(
+      "[CSP-REPORT] %s",
+      JSON.stringify({
+        directive: report["effective-directive"] ?? report.effectiveDirective ?? "",
+        blocked: String(
+          report["blocked-uri"] ?? report.blockedURL ?? report.blockedURI ?? "",
+        ).slice(0, 300),
+        document: String(
+          report["document-uri"] ?? report.documentURL ?? report.documentURI ?? "",
+        ).slice(0, 300),
+        source: String(report["source-file"] ?? report.sourceFile ?? "").slice(0, 300),
+        line: report["line-number"] ?? report.lineNumber ?? null,
+        sample: String(report["script-sample"] ?? report.sample ?? "").slice(0, 200),
+        ua: (c.req.header("user-agent") || "").slice(0, 160),
+      }),
+    );
+  }
+
+  return c.body(null, 204);
+});
+
 app.route("/sessions", sessionRoutes);
 app.route("/chats", chatRoutes);
 app.route("/groups", groupRoutes);
