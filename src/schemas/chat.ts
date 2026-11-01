@@ -129,3 +129,12 @@ export const sendPollSchema = z.object({
   values: z.array(z.string()).min(2, "At least two options are required"),
   selectableCount: z.number().int().positive().optional().default(1),
 });
+
+/** AI -> human takeover request. */
+export const handoffSchema = z
+  .object({
+    conversationId: z.string().min(5, "conversationId is required"),
+    reason: z.string().max(200).optional(),
+    pauseMinutes: z.number().int().min(1).max(1440).optional(),
+  })
+  .strict();

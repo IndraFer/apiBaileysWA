@@ -21,6 +21,7 @@ import {
   editMessageSchema,
   fetchHistorySchema,
   forwardMessageSchema,
+  handoffSchema,
   onWhatsAppSchema,
   presenceSchema,
   readMessagesSchema,
@@ -489,6 +490,31 @@ chatRoutes.post("/:sessionId/download-media", sessionValidator, async (c) => {
     return success(c, media);
   } catch (err) {
     return error(c, `Failed to download media: ${(err as Error).message}`);
+  }
+});
+
+/**
+ * POST /chats/:sessionId/handoff
+ *
+ * AI -> human takeover. Pausing a conversation stops the AI from answering it
+ * for `pauseMinutes` (default 30, clamped 1..1440), even while the AI window is
+ * open, so the agent can take over without the bot talking over them.
+ */
+chatRoutes.post("/:sessionId/handoff", sessionValidator, async (c) => {
+  const parsed = handoffSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+
+  try {
+    const session = connectionManager.getSession(c.req.param("sessionId") as string);
+    const reason = parsed.data.reason ?? "ai_handoff";
+    const result = session.pauseAi(
+      parsed.data.conversationId,
+      (parsed.data.pauseMinutes ?? 30) * 60_000,
+      reason,
+    );
+    return success(c, { ...result, reason }, "AI paused for this conversation");
+  } catch (err) {
+    return error(c, (err as Error).message, 404);
   }
 });
 

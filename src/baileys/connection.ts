@@ -31,7 +31,8 @@ import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
-import { isAiWindowActive, resolveRoutingConfig } from "@/services/routing";
+import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
@@ -81,6 +82,25 @@ const LOGGER_OMIT_KEYS = [
   "apiKey",
   "authorization",
 ];
+
+/**
+ * Minimal printf-style formatting for the router logger adapter
+ * (pino's typings do not accept a variadic string overload here).
+ */
+function formatLog(message: string, args: unknown[]): string {
+  let index = 0;
+  return message.replace(/%[sd]/g, () => {
+    const value = args[index];
+    index += 1;
+    if (typeof value === "string") return value;
+    if (value === undefined) return "?";
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  });
+}
 
 /**
  * Extract the human-readable text of a message (plain text or media caption).
@@ -172,6 +192,8 @@ export class BaileysConnection {
    * activity is detected without a separate presence service.
    */
   private apiSentIds = new Set<string>();
+  /** Per-conversation debounce and human-pause state machine. */
+  private aiRouter: ConversationRouter;
   private _isConnected = false;
   private _qrCode: string | null = null;
   private _pairingCode: string | null = null;
@@ -180,6 +202,29 @@ export class BaileysConnection {
     this.sessionId = sessionId;
     this.options = options;
     this.store = new MemoryStore({ sessionId });
+    this.aiRouter = new ConversationRouter({
+      sessionId,
+      getRouting: () => resolveRoutingConfig(this.options.routing),
+      isAiEligible: () => this.isAiEligible(),
+      generateReply: (input) => this.generateAiReply(input),
+      deliver: async (conversationId, text, lastMessage) => {
+        await this.sendMessage(conversationId, { text }, { quoted: lastMessage });
+      },
+      onFailure: async (conversationId, lastMessage) => {
+        const autoReply = this.options.autoReply ?? config.autoReply;
+        if (!autoReply.enabled) return;
+        await this.sendMessage(
+          conversationId,
+          { text: autoReply.message },
+          { quoted: lastMessage },
+        );
+      },
+      logger: {
+        debug: (message, ...args) => logger.debug(formatLog(message, args)),
+        info: (message, ...args) => logger.info(formatLog(message, args)),
+        warn: (message, ...args) => logger.warn(formatLog(message, args)),
+      },
+    });
   }
 
   get isConnected(): boolean {
@@ -593,8 +638,7 @@ export class BaileysConnection {
     if (messages.length === 0) return;
     if (!autoReply.enabled && !ai.enabled) return;
 
-    const aiReady = Boolean(ai.enabled && isAiWindowActive(routing) && ai.model && ai.apiKey);
-    if (aiReady && (await this.replyWithAi(messages, ai, routing))) return;
+    if (this.enqueueForAi(messages, routing)) return;
 
     if (!autoReply.enabled) return;
 
@@ -651,89 +695,112 @@ export class BaileysConnection {
   }
 
   /**
-   * Ask the AI agent for a reply and send it.
-   * Returns true when the AI path handled the event (including the deliberate
-   * "stay silent because a human is active" case), so the static fallback
-   * does not run as well.
+   * Route inbound texts into the AI router.
+   * Returns true when the AI path owns this event (queued or paused), so the
+   * static fallback rules do not also run.
    */
-  private async replyWithAi(
-    messages: WAMessage[],
-    ai: ReturnType<typeof resolveAiConfig>,
-    routing: ReturnType<typeof resolveRoutingConfig>,
-  ): Promise<boolean> {
+  private enqueueForAi(messages: WAMessage[], routing: ResolvedRouting): boolean {
     const last = messages[messages.length - 1];
     const remoteJid = last?.key.remoteJid;
-    if (!remoteJid || !last) return false;
-
-    // Human replied recently (phone, dashboard, WhatsApp Web) → stay silent.
-    if (this.isHumanRecentlyActive(remoteJid, routing.humanIdleMs)) {
-      logger.debug(
-        "[%s] AI skipped for %s: human activity within %dms",
-        this.sessionId,
-        remoteJid,
-        routing.humanIdleMs,
-      );
-      return true;
-    }
-
-    const cooldownKey = `${this.sessionId}:cooldown:${remoteJid}`;
-    if (autoReplyCooldownCache.has(cooldownKey)) {
-      logger.debug("[%s] AI skipped for %s: cooldown active", this.sessionId, remoteJid);
-      return true;
-    }
+    if (!last || !remoteJid) return false;
 
     const texts = messages
       .map((m) => extractMessageText(m))
-      .filter((text): text is string => Boolean(text))
-      .slice(-routing.maxBatchMessages);
+      .filter((text): text is string => Boolean(text));
     if (texts.length === 0) return false;
 
-    // Exclude the current batch from history: it is sent explicitly below.
-    const currentIds = new Set(
-      messages.map((m) => (m.key.id ? String(m.key.id) : "")).filter(Boolean),
-    );
-    const history = this.store
-      .loadMessages(remoteJid, 16)
-      .filter((m) => !currentIds.has(String(m.key.id ?? "")))
-      .map((m) => ({ message: extractMessageText(m), fromMe: Boolean(m.key.fromMe) }))
-      .filter((entry): entry is { message: string; fromMe: boolean } => Boolean(entry.message))
-      .map((entry) => ({
-        role: entry.fromMe ? ("assistant" as const) : ("user" as const),
-        content: entry.message,
-      }));
-
-    autoReplyCooldownCache.set(cooldownKey, true);
-    await this.humanizeReadStep(last);
-
-    const result = await generateAgentReply({
-      sessionId: this.sessionId,
-      conversationId: remoteJid,
-      texts,
-      history,
-      ai,
-    });
-
-    if (!result.ok) {
-      logger.warn("[%s] AI reply failed for %s: %s", this.sessionId, remoteJid, result.error);
-      return false;
+    // A human wrote in this chat → keep it human-owned for humanIdleMs.
+    const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
+    if (lastHumanAt !== null) {
+      this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
     }
 
-    logger.info(
-      "[%s] AI reply to %s (tools: %s)",
-      this.sessionId,
-      remoteJid,
-      result.toolsUsed.length > 0 ? result.toolsUsed.join(",") : "none",
-    );
-    await this.sendMessage(remoteJid, { text: result.text }, { quoted: last });
+    if (!this.isAiEligible()) return false;
+
+    void this.humanizeReadStep(last);
+    this.aiRouter.enqueue(remoteJid, texts, last);
     return true;
   }
 
-  /**
-   * True when a human sent a message in this conversation recently.
-   * `fromMe` messages sent through this API are tracked separately, so only
-   * messages typed elsewhere (phone, WhatsApp Web) count as human activity.
-   */
-  private isHumanRecentlyActive(conversationId: string, humanIdleMs: number): boolean {
+  /** True when the AI may answer right now (enabled, window open, configured). */
+  private isAiEligible(): boolean {
+    const ai = resolveAiConfig(this.options.ai);
+    if (!ai.enabled || !ai.model) return false;
+    if (ai.driver === "openai" && !ai.apiKey) return false;
+    if (ai.driver === "webhook" && !ai.agentUrl) return false;
+    return isAiWindowActive(resolveRoutingConfig(this.options.routing));
+  }
+
+  /** Generate a reply, or dispatch the event when the webhook driver is used. */
+  private async generateAiReply(input: {
+    conversationId: string;
+    texts: string[];
+  }): Promise<RouterGeneration> {
+    const ai = resolveAiConfig(this.options.ai);
+
+    if (ai.driver === "webhook") {
+      const result = await deliverWebhookOnce(
+        ai.agentUrl,
+        {
+          event: "message.inbound",
+          sessionId: this.sessionId,
+          conversationId: input.conversationId,
+          texts: input.texts,
+          timestamp: Date.now(),
+          reply: { endpoint: `/chats/${this.sessionId}/send` },
+        },
+        config.ai.serviceToken,
+        ai.timeoutMs,
+      );
+      if (!result.ok) return { ok: false, error: result.error ?? `HTTP ${result.status}` };
+      return { ok: true, text: null };
+    }
+
+    const result = await generateAgentReply({
+      sessionId: this.sessionId,
+      conversationId: input.conversationId,
+      texts: input.texts,
+      history: this.buildHistory(input.conversationId, input.texts),
+      ai,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    logger.info(
+      "[%s] AI reply to %s (tools: %s)",
+      this.sessionId,
+      input.conversationId,
+      result.toolsUsed.length > 0 ? result.toolsUsed.join(",") : "none",
+    );
+    return { ok: true, text: result.text };
+  }
+
+  /** Recent history, excluding the texts that are being answered now. */
+  private buildHistory(
+    conversationId: string,
+    currentTexts: string[],
+  ): Array<{ role: "user" | "assistant"; content: string }> {
+    const pending = [...currentTexts];
+    const entries = this.store
+      .loadMessages(conversationId, 20)
+      .map((m) => ({ text: extractMessageText(m), fromMe: Boolean(m.key.fromMe) }))
+      .filter((entry): entry is { text: string; fromMe: boolean } => Boolean(entry.text));
+
+    // Drop the trailing inbound entries that belong to the current batch.
+    for (let index = entries.length - 1; index >= 0 && pending.length > 0; index -= 1) {
+      const entry = entries[index];
+      if (entry && !entry.fromMe && entry.text === pending[pending.length - 1]) {
+        entries.splice(index, 1);
+        pending.pop();
+      }
+    }
+
+    return entries.slice(-12).map((entry) => ({
+      role: entry.fromMe ? ("assistant" as const) : ("user" as const),
+      content: entry.text,
+    }));
+  }
+
+  /** Timestamp (ms) of the last human message, or null when there is none. */
+  private lastHumanActivityAt(conversationId: string, humanIdleMs: number): number | null {
     const cutoff = Date.now() - humanIdleMs;
     const history = this.store.loadMessages(conversationId, 20);
     for (let index = history.length - 1; index >= 0; index -= 1) {
@@ -743,9 +810,19 @@ export class BaileysConnection {
       if (timestamp < cutoff) continue;
       const id = msg.key.id ? String(msg.key.id) : "";
       if (id && this.apiSentIds.has(id)) continue;
-      return true;
+      return timestamp;
     }
-    return false;
+    return null;
+  }
+
+  /**
+   * Keep a conversation human-owned for `pauseMs`. Used by the AI handoff
+   * endpoint; the deadline is clamped to at least one minute.
+   */
+  pauseAi(conversationId: string, pauseMs: number, reason = "handoff"): { pausedUntil: number } {
+    const until = Date.now() + Math.max(60_000, pauseMs);
+    this.aiRouter.pause(conversationId, until, reason);
+    return { pausedUntil: until };
   }
 
   /** Remember an API-sent message id so it is not mistaken for human activity. */
@@ -1106,6 +1183,7 @@ export class BaileysConnection {
       this.clearOnlinePresenceTimeout = null;
     }
     await this.store.destroy();
+    this.aiRouter.dispose();
     this.options.onConnectionClose?.();
   }
 

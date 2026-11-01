@@ -207,12 +207,32 @@ optional private-host block (`AI_TOOL_BLOCK_INTERNAL`), per-endpoint timeout,
 response truncation (`AI_TOOL_MAX_RESPONSE_CHARS`) and `AI_TOOL_MAX_ROUNDS` to
 stop tool loops.
 
-> **Status:** routing window, human-activity detection, provider call and
-tool-calling are implemented. The idle **debounce** (`ROUTING_BATCH_IDLE_MS`,
-> `ROUTING_BATCH_MAX_WAIT_MS`) is configured but not enforced yet: messages are
-> batched only when they arrive in the same `messages.upsert` event, and the
-> 5-minute auto-reply cooldown currently prevents a second reply to the same
-> chat.
+> **Status:** routing window, human-activity detection, idle **debounce**,
+> provider call, tool-calling and AI→human handoff are implemented.
+>
+> - Messages are collected until the chat is idle for `ROUTING_BATCH_IDLE_MS`
+>   (reset on every new message), capped by `ROUTING_BATCH_MAX_WAIT_MS` from the
+>   first message and by `ROUTING_MAX_BATCH_MESSAGES`. One idle window → one
+>   prompt → one reply.
+> - After human activity the conversation stays human-owned for
+>   `ROUTING_HUMAN_IDLE_MS`; the backlog that arrived meanwhile is answered in a
+>   single prompt when the pause expires.
+> - Exactly one timer is armed per conversation; a stale timer can never fire a
+>   reply (epoch guard), so there is no periodic polling.
+
+#### AI → human takeover
+
+The model (or your gateway) can stop the bot for one conversation:
+
+```http
+POST /chats/:sessionId/handoff
+{ "conversationId": "628xxx@s.whatsapp.net", "reason": "customer_minta_manusia", "pauseMinutes": 30 }
+```
+
+While paused, inbound messages accumulate but the AI stays silent; when the
+pause expires the backlog is answered once. A human reply in the meantime
+extends the pause automatically. `pauseMinutes` is clamped to 1..1440 (default
+30).
 
 ## 🐳 Docker Deployment
 
