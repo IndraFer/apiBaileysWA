@@ -104,6 +104,11 @@ const {
   AI_TOOL_TIMEOUT_MS,
   AI_TOOL_MAX_RESPONSE_CHARS,
   AI_TOOL_BLOCK_INTERNAL,
+  AI_GUARD_ENABLED,
+  AI_GUARD_BLOCK_SCORE,
+  AI_GUARD_MAX_STRIKES,
+  AI_GUARD_MUTE_MS,
+  AI_GUARD_MAX_INPUT_CHARS,
 } = process.env;
 
 /**
@@ -303,6 +308,22 @@ const config = {
     toolMaxResponseChars: AI_TOOL_MAX_RESPONSE_CHARS ? Number(AI_TOOL_MAX_RESPONSE_CHARS) : 2000,
     /** When true, configured tool URLs pointing at private hosts are refused. */
     toolBlockInternal: AI_TOOL_BLOCK_INTERNAL === "true",
+    /**
+     * Prompt-injection tripwire and abuse control. Heuristics are a signal, not
+     * a boundary: the real limits are allowlisted tools, no secrets in the
+     * prompt, output scrubbing and this mute policy.
+     */
+    guard: {
+      enabled: AI_GUARD_ENABLED !== "false",
+      /** Score at or above this refuses the message (default 50). */
+      blockScore: AI_GUARD_BLOCK_SCORE ? Number(AI_GUARD_BLOCK_SCORE) : 50,
+      /** Blocked attempts before the conversation is muted (default 3). */
+      maxStrikes: AI_GUARD_MAX_STRIKES ? Number(AI_GUARD_MAX_STRIKES) : 3,
+      /** Mute duration; messages received meanwhile are ignored (default 15m). */
+      muteMs: AI_GUARD_MUTE_MS ? Number(AI_GUARD_MUTE_MS) : 900000,
+      /** Hard cap on inbound text handed to the model (default 4000 chars). */
+      maxInputChars: AI_GUARD_MAX_INPUT_CHARS ? Number(AI_GUARD_MAX_INPUT_CHARS) : 4000,
+    },
     agentUrl: AI_AGENT_URL || "",
     /** Service identity for gateway -> API internal calls (not per-user). */
     serviceToken: AI_SERVICE_TOKEN || "",

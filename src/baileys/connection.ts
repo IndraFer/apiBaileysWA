@@ -33,6 +33,7 @@ import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
 import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
@@ -193,6 +194,8 @@ export class BaileysConnection {
    * activity is detected without a separate presence service.
    */
   private apiSentIds = new Set<string>();
+  /** Consecutive blocked messages per conversation (abuse control). */
+  private guardStrikes = new Map<string, number>();
   /** Per-conversation debounce and human-pause state machine. */
   private aiRouter: ConversationRouter;
   private _isConnected = false;
@@ -717,10 +720,57 @@ export class BaileysConnection {
     const remoteJid = last?.key.remoteJid;
     if (!last || !remoteJid) return false;
 
+    const guard = config.ai.guard;
     const texts = messages
       .map((m) => extractMessageText(m))
-      .filter((text): text is string => Boolean(text));
+      .filter((text): text is string => Boolean(text))
+      .map((text) => sanitizeUserText(text, guard.maxInputChars))
+      .filter(Boolean);
     if (texts.length === 0) return false;
+
+    // Already muted: ignore silently until it expires. Nothing is queued, so
+    // no stale backlog is answered afterwards — a new message resumes.
+    if (this.aiRouter.isMuted(remoteJid)) {
+      logger.debug("[%s] Ignoring %s during mute", this.sessionId, remoteJid);
+      return true;
+    }
+
+    // Prompt-injection tripwire: refuse obvious override attempts and escalate
+    // repeated ones into a mute.
+    if (guard.enabled) {
+      const verdict = scanUserText(texts.join("\n"));
+      if (verdict.score >= guard.blockScore) {
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId: remoteJid,
+          route: "blocked",
+          reason: verdict.reasons.join(","),
+        });
+        const strikes = (this.guardStrikes.get(remoteJid) ?? 0) + 1;
+        this.guardStrikes.set(remoteJid, strikes);
+        logger.warn(
+          "[%s] Blocked suspicious message from %s (score %d, strike %d): %s",
+          this.sessionId,
+          remoteJid,
+          verdict.score,
+          strikes,
+          verdict.reasons.join(","),
+        );
+        if (strikes >= guard.maxStrikes) {
+          this.aiRouter.mute(remoteJid, Date.now() + guard.muteMs);
+          this.guardStrikes.delete(remoteJid);
+          recordDecision({
+            sessionId: this.sessionId,
+            conversationId: remoteJid,
+            route: "muted",
+            reason: `strikes=${strikes}`,
+          });
+        }
+        return true;
+      }
+      // A clean message resets the counter.
+      this.guardStrikes.delete(remoteJid);
+    }
 
     // A human wrote in this chat → keep it human-owned for humanIdleMs.
     const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);

@@ -282,6 +282,30 @@ pause expires the backlog is answered once. A human reply in the meantime
 extends the pause automatically. `pauseMinutes` is clamped to 1..1440 (default
 30).
 
+#### Prompt-injection & abuse control
+
+Layers, weakest to strongest:
+
+1. **Tripwire (heuristics)** — obvious override / jailbreak / secret-probe
+   patterns are refused before any provider call (`AI_GUARD_BLOCK_SCORE`,
+   default 50). Heuristics are a signal, not a boundary.
+2. **Instruction hierarchy** — customer text is wrapped in
+   `<pesan_pengguna>…</pesan_pengguna>` and the system prompt states that this
+   is data, never instructions.
+3. **Least privilege** — tools only come from the configured allowlist, the URL
+   is never model-controlled, credentials never enter the prompt, and tool
+   rounds plus response size are bounded.
+4. **Output scrubbing** — credential-shaped strings (API keys, bearer tokens,
+   private keys) are redacted from the reply before it is sent.
+5. **Abuse control** — after `AI_GUARD_MAX_STRIKES` blocked messages the
+   conversation is muted for `AI_GUARD_MUTE_MS`. Messages received during a
+   mute are ignored and **not queued**, so nothing stale is answered when the
+   mute expires; the next genuine message resumes normal handling.
+
+Honest limit: heuristics can be rephrased, so layers 3–5 carry the real
+protection — the tripwire mainly stops scripted abuse and produces the signal
+used for muting.
+
 #### Dashboard page
 
 A dedicated **AI & Routing** page (`#ai`, requires `manageSessions`) configures

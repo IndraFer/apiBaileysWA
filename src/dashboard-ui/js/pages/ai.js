@@ -12,6 +12,8 @@
     human: "badge-warning",
     paused: "badge-warning",
     failed: "badge-danger",
+    blocked: "badge-danger",
+    muted: "badge-danger",
   };
 
   /** Ready-to-paste examples: two placeholders + one live free endpoint. */

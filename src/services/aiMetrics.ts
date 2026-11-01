@@ -11,7 +11,7 @@
  */
 import { timeInZone } from "@/services/routing";
 
-export type AiRoute = "ai" | "static" | "human" | "paused" | "failed";
+export type AiRoute = "ai" | "static" | "human" | "paused" | "failed" | "blocked" | "muted";
 
 export interface AiDecision {
   at: number;
@@ -38,6 +38,8 @@ export interface AiMetricsSnapshot {
     humanSkips: number;
     pausedSkips: number;
     failures: number;
+    blocked: number;
+    muted: number;
     toolCalls: number;
     tokensIn: number;
     tokensOut: number;
@@ -62,6 +64,8 @@ const counters = {
   humanSkips: 0,
   pausedSkips: 0,
   failures: 0,
+  blocked: 0,
+  muted: 0,
   toolCalls: 0,
   tokensIn: 0,
   tokensOut: 0,
@@ -129,6 +133,12 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
       counters.failures += 1;
       perSession.failures += 1;
       break;
+    case "blocked":
+      counters.blocked += 1;
+      break;
+    case "muted":
+      counters.muted += 1;
+      break;
   }
 }
 
@@ -177,6 +187,8 @@ export function resetAiMetrics(): void {
   counters.humanSkips = 0;
   counters.pausedSkips = 0;
   counters.failures = 0;
+  counters.blocked = 0;
+  counters.muted = 0;
   counters.toolCalls = 0;
   counters.tokensIn = 0;
   counters.tokensOut = 0;

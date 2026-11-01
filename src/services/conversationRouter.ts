@@ -53,6 +53,8 @@ interface ConversationState {
   lastMessage: WAMessage | null;
   firstAt: number;
   pausedUntil: number;
+  /** While set, inbound messages are ignored (abuse control). */
+  mutedUntil: number;
   timer: ReturnType<typeof setTimeout> | null;
   epoch: number;
   flushing: boolean;
@@ -72,6 +74,17 @@ export class ConversationRouter {
     const routing = this.options.getRouting();
     const state = this.ensure(conversationId);
     const now = Date.now();
+
+    // Muted: ignore everything until the mute expires. Nothing is queued, so
+    // no backlog is answered later — a fresh message after the mute resumes.
+    if (state.mutedUntil > now) {
+      this.options.logger.debug(
+        "[%s] Dropping message for %s during mute",
+        this.options.sessionId,
+        conversationId,
+      );
+      return;
+    }
 
     state.texts.push(...texts);
     state.lastMessage = lastMessage;
@@ -120,6 +133,36 @@ export class ConversationRouter {
     return Boolean(state && state.pausedUntil > Date.now());
   }
 
+  /**
+   * Ignore every inbound message for this conversation until `until`. Pending
+   * texts are discarded: a human/abuser already saw them, and answering them
+   * after the mute would be a stale reply. A new message afterwards resumes
+   * normal handling.
+   */
+  mute(conversationId: string, until: number): void {
+    const state = this.ensure(conversationId);
+    state.mutedUntil = Math.max(state.mutedUntil, until);
+    state.texts = [];
+    state.firstAt = 0;
+    state.epoch += 1;
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    this.options.logger.warn(
+      "[%s] Muted %s until %s",
+      this.options.sessionId,
+      conversationId,
+      new Date(state.mutedUntil).toISOString(),
+    );
+  }
+
+  /** True while the conversation is muted. */
+  isMuted(conversationId: string): boolean {
+    const state = this.conversations.get(conversationId);
+    return Boolean(state && state.mutedUntil > Date.now());
+  }
+
   /** Drop all timers and pending state (session shutdown). */
   dispose(): void {
     for (const state of this.conversations.values()) {
@@ -138,6 +181,7 @@ export class ConversationRouter {
       lastMessage: null,
       firstAt: 0,
       pausedUntil: 0,
+      mutedUntil: 0,
       timer: null,
       epoch: 0,
       flushing: false,
