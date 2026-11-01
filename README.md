@@ -34,6 +34,22 @@
 
 ---
 
+## 🆕 What changed in 1.6
+
+- **AI auto-response per number** — responder mode \`off/window/always\`, IANA
+  time window (cross-midnight), OpenAI-compatible driver, tool-calling RAG,
+  debounce, human takeover, handoff, prompt-injection guard, routing metrics.
+- **Admin panel** — add users, approvals, roles, session ownership
+  (\`ownerId\`), per-role quotas (\`MAX_SESSIONS_PER_USER\`,
+  \`MAX_SESSIONS_PER_MANAGER\`), and delete-with-revoke of sessions+credentials.
+- **Security hardening** — HttpOnly cookie sessions, strict CSP with violation
+  reporting, HSTS/HTTPS redirect behind a trusted proxy, same-origin dashboard
+  APIs, DOMPurify-sanitized rendering.
+- **Webhook reliability** — per-URL circuit breaker and gzip payloads above a
+  configurable threshold, with retries and dead-letter handling.
+- **Cleaner UI** — no inline styles/handlers, shared utility classes, nav gating
+  by session/webhook/role, and a consistent control height.
+
 ## 🚀 Quick Start
 
 ### 1. Prerequisite (Choose One Runtime)
@@ -142,6 +158,26 @@ dashboard pauses the AI for `ROUTING_HUMAN_IDLE_MS`, and
 
 Precedence: **AI path → static rules → nothing**. If the AI call fails, the
 static away message is sent instead, so the customer always gets an answer.
+
+#### Tuning (env defaults, overridable per number in the UI)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AI_MODE` | `window` | `off` / `window` / `always` |
+| `AI_TEMPERATURE` | `0.6` | Sampling temperature |
+| `AI_TOP_P` | `0.95` | Nucleus sampling |
+| `AI_MIN_P` | `0.05` | Min-p (sent only to OpenRouter bases) |
+| `AI_MAX_TOKENS` | `1024` | Reply budget |
+| `AI_TIMEOUT_MS` | `25000` | Provider request timeout |
+| `AI_TOOL_MAX_ROUNDS` | `2` | Tool-call rounds per reply |
+| `AI_GUARD_ENABLED` | `true` | Prompt-injection guard on/off |
+| `AI_GUARD_MAX_INPUT_CHARS` | `4000` | Input cap before refusal |
+| `ROUTING_BATCH_IDLE_MS` | `20000` | Debounce window per conversation |
+| `ROUTING_BATCH_MAX_WAIT_MS` | `60000` | Hard cap from the first message |
+| `ROUTING_HUMAN_IDLE_MS` | `900000` | Human-activity pause |
+
+Precedence: **session metadata overrides env**, and the dashboard UI writes
+session metadata. Nothing requires a database.
 
 #### Drivers
 
@@ -410,9 +446,10 @@ Deleting a user can revoke every session they own (logout + credentials).
 
 **Dashboard markup is sanitized before insertion.** The dashboard never assigns
 `innerHTML`; `UI.setHtml` runs markup through a vendored DOMPurify build
-(`src/dashboard-ui/js/vendor/purify.min.js`) and fails closed to text when the
-sanitizer is absent. Refresh that file when upgrading the `dompurify`
-dependency.
+(`src/dashboard-ui/js/lib/purify.min.js`) and fails closed to text when the
+sanitizer is absent. The vendored build carries its version in the file
+header; refresh it by copying `dist/purify.min.js` from a current `dompurify`
+release (no npm dependency is kept at runtime).
 
 **CSP mode.** `CSP_REPORT_ONLY=true` switches the header to
 `Content-Security-Policy-Report-Only`: violations are still posted to
@@ -515,6 +552,13 @@ DASHBOARD_REGISTRATION_ENABLED=false
 DASHBOARD_REGISTRATION_REQUIRE_APPROVAL=true
 DASHBOARD_JWT_SECRET=super-secret-key-change-me
 DASHBOARD_PASSWORD_MIN_LENGTH=6
+
+# Session ownership / quotas for non-admin users (0 = unlimited)
+MAX_SESSIONS_PER_USER=3
+MAX_SESSIONS_PER_MANAGER=5
+
+# Keep CSP enforcing; see the CSP mode note in the security section
+CSP_REPORT_ONLY=false
 ```
 
 ### Initial Setup
@@ -527,9 +571,15 @@ DASHBOARD_PASSWORD_MIN_LENGTH=6
 ### Role & Access Model
 
 - `admin`: full dashboard access (users/approval/roles, session lifecycle, webhooks, all messaging).
-- `manager`: operational access for chats/outbound/groups, without admin-level account controls.
-- `assistant`: reply-focused dashboard role (no proactive outbound), for safer delegated handling.
-- Optional `assignedSessions`: per-user session scoping in dashboard APIs/UI only.
+- `manager`: chats/outbound/groups **and session lifecycle**, capped by
+  `MAX_SESSIONS_PER_MANAGER`; still no account controls.
+- `assistant`: reply-focused dashboard role (no session lifecycle, no proactive
+  outbound), capped by `MAX_SESSIONS_PER_USER` if the role ever gains creation.
+- Sessions created from the dashboard record their creator (`ownerId`);
+  non-admins see their own sessions plus any `assignedSessions`. Legacy sessions
+  without an owner keep the previous assignment semantics.
+- Admins can **add users**, change roles, approve pending accounts, and delete a
+  user while optionally revoking every session they own (logout + credentials).
 
 ### Registration & Approval Behavior
 
@@ -542,7 +592,15 @@ DASHBOARD_PASSWORD_MIN_LENGTH=6
 - **Sessions**: Add WhatsApp accounts (QR/Pairing Code), Delete accounts safely (auto-cleans media/logs).
 - **Messaging**: Test sending texts, images, and bulk broadcasts interactively.
 - **Webhooks**: Configure webhook URLs and event subscriptions per-session.
+- **AI & Routing**: Per-number auto-response — responder mode (off/window/always),
+  time window and timezone, OpenAI-compatible model + encrypted credentials,
+  system instruction, knowledge endpoints (tool-calling RAG), and live routing
+  metrics.
 - **Events**: Real-time SSE (Server-Sent Events) live log for WhatsApp events.
+- **Admin & users**: Add users, approve registrations, change roles, scope
+  sessions, and revoke sessions/credentials when deleting a user.
+- **Security**: HttpOnly session cookie, strict CSP with violation reporting
+  (`/dashboard/csp-report`), HSTS behind TLS, same-origin dashboard APIs.
 
 ---
 
