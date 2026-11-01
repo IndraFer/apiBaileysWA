@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { swaggerUI } from "@hono/swagger-ui";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
@@ -11,6 +11,7 @@ import { generateOpenApiSpec } from "@/docs/openapi";
 import appLogger from "@/lib/logger";
 import { isSecureRequest } from "@/lib/request";
 import { error, success } from "@/lib/response";
+import { serveFile } from "@/lib/runtime";
 import { authMiddleware } from "@/middleware/auth";
 import { generalRateLimit } from "@/middleware/rateLimit";
 import chatRoutes from "@/routes/chat";
@@ -67,25 +68,64 @@ app.use("*", async (c, next) => {
 // offending snippet, but support varies (Safari may omit it), so a report can
 // still arrive with an empty sample. Violations are reported to
 // /dashboard/csp-report so the real source is read from logs, not guessed.
-const DASHBOARD_CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'report-sample'",
-  "style-src 'self' 'report-sample'",
-  // WebKit attaches a UA inline style to native <select> (text-overflow); a
-  // strict style-src-attr blocks it and floods the console. Keep <style>
-  // elements at 'self' but allow style attributes.
-  "style-src-attr 'unsafe-inline'",
-  "style-src-elem 'self'",
-  "img-src 'self' data:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "report-uri /dashboard/csp-report",
-  "report-to csp",
-].join("; ");
+const CDN_SCRIPT = [
+  "https://cdn.jsdelivr.net",
+  "https://unpkg.com",
+  "https://cdnjs.cloudflare.com",
+];
+const CDN_STYLE = [...CDN_SCRIPT, "https://fonts.googleapis.com"];
+const CDN_FONT = ["https://fonts.gstatic.com"];
+const CDN_IMG = [...CDN_SCRIPT];
+const CDN_CONNECT = ["https://cdn.jsdelivr.net", "https://unpkg.com"];
+
+/**
+ * Build the CSP from the defaults plus configurable origins.
+ *
+ * CDNs are allowed by default (pinned assets are common practice); set
+ * CSP_CDN=false for a same-origin-only policy. Extra origins can be added per
+ * directive, so a specific CDN never requires disabling CSP.
+ */
+function buildCsp(): string {
+  const { cdn, extra } = config.csp;
+  const uniq = (list: string[]) => [...new Set(list.filter(Boolean))];
+
+  const script = uniq([
+    "\x27self\x27",
+    "\x27report-sample\x27",
+    ...(cdn ? CDN_SCRIPT : []),
+    ...extra.script,
+  ]);
+  const style = uniq([
+    "\x27self\x27",
+    "\x27report-sample\x27",
+    ...(cdn ? CDN_STYLE : []),
+    ...extra.style,
+  ]);
+  const styleElem = uniq(["\x27self\x27", ...(cdn ? CDN_STYLE : []), ...extra.style]);
+  const font = uniq(["\x27self\x27", "data:", ...(cdn ? CDN_FONT : []), ...extra.font]);
+  const img = uniq(["\x27self\x27", "data:", ...(cdn ? CDN_IMG : []), ...extra.img]);
+  const connect = uniq(["\x27self\x27", ...(cdn ? CDN_CONNECT : []), ...extra.connect]);
+
+  return [
+    "default-src \x27self\x27",
+    `script-src ${script.join(" ")}`,
+    `style-src ${style.join(" ")}`,
+    // WebKit attaches a UA inline style to native <select> (text-overflow).
+    "style-src-attr \x27unsafe-inline\x27",
+    `style-src-elem ${styleElem.join(" ")}`,
+    `img-src ${img.join(" ")}`,
+    `font-src ${font.join(" ")}`,
+    `connect-src ${connect.join(" ")}`,
+    "frame-ancestors \x27none\x27",
+    "base-uri \x27self\x27",
+    "form-action \x27self\x27",
+    "object-src \x27none\x27",
+    "report-uri /dashboard/csp-report",
+    "report-to csp",
+  ].join("; ");
+}
+
+const DASHBOARD_CSP = buildCsp();
 
 const CSP_HEADER = config.cspReportOnly
   ? "Content-Security-Policy-Report-Only"
@@ -199,7 +239,93 @@ try {
   cachedPkg = { name: "Baileys WA API", version: "1.0.0", description: "" };
 }
 
-app.get("/docs", swaggerUI({ url: "/openapi.json" }));
+// Swagger UI is self-hosted from node_modules: a CDN build would be blocked by
+// the strict CSP (script-src self) and would not work offline.
+const SWAGGER_DIST = path.join(process.cwd(), "node_modules", "swagger-ui-dist");
+
+const SWAGGER_INIT = [
+  "window.ui = SwaggerUIBundle({",
+  '  url: "/openapi.json",',
+  '  dom_id: "#swagger-ui",',
+  "  deepLinking: true,",
+  "  presets: [SwaggerUIBundle.presets.apis],",
+  '  layout: "BaseLayout",',
+  "  tryItOutEnabled: false",
+  "});",
+].join("\n");
+
+/** Version and SRI hashes come from the installed package, so the CDN build is pinned. */
+const SWAGGER_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(SWAGGER_DIST, "package.json"), "utf8")) as {
+      version?: string;
+    };
+    return pkg.version || "5";
+  } catch {
+    return "5";
+  }
+})();
+
+function sriFor(file: string): string {
+  try {
+    const digest = createHash("sha384")
+      .update(fs.readFileSync(path.join(SWAGGER_DIST, file)))
+      .digest("base64");
+    return `integrity="sha384-${digest}" crossorigin="anonymous"`;
+  } catch {
+    return "";
+  }
+}
+
+const DOCS_HTML_LOCAL =
+  '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>API Documentation</title>\n<link rel="stylesheet" href="/docs-assets/swagger-ui.css" />\n</head>\n<body>\n<div id="swagger-ui"></div>\n<script src="/docs-assets/swagger-ui-bundle.js"></script>\n<script src="/docs-assets/swagger-init.js"></script>\n</body>\n</html>';
+
+const DOCS_HTML_CDN = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>API Documentation</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_VERSION}/swagger-ui.css" ${sriFor("swagger-ui.css")} />
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_VERSION}/swagger-ui-bundle.js" ${sriFor("swagger-ui-bundle.js")}></script>
+<script src="/docs-assets/swagger-init.js"></script>
+</body>
+</html>`;
+
+// CDN by default (pinned + SRI); set DOCS_ASSETS=local for an offline install.
+const DOCS_HTML = config.csp.docsAssets === "cdn" ? DOCS_HTML_CDN : DOCS_HTML_LOCAL;
+
+const SWAGGER_TYPES: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".png": "image/png",
+  ".map": "application/json; charset=utf-8",
+};
+
+app.get("/docs", (c) => c.html(DOCS_HTML));
+
+app.get("/docs-assets/:file", async (c) => {
+  const file = c.req.param("file") ?? "";
+  if (!/^[a-zA-Z0-9._-]+$/.test(file)) return c.notFound();
+
+  if (file === "swagger-init.js") {
+    return c.body(SWAGGER_INIT, 200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+    });
+  }
+
+  const contentType = SWAGGER_TYPES[path.extname(file).toLowerCase()];
+  if (!contentType) return c.notFound();
+
+  const fullPath = path.join(SWAGGER_DIST, file);
+  if (!fullPath.startsWith(SWAGGER_DIST + path.sep)) return c.notFound();
+  if (!fs.existsSync(fullPath)) return c.notFound();
+
+  return serveFile(fullPath, contentType);
+});
 
 app.get("/openapi.json", (_c) => {
   const pkg = cachedPkg;

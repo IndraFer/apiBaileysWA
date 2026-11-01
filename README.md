@@ -448,11 +448,28 @@ semantics. `MAX_SESSIONS_PER_USER` (default 3) and `MAX_SESSIONS_PER_MANAGER`
 Deleting a user can revoke every session they own (logout + credentials).
 
 **Dashboard markup is sanitized before insertion.** The dashboard never assigns
-`innerHTML`; `UI.setHtml` runs markup through a vendored DOMPurify build
-(`src/dashboard-ui/js/lib/purify.min.js`) and fails closed to text when the
-sanitizer is absent. The vendored build carries its version in the file
-header; refresh it by copying `dist/purify.min.js` from a current `dompurify`
-release (no npm dependency is kept at runtime).
+`innerHTML`; `UI.setHtml` runs markup through DOMPurify loaded from jsdelivr (pinned
+3.4.17 with SRI) and fails closed to text when the sanitizer is absent. Because
+the asset comes from a CDN, keep `CSP_CDN` enabled (the default); with
+`CSP_CDN=false` the script is blocked and the dashboard renders text only. A
+devDependency on `dompurify` records the pinned version used for the SRI hash.
+
+**CSP and CDNs.** The policy allows common CDNs by default
+(`cdn.jsdelivr.net`, `unpkg.com`, `cdnjs.cloudflare.com`, Google Fonts), because
+pinning a version and loading it from a CDN is normal practice. `CSP_CDN=false`
+locks the policy back to same-origin. Additional origins can be appended per
+directive with `CSP_EXTRA_SCRIPT_SRC`, `CSP_EXTRA_STYLE_SRC`,
+`CSP_EXTRA_FONT_SRC`, `CSP_EXTRA_IMG_SRC` and `CSP_EXTRA_CONNECT_SRC`
+(space-separated), so a specific CDN never requires disabling CSP.
+
+> Honest trade-off: an allowed CDN origin can serve any code the browser will
+> execute. Pin exact versions and add `integrity` (SRI) for third-party scripts —
+> CSP does not replace SRI. The built-in Swagger UI page does this already.
+
+**Swagger UI assets.** `DOCS_ASSETS=cdn` (default) loads a version-pinned
+Swagger UI bundle from jsdelivr with SRI, and `DOCS_ASSETS=local` serves the copy
+from `node_modules/swagger-ui-dist` for offline installs. Both work under the
+same CSP.
 
 **CSP mode.** `CSP_REPORT_ONLY=true` switches the header to
 `Content-Security-Policy-Report-Only`: violations are still posted to

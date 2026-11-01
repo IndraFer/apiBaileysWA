@@ -21,6 +21,13 @@ const {
   AUDIT_LOG_BODY,
   AUDIT_LOG_RETENTION_DAYS,
   AUDIT_LOG_MAX_ENTRIES,
+  CSP_CDN,
+  DOCS_ASSETS,
+  CSP_EXTRA_SCRIPT_SRC,
+  CSP_EXTRA_STYLE_SRC,
+  CSP_EXTRA_FONT_SRC,
+  CSP_EXTRA_IMG_SRC,
+  CSP_EXTRA_CONNECT_SRC,
   BAILEYS_LOG_LEVEL,
   BAILEYS_CLIENT_VERSION,
   MAX_RETRIES,
@@ -165,6 +172,13 @@ const humanReadDelay = rangePair(HUMANIZE_READ_DELAY_MIN_MS, HUMANIZE_READ_DELAY
 const humanThinkDelay = rangePair(HUMANIZE_THINK_MIN_MS, HUMANIZE_THINK_MAX_MS, 800, 2000);
 const humanPacing = rangePair(HUMANIZE_GLOBAL_PACING_MIN_MS, HUMANIZE_GLOBAL_PACING_MAX_MS, 0, 0);
 const broadcastDelay = rangePair(BROADCAST_MIN_DELAY_MS, BROADCAST_MAX_DELAY_MS, 1500, 3000);
+
+function splitSources(value?: string): string[] {
+  return (value || "")
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
 const config = {
   env: (NODE_ENV || "development") as "development" | "production",
@@ -408,6 +422,21 @@ const config = {
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
+
+  /** CSP origins are configurable: self-hosting is the default, CDNs opt-in. */
+  csp: {
+    // CDNs are allowed by default (common practice); CSP_CDN=false locks the
+    // policy down to same-origin only.
+    cdn: CSP_CDN !== "false",
+    docsAssets: DOCS_ASSETS === "local" ? ("local" as const) : ("cdn" as const),
+    extra: {
+      script: splitSources(CSP_EXTRA_SCRIPT_SRC),
+      style: splitSources(CSP_EXTRA_STYLE_SRC),
+      font: splitSources(CSP_EXTRA_FONT_SRC),
+      img: splitSources(CSP_EXTRA_IMG_SRC),
+      connect: splitSources(CSP_EXTRA_CONNECT_SRC),
+    },
+  },
 
   /** Inbound API audit log (dashboard REST API page). */
   auditLog: {
