@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-11-01
+
+### Fixed
+
+- type the OpenAPI metadata as unknown
+
 ## [1.13.2] - 2026-11-01
 
 ### Fixed
