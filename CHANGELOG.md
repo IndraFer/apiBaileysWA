@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-11-01
+
+### Fixed
+
+- persist read state and hide the self LID chat
+
 ## [1.13.1] - 2026-11-01
 
 ### Fixed
