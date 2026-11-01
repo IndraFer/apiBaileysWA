@@ -7,7 +7,9 @@
         .map((s) => `<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`)
         .join("");
 
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
         <div class="toolbar">
           <div class="form-group mb-0 u-minw-180">
             <select id="group-session">${opts || "<option disabled>No sessions</option>"}</select>
@@ -15,7 +17,8 @@
           <button class="btn btn-primary btn-sm" id="btn-load-groups">Load Groups</button>
           <button class="btn btn-outline btn-sm" id="btn-create-group">+ Create Group</button>
         </div>
-        <div id="groups-list"><div class="empty-state"><p class="text-muted">Select a session and click "Load Groups"</p></div></div>`;
+        <div id="groups-list"><div class="empty-state"><p class="text-muted">Select a session and click "Load Groups"</p></div></div>`,
+      );
 
       document.getElementById("btn-load-groups").addEventListener("click", () => this.loadGroups());
       document
@@ -28,36 +31,39 @@
       if (!session) return Toast.warning("Select a session first");
 
       const el = document.getElementById("groups-list");
-      el.innerHTML = '<div class="skeleton skeleton-card w-full u-h-150"></div>';
+      UI.setHtml(el, '<div class="skeleton skeleton-card w-full u-h-150"></div>');
 
       // Use the main API endpoint
       const result = await API.request(`/groups/${session}/list`, {
         method: "GET",
       });
       if (!result.success) {
-        el.innerHTML = `<p class="text-muted">${result.message}</p>`;
+        UI.setHtml(el, `<p class="text-muted">${UI.escapeHtml(result.message)}</p>`);
         return;
       }
 
       const groups = result.data || [];
       if (groups.length === 0) {
-        el.innerHTML = '<div class="empty-state"><h3>No Groups</h3></div>';
+        UI.setHtml(el, '<div class="empty-state"><h3>No Groups</h3></div>');
         return;
       }
 
-      el.innerHTML = `<div class="table-wrapper"><table>
+      UI.setHtml(
+        el,
+        `<div class="table-wrapper"><table>
         <thead><tr><th>Name</th><th>JID</th><th>Size</th></tr></thead>
         <tbody>${groups
           .map(
             (g) => `
           <tr>
-            <td><strong>${g.subject || g.name || "—"}</strong></td>
-            <td class="text-muted font-mono text-xs">${g.id || g.jid || ""}</td>
-            <td>${g.size || g.participants?.length || "—"}</td>
+            <td><strong>${UI.escapeHtml(g.subject || g.name || "—")}</strong></td>
+            <td class="text-muted font-mono text-xs">${UI.escapeHtml(g.id || g.jid || "")}</td>
+            <td>${UI.escapeHtml(g.size || g.participants?.length || "—")}</td>
           </tr>`,
           )
           .join("")}
-        </tbody></table></div>`;
+        </tbody></table></div>`,
+      );
     },
 
     showCreateModal() {

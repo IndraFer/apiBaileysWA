@@ -395,7 +395,9 @@
       chatCache = [];
       activeSelfJid = normalizeJid(sessions[0]?.user?.id || "");
 
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
 			<div class="chatrooms-page">
 				<div class="chatrooms-toolbar">
 					<div class="chatrooms-toolbar-controls">
@@ -462,7 +464,8 @@
 					<aside class="chatrooms-sidebar" id="chatrooms-sidebar"></aside>
 					<section class="chatrooms-main" id="chatrooms-main"></section>
 				</div>
-			</div>`;
+			</div>`,
+      );
 
       const sessionSelect = document.getElementById("chatrooms-session");
       const refreshBtn = document.getElementById("chatrooms-refresh");
@@ -475,10 +478,14 @@
       const pollIdleInput = document.getElementById("poll-idle-ms");
 
       if (!selectedSessionId) {
-        document.getElementById("chatrooms-sidebar").innerHTML =
-          '<div class="chatrooms-empty">No session available. Please create and connect a session first.</div>';
-        document.getElementById("chatrooms-main").innerHTML =
-          '<div class="chatrooms-empty">Select a session to start testing chat rooms.</div>';
+        UI.setHtml(
+          document.getElementById("chatrooms-sidebar"),
+          '<div class="chatrooms-empty">No session available. Please create and connect a session first.</div>',
+        );
+        UI.setHtml(
+          document.getElementById("chatrooms-main"),
+          '<div class="chatrooms-empty">Select a session to start testing chat rooms.</div>',
+        );
         return;
       }
 
@@ -832,27 +839,34 @@
       });
 
       if (!filtered.length) {
-        sidebar.innerHTML = query
-          ? '<div class="chatrooms-empty">No chat matched your search.</div>'
-          : selectedMode === "groups"
-            ? '<div class="chatrooms-empty">No group chat found in store yet.</div>'
-            : '<div class="chatrooms-empty">No 1-on-1 chat found in store yet.</div>';
-        document.getElementById("chatrooms-main").innerHTML =
-          '<div class="chatrooms-empty">Send or receive at least one message to populate rooms.</div>';
+        UI.setHtml(
+          sidebar,
+          query
+            ? '<div class="chatrooms-empty">No chat matched your search.</div>'
+            : selectedMode === "groups"
+              ? '<div class="chatrooms-empty">No group chat found in store yet.</div>'
+              : '<div class="chatrooms-empty">No 1-on-1 chat found in store yet.</div>',
+        );
+        UI.setHtml(
+          document.getElementById("chatrooms-main"),
+          '<div class="chatrooms-empty">Send or receive at least one message to populate rooms.</div>',
+        );
         return;
       }
 
-      sidebar.innerHTML = filtered
-        .map((chat) => {
-          const jid = chat.id;
-          const name = escapeHtml(normalizeContactName(chat));
-          const unread = Number(chat.unreadCount || 0);
-          const time = formatMessageTime(chat.conversationTimestamp);
-          const active = jid === selectedJid ? "active" : "";
-          const subtitle = chat.lastMessageRecvTimestamp
-            ? `Last activity: ${formatMessageTime(chat.lastMessageRecvTimestamp)}`
-            : "Open room to load messages";
-          return `
+      UI.setHtml(
+        sidebar,
+        filtered
+          .map((chat) => {
+            const jid = chat.id;
+            const name = escapeHtml(normalizeContactName(chat));
+            const unread = Number(chat.unreadCount || 0);
+            const time = formatMessageTime(chat.conversationTimestamp);
+            const active = jid === selectedJid ? "active" : "";
+            const subtitle = chat.lastMessageRecvTimestamp
+              ? `Last activity: ${formatMessageTime(chat.lastMessageRecvTimestamp)}`
+              : "Open room to load messages";
+            return `
             <button class="chatroom-item ${active}" data-jid="${jid}">
               <div class="chatroom-item-header">
                 <span class="chatroom-name">${name}</span>
@@ -861,8 +875,9 @@
               <div class="chatroom-item-sub">${escapeHtml(subtitle)}</div>
               ${unread > 0 ? `<span class="chatroom-unread">${unread}</span>` : ""}
             </button>`;
-        })
-        .join("");
+          })
+          .join(""),
+      );
 
       sidebar.querySelectorAll(".chatroom-item").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -943,11 +958,14 @@
       bubble.className = "msg-bubble-wrap from-me";
       bubble.dataset.pendingId = pendingId;
       bubble.dataset.messageKey = msgKey;
-      bubble.innerHTML = `
+      UI.setHtml(
+        bubble,
+        `
         <div class="msg-bubble from-me msg-bubble-pending">
           <div class="msg-text">${renderTextWithMarkdown(text)}</div>
           <div class="msg-time">${formatMessageTime(currentTimeTs)} • Sending...</div>
-        </div>`;
+        </div>`,
+      );
 
       const emptyState = messagesEl.querySelector(".chatrooms-empty");
       if (emptyState) emptyState.remove();
@@ -991,14 +1009,17 @@
 
       const bubble = document.createElement("div");
       bubble.className = "msg-bubble-wrap from-me";
-      bubble.innerHTML = `
+      UI.setHtml(
+        bubble,
+        `
         <div class="msg-bubble from-me msg-bubble-failed">
           <div class="msg-text">${renderTextWithMarkdown(text)}</div>
           <div class="msg-failed-actions">
             <span class="text-xs text-danger">Failed to send</span>
             <button class="btn btn-outline btn-sm" type="button">Retry</button>
           </div>
-        </div>`;
+        </div>`,
+      );
 
       const retryBtn = bubble.querySelector("button");
       retryBtn?.addEventListener("click", () => {
@@ -1017,22 +1038,27 @@
     async loadGroupMembers(jid) {
       const panel = document.getElementById("group-members-panel");
       if (!panel) return;
-      panel.innerHTML = '<div class="text-sm text-muted">Loading members...</div>';
+      UI.setHtml(panel, '<div class="text-sm text-muted">Loading members...</div>');
       const result = await API.get(
         `/sessions/${encodeURIComponent(selectedSessionId)}/groups/${encodeURIComponent(jid)}/members`,
       );
       if (!result.success) {
-        panel.innerHTML = `<div class="text-sm text-danger">${escapeHtml(result.message || "Failed to load members")}</div>`;
+        UI.setHtml(
+          panel,
+          `<div class="text-sm text-danger">${escapeHtml(result.message || "Failed to load members")}</div>`,
+        );
         return;
       }
 
       const members = result.data?.participants || [];
       if (!members.length) {
-        panel.innerHTML = '<div class="text-sm text-muted">No members metadata available.</div>';
+        UI.setHtml(panel, '<div class="text-sm text-muted">No members metadata available.</div>');
         return;
       }
 
-      panel.innerHTML = `
+      UI.setHtml(
+        panel,
+        `
         <div class="group-members-count">Members: ${members.length}</div>
         <div class="group-members-list">
           ${members
@@ -1041,7 +1067,8 @@
                 `<span class="group-member-chip">${escapeHtml((m.id || "").replace(/@s\.whatsapp\.net$/, ""))}${m.admin ? ` (${escapeHtml(String(m.admin))})` : ""}</span>`,
             )
             .join("")}
-        </div>`;
+        </div>`,
+      );
     },
 
     async loadConversation(jid, showToastOnError = true) {
@@ -1053,7 +1080,9 @@
 
       const jidLabel = jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "");
       const isGroupMode = selectedMode === "groups";
-      main.innerHTML = `
+      UI.setHtml(
+        main,
+        `
         <div class="chatroom-header">
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
@@ -1072,7 +1101,8 @@
         <form class="chatroom-input" id="chatroom-send-form">
           <input type="text" id="chatroom-text" placeholder="Type a message for this room..." autocomplete="off" maxlength="2000" />
           <button class="btn btn-primary" type="submit">Send</button>
-        </form>`;
+        </form>`,
+      );
 
       document.getElementById("chatroom-reload-msg").addEventListener("click", async () => {
         await this.loadConversation(jid, false);
@@ -1093,8 +1123,10 @@
       );
       if (!result.success) {
         if (showToastOnError) Toast.error(result.message || "Failed to load conversation");
-        document.getElementById("chatroom-messages").innerHTML =
-          '<div class="chatrooms-empty">Failed to load conversation.</div>';
+        UI.setHtml(
+          document.getElementById("chatroom-messages"),
+          '<div class="chatrooms-empty">Failed to load conversation.</div>',
+        );
         return;
       }
 
@@ -1190,52 +1222,56 @@
         messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 90;
 
       if (!visibleMessages.length) {
-        messagesEl.innerHTML =
-          '<div class="chatrooms-empty">No visible chat message (system payload skipped).</div>';
+        UI.setHtml(
+          messagesEl,
+          '<div class="chatrooms-empty">No visible chat message (system payload skipped).</div>',
+        );
         return;
       }
 
-      messagesEl.innerHTML = visibleMessages
-        .map((msg) => {
-          const fromMe = !!msg?.key?.fromMe;
-          const payload = extractMessagePayload(msg);
-          const mentioned = msg?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-          const actionButtons = extractActionButtons(msg);
-          const time = formatMessageTime(msg.messageTimestamp);
+      UI.setHtml(
+        messagesEl,
+        visibleMessages
+          .map((msg) => {
+            const fromMe = !!msg?.key?.fromMe;
+            const payload = extractMessagePayload(msg);
+            const mentioned = msg?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            const actionButtons = extractActionButtons(msg);
+            const time = formatMessageTime(msg.messageTimestamp);
 
-          // Check if this message has a tracked status (sent/read/delivered)
-          let statusClass = "";
-          let statusTag = "";
-          let msgKey = "";
-          if (fromMe) {
-            // Find matching sent message by text content
-            for (const [key, statusObj] of sentMessageStatus.entries()) {
-              if (
-                key.startsWith(`${jid}:`) &&
-                key.includes(payload.text) &&
-                statusObj.status !== "sending"
-              ) {
-                msgKey = key;
-                const status = statusObj.status;
-                if (status === "read") {
-                  statusClass = " msg-bubble-read";
-                  statusTag = " • Read";
-                } else if (status === "delivered") {
-                  statusTag = " • Delivered";
-                } else if (status === "sent") {
-                  statusTag = " • Sent";
-                } else if (status === "watched") {
-                  statusTag = " • Watched";
+            // Check if this message has a tracked status (sent/read/delivered)
+            let statusClass = "";
+            let statusTag = "";
+            let msgKey = "";
+            if (fromMe) {
+              // Find matching sent message by text content
+              for (const [key, statusObj] of sentMessageStatus.entries()) {
+                if (
+                  key.startsWith(`${jid}:`) &&
+                  key.includes(payload.text) &&
+                  statusObj.status !== "sending"
+                ) {
+                  msgKey = key;
+                  const status = statusObj.status;
+                  if (status === "read") {
+                    statusClass = " msg-bubble-read";
+                    statusTag = " • Read";
+                  } else if (status === "delivered") {
+                    statusTag = " • Delivered";
+                  } else if (status === "sent") {
+                    statusTag = " • Sent";
+                  } else if (status === "watched") {
+                    statusTag = " • Watched";
+                  }
+                  break;
                 }
-                break;
               }
             }
-          }
 
-          const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
-          const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
+            const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
+            const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
 
-          return `
+            return `
               <div class="${bubbleWrap}"${dataMessageKey}>
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
                   <div class="msg-text">${renderTextWithMarkdown(payload.text || "(empty)")}</div>
@@ -1261,8 +1297,9 @@
                   <div class="msg-time">${time}${statusTag}</div>
                 </div>
               </div>`;
-        })
-        .join("");
+          })
+          .join(""),
+      );
 
       if (nearBottom) {
         messagesEl.scrollTop = messagesEl.scrollHeight;

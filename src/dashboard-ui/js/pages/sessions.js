@@ -15,13 +15,16 @@
   window.SessionsPage = {
     async render() {
       const container = document.getElementById("page-content");
-      container.innerHTML = `
+      UI.setHtml(
+        container,
+        `
         <div class="toolbar">
           <button class="btn btn-primary" id="btn-new-session">+ New Session</button>
           <div class="toolbar-spacer"></div>
           <button class="btn btn-outline btn-sm" id="btn-refresh-sessions">↻ Refresh</button>
         </div>
-        <div id="sessions-list"><div class="skeleton skeleton-card w-full u-h-200"></div></div>`;
+        <div id="sessions-list"><div class="skeleton skeleton-card w-full u-h-200"></div></div>`,
+      );
 
       document
         .getElementById("btn-new-session")
@@ -49,21 +52,25 @@
       const result = await API.get("/sessions");
       const el = document.getElementById("sessions-list");
       if (!result.success) {
-        el.innerHTML = '<p class="text-muted">Failed to load sessions</p>';
+        UI.setHtml(el, '<p class="text-muted">Failed to load sessions</p>');
         return;
       }
 
       const sessions = result.data || [];
       if (sessions.length === 0) {
-        el.innerHTML = `<div class="empty-state">
+        UI.setHtml(
+          el,
+          `<div class="empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/></svg>
           <h3>No Sessions</h3><p class="text-muted">Create a new session to connect your WhatsApp account</p>
-        </div>`;
+        </div>`,
+        );
         return;
       }
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every dynamic value below is escaped with escapeHtml()
-      el.innerHTML = `<div class="table-wrapper"><table>
+      UI.setHtml(
+        el,
+        `<div class="table-wrapper"><table>
         <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th><th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
@@ -84,7 +91,8 @@
           </tr>`,
           )
           .join("")}
-        </tbody></table></div>`;
+        </tbody></table></div>`,
+      );
     },
 
     showNewSessionModal() {
@@ -226,7 +234,7 @@
         ? '<div class="badge badge-info qr-fresh-auth-badge">FRESH AUTH ENABLED</div>'
         : "";
       Modal.show(
-        `QR Code — ${sessionId}`,
+        `QR Code — ${escapeHtml(sessionId)}`,
         `
         <div class="qr-container">
           ${freshAuthBadge}
@@ -266,7 +274,10 @@
         if (status.connected) {
           clearInterval(pollTimer);
           setQrStatus("CONNECTED", "badge-success");
-          el.innerHTML = `<div class="u-fs-3rem">✓</div><p class="u-success-bold">Connected successfully!</p>`;
+          UI.setHtml(
+            el,
+            `<div class="u-fs-3rem">✓</div><p class="u-success-bold">Connected successfully!</p>`,
+          );
           Toast.success(`Session ${sessionId} connected!`);
           setTimeout(() => {
             Modal.hide();
@@ -291,7 +302,10 @@
         missingQrCount += 1;
         if (missingQrCount >= 5 || status.exists === false) {
           setQrStatus("EXPIRED", "badge-danger");
-          el.innerHTML = `<div class="u-fs-2rem-mb-075">!</div><p>QR code is no longer available. Recreate the session to start a new login.</p>`;
+          UI.setHtml(
+            el,
+            `<div class="u-fs-2rem-mb-075">!</div><p>QR code is no longer available. Recreate the session to start a new login.</p>`,
+          );
           clearInterval(pollTimer);
           return;
         }
@@ -319,7 +333,7 @@
     async deleteSession(sessionId) {
       const confirmed = await Modal.confirm(
         "Delete Session",
-        `<p class="u-mb-15-center">Are you sure you want to delete session <strong>"${sessionId}"</strong>?<br><span class="u-danger-text">* This action cannot be undone.</span></p>`,
+        `<p class="u-mb-15-center">Are you sure you want to delete session <strong>"${escapeHtml(sessionId)}"</strong>?<br><span class="u-danger-text">* This action cannot be undone.</span></p>`,
         {
           confirmText: "Delete",
           cancelText: "Cancel",
@@ -345,7 +359,7 @@
       const ar = session.autoReply || {};
 
       Modal.show(
-        `Update Settings — ${sessionId}`,
+        `Update Settings — ${escapeHtml(sessionId)}`,
         `
         <form id="update-session-form">
           <div class="form-group">

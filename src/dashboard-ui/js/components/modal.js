@@ -3,7 +3,7 @@
   window.Modal = {
     show(title, bodyHtml) {
       document.getElementById("modal-title").textContent = title;
-      document.getElementById("modal-body").innerHTML = bodyHtml;
+      UI.setHtml(document.getElementById("modal-body"), bodyHtml);
       document.getElementById("modal-overlay").classList.remove("hidden");
     },
     hide() {

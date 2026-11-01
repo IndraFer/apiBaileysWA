@@ -7,7 +7,9 @@
         .map((s) => `<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`)
         .join("");
 
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
         <div class="card mb-2">
           <div class="card-header"><h3>Send Message</h3></div>
           <form id="send-msg-form">
@@ -70,7 +72,8 @@
             <button type="submit" class="btn btn-primary">Send Bulk</button>
           </form>
           <div id="bulk-result" class="mt-2"></div>
-        </div>`;
+        </div>`,
+      );
 
       // Type switching
       document.getElementById("msg-type").addEventListener("change", (e) => {
@@ -144,8 +147,10 @@
         });
         if (result.success) {
           Toast.success(`Bulk job created: ${result.data?.jobId || "queued"}`);
-          document.getElementById("bulk-result").innerHTML =
-            `<p class="text-sm text-accent">Job: ${result.data?.jobId} | Total: ${messages.length}</p>`;
+          UI.setHtml(
+            document.getElementById("bulk-result"),
+            `<p class="text-sm text-accent">Job: ${UI.escapeHtml(result.data?.jobId)} | Total: ${messages.length}</p>`,
+          );
         } else {
           Toast.error(result.message);
         }

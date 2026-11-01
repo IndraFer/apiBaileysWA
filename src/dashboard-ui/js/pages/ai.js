@@ -186,13 +186,17 @@
       state.sessions = sessions;
 
       if (sessions.length === 0) {
-        container.innerHTML = `<div class="empty-state"><p class="text-muted">No sessions yet. Create a session first.</p></div>`;
+        UI.setHtml(
+          container,
+          `<div class="empty-state"><p class="text-muted">No sessions yet. Create a session first.</p></div>`,
+        );
         return;
       }
 
       state.sessionId = state.sessionId || sessions[0].sessionId;
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- all interpolated values pass through escapeHtml(); same convention as the other dashboard pages
-      container.innerHTML = `
+      UI.setHtml(
+        container,
+        `
         <div class="toolbar">
           <div class="form-group u-m0-minw-220">
             <select id="ai-session-select" class="input">
@@ -392,7 +396,8 @@
             <button class="btn btn-outline btn-sm" id="ai-reset-metrics">Reset</button>
           </div>
           <div id="ai-metrics"><div class="empty-state"><p class="text-muted">Loading…</p></div></div>
-        </div>`;
+        </div>`,
+      );
 
       document.getElementById("ai-session-select").addEventListener("change", (event) => {
         state.sessionId = event.target.value;
@@ -515,8 +520,9 @@
         summary.textContent = `${aiShort} → ${staticShort} → webhook events only`;
       }
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- every interpolated value passes through escapeHtml()
-      target.innerHTML = `
+      UI.setHtml(
+        target,
+        `
         <div class="table-wrapper"><table>
           <thead><tr><th>#</th><th>Layer</th><th>Behaviour</th></tr></thead>
           <tbody>
@@ -524,7 +530,8 @@
             <tr><td>2</td><td><span class="badge badge-info">Static</span></td><td class="text-xs">${escapeHtml(staticText)}</td></tr>
             <tr><td>3</td><td><span class="badge">Webhook</span></td><td class="text-xs">event delivery only — never answers</td></tr>
           </tbody>
-        </table></div>`;
+        </table></div>`,
+      );
     },
 
     async save() {
@@ -612,8 +619,7 @@
       state.metrics = data;
       const target = document.getElementById("ai-metrics");
       if (!target) return;
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- renderMetrics() escapes every dynamic value with escapeHtml()
-      target.innerHTML = this.renderMetrics(data);
+      UI.setHtml(target, this.renderMetrics(data));
 
       // Bar widths go through CSSOM (allowed by CSP) instead of an inline style.
       target.querySelectorAll("[data-width]").forEach((bar) => {

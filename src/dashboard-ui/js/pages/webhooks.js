@@ -100,8 +100,9 @@
         2,
       );
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- interpolated values are escaped by renderSessionWebhook/renderLogs; same convention as the other dashboard pages
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
         <div class="card mb-2">
           <div class="card-header"><h3>Where webhooks fit</h3></div>
           <p class="text-sm text-muted mb-2">
@@ -177,7 +178,8 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
             </div>
           </div>
           <div id="webhook-logs-container">${this.renderLogs(logs)}</div>
-        </div>`;
+        </div>`,
+      );
 
       document
         .getElementById("btn-refresh-wh-logs")
@@ -378,11 +380,11 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
               : "-";
             return `<tr>
               <td>${new Date(log.timestamp).toLocaleTimeString()}</td>
-              <td>${log.sessionId}</td>
-              <td class="font-mono text-xs">${log.event}</td>
-              <td><span class="badge ${statusClass} webhook-status-badge" title="${log.status}">${statusLabel}</span></td>
+              <td>${escapeHtml(log.sessionId)}</td>
+              <td class="font-mono text-xs">${escapeHtml(log.event)}</td>
+              <td><span class="badge ${statusClass} webhook-status-badge" title="${escapeHtml(log.status)}">${statusLabel}</span></td>
               <td class="text-xs text-muted webhook-latency">${latencyLabel}</td>
-              <td class="text-xs text-muted">${log.httpStatus ? `HTTP ${log.httpStatus}` : ""} ${log.error || ""}</td>
+              <td class="text-xs text-muted">${log.httpStatus ? `HTTP ${log.httpStatus}` : ""} ${escapeHtml(log.error || "")}</td>
             </tr>`;
           })
           .join("")}
@@ -392,7 +394,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
     async refreshLogs() {
       const logs = await this.getWebhookLogs();
       const el = document.getElementById("webhook-logs-container");
-      if (el) el.innerHTML = this.renderLogs(logs);
+      if (el) UI.setHtml(el, this.renderLogs(logs));
     },
 
     async clearLogs() {

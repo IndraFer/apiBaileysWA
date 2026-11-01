@@ -6,7 +6,9 @@
 
   window.EventsPage = {
     async render() {
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
 				<div class="card events-panel">
 					<div class="toolbar events-panel-toolbar">
 						<div class="events-panel-title">
@@ -22,7 +24,8 @@
 							<div class="empty-state"><p class="text-muted">Waiting for events...</p></div>
 						</div>
 					</div>
-				</div>`;
+				</div>`,
+      );
 
       document
         .getElementById("btn-pause-events")
@@ -35,7 +38,7 @@
       const recent = await API.get("/events/recent?limit=30");
       if (recent.success && recent.data?.length > 0) {
         const feed = document.getElementById("events-feed");
-        feed.innerHTML = "";
+        feed.replaceChildren();
         recent.data.reverse().forEach((ev) => {
           this.addEvent(ev, false);
         });
@@ -66,14 +69,14 @@
 
       eventSource.addEventListener("heartbeat", () => {
         const status = document.getElementById("sse-status");
-        if (status) status.innerHTML = '<span class="badge-dot pulse"></span>LISTENING';
+        if (status) UI.setHtml(status, '<span class="badge-dot pulse"></span>LISTENING');
       });
 
       eventSource.onerror = () => {
         const status = document.getElementById("sse-status");
         if (status) {
           status.className = "badge badge-danger";
-          status.innerHTML = "DISCONNECTED";
+          UI.setHtml(status, "DISCONNECTED");
         }
       };
     },
@@ -89,13 +92,16 @@
       const time = new Date(ev.timestamp).toLocaleTimeString();
       const item = document.createElement("div");
       item.className = "event-item";
-      item.innerHTML = `
+      UI.setHtml(
+        item,
+        `
         <div class="event-header">
-          <span class="event-type">${ev.event}</span>
-          <span class="event-session">${ev.sessionId}</span>
+          <span class="event-type">${UI.escapeHtml(ev.event)}</span>
+          <span class="event-session">${UI.escapeHtml(ev.sessionId)}</span>
           <span class="event-time">${time}</span>
         </div>
-        <div class="event-detail">${JSON.stringify(ev.data, null, 2)}</div>`;
+        <div class="event-detail">${UI.escapeHtml(JSON.stringify(ev.data, null, 2))}</div>`,
+      );
 
       item.addEventListener("click", () => item.classList.toggle("expanded"));
 
@@ -112,17 +118,17 @@
       const status = document.getElementById("sse-status");
       if (paused) {
         status.className = "badge badge-warning";
-        status.innerHTML = "PAUSED";
+        UI.setHtml(status, "PAUSED");
       } else {
         status.className = "badge badge-success";
-        status.innerHTML = '<span class="badge-dot pulse"></span>LISTENING';
+        UI.setHtml(status, '<span class="badge-dot pulse"></span>LISTENING');
       }
     },
 
     clearEvents() {
       const feed = document.getElementById("events-feed");
       if (feed)
-        feed.innerHTML = '<div class="empty-state"><p class="text-muted">Events cleared</p></div>';
+        UI.setHtml(feed, '<div class="empty-state"><p class="text-muted">Events cleared</p></div>');
       eventCount = 0;
       const badge = document.getElementById("events-badge");
       if (badge) badge.classList.add("is-hidden");

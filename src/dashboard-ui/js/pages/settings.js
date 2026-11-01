@@ -53,8 +53,9 @@
             "Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
         }[role] || "Limited operational access.";
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-      document.getElementById("page-content").innerHTML = `
+      UI.setHtml(
+        document.getElementById("page-content"),
+        `
         <div class="card mb-2">
           <div class="card-header">
             <h3>Account</h3>
@@ -118,7 +119,8 @@
         <div class="card" id="about-card">
           <div class="card-header"><h3>About</h3></div>
           <div class="u-p-1s"><div class="skeleton skeleton-text u-skeleton-200"></div><div class="skeleton skeleton-text u-skeleton-150"></div></div>
-        </div>`;
+        </div>`,
+      );
 
       const healthBtn = document.getElementById("btn-health-check");
       if (healthBtn) {
@@ -151,8 +153,9 @@
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
           const restricted = Boolean(data.infoRestricted);
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-          aboutCard.innerHTML = `
+          UI.setHtml(
+            aboutCard,
+            `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
 						<tr><td class="text-muted u-w-100">Project</td><td><strong>${data.project}</strong></td></tr>
@@ -160,13 +163,15 @@
 						${restricted ? `<tr><td class="text-muted">System Details</td><td><span class="badge badge-warning">ADMIN ONLY</span></td></tr>` : `<tr><td class="text-muted">Engine</td><td><strong>${data.engine}</strong></td></tr>`}
 						${restricted ? "" : `<tr><td class="text-muted">Runtime</td><td>${data.runtime}</td></tr>`}
 					  </table>
-					`;
+					`,
+          );
         }
       } catch (_err) {
         const aboutCard = document.getElementById("about-card");
         if (aboutCard) {
-          // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-          aboutCard.innerHTML = `
+          UI.setHtml(
+            aboutCard,
+            `
 					  <div class="card-header"><h3>About</h3></div>
 					  <table>
 						<tr><td class="text-muted u-w-100">Project</td><td><strong>Baileys WA API</strong></td></tr>
@@ -174,7 +179,8 @@
 						<tr><td class="text-muted">Engine</td><td>Baileys 7.0.0-rc.9</td></tr>
 						<tr><td class="text-muted">Runtime</td><td>Bun + Hono</td></tr>
 					  </table>
-					`;
+					`,
+          );
         }
       }
     },
@@ -203,8 +209,9 @@
         const projectName = d.name || "Baileys WA API";
         const projectVersion = d.version || "v1.0.0";
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        document.getElementById("modal-body").innerHTML = `
+        UI.setHtml(
+          document.getElementById("modal-body"),
+          `
           <div class="u-text-center-mb-125">
             <div class="u-status-icon" data-status-color="${statusColor}">${statusIcon}</div>
             <h3 class="u-status-text" data-status-color="${statusColor}">${statusText}</h3>
@@ -239,7 +246,8 @@
             <tr><td class="text-muted">Redis</td><td><span class="badge ${d.redis === "connected" ? "badge-success" : "badge-warning"}">${(d.redis || "disabled").toUpperCase()}</span></td></tr>
             <tr><td class="text-muted">Description</td><td class="text-sm">${d.description || "—"}</td></tr>
           </table>
-        `;
+        `,
+        );
 
         // Dynamic colours are applied through CSSOM (allowed by CSP) instead of
         // inline style attributes.
@@ -247,13 +255,15 @@
           el.style.setProperty("--status-color", el.getAttribute("data-status-color") || "");
         });
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        document.getElementById("modal-body").innerHTML = `
+        UI.setHtml(
+          document.getElementById("modal-body"),
+          `
           <div class="u-text-center-p-15">
             <div class="u-text-2rem">⚠️</div>
             <p class="text-danger">Failed to reach health endpoint</p>
             <p class="text-muted text-sm">${err.message}</p>
-          </div>`;
+          </div>`,
+        );
       }
     },
 
@@ -320,19 +330,20 @@
           <a href="/openapi.json" target="_blank" class="btn btn-outline btn-sm">Download JSON</a>
         </div>`;
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        document.getElementById("modal-body").innerHTML = html;
+        UI.setHtml(document.getElementById("modal-body"), html);
 
         // Allow the modal to be wider for the spec
         document.getElementById("modal").style.maxWidth = "700px";
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        document.getElementById("modal-body").innerHTML = `
+        UI.setHtml(
+          document.getElementById("modal-body"),
+          `
           <div class="u-text-center-p-15">
             <div class="u-text-2rem">⚠️</div>
             <p class="text-danger">Failed to load OpenAPI spec</p>
             <p class="text-muted text-sm">${err.message}</p>
-          </div>`;
+          </div>`,
+        );
       }
     },
 
@@ -350,8 +361,9 @@
             ? '<span class="badge badge-success">ON</span>'
             : '<span class="badge badge-warning">OFF</span>';
 
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        card.innerHTML = `
+        UI.setHtml(
+          card,
+          `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <table>
 					<tr><td class="text-muted u-w-200">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
@@ -361,16 +373,19 @@
 					<tr><td class="text-muted">Auto-Reject Calls</td><td>${badge(d.rejectCalls)}</td></tr>
 				  </table>
 				  <p class="text-muted text-sm u-p-075-1"><span class="u-text-warning-bold">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
-				`;
+				`,
+        );
       } catch (err) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        card.innerHTML = `
+        UI.setHtml(
+          card,
+          `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <div class="u-p-15-center">
 					<p class="text-danger u-mb-05">Unable to load simulation config</p>
 					<p class="text-muted text-sm">${err.message}</p>
 				  </div>
-				`;
+				`,
+        );
       }
     },
 
@@ -476,8 +491,10 @@
       ]);
 
       if (!usersRes.success) {
-        // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-        table.innerHTML = `<tr><td class="text-danger text-center">Failed to load users: ${escapeHtml(usersRes.message)}</td></tr>`;
+        UI.setHtml(
+          table,
+          `<tr><td class="text-danger text-center">Failed to load users: ${escapeHtml(usersRes.message)}</td></tr>`,
+        );
         return;
       }
 
@@ -551,8 +568,7 @@
                 </tr>`;
       });
 
-      // pi-lens-ignore: no-inner-html-js, ast-grep:no-inner-html-js -- dynamic values are escaped with escapeHtml()
-      table.innerHTML = html;
+      UI.setHtml(table, html);
 
       table.querySelectorAll(".user-role-select").forEach((sel) => {
         sel.addEventListener("change", async (e) => {

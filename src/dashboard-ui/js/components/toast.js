@@ -7,7 +7,10 @@
       const container = document.getElementById("toast-container");
       const toast = document.createElement("div");
       toast.className = `toast ${type}`;
-      toast.innerHTML = `<span class="toast-icon">${icons[type] || ""}</span><span class="toast-message">${message}</span>`;
+      UI.setHtml(
+        toast,
+        `<span class="toast-icon">${icons[type] || ""}</span><span class="toast-message">${UI.escapeHtml(message)}</span>`,
+      );
       container.appendChild(toast);
       setTimeout(() => {
         toast.style.opacity = "0";
