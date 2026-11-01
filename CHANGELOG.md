@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-11-01
+
+### Changed
+
+- track CHANGELOG.md
+- adopt tags, changelog and a release helper
+
+### Fixed
+
+- show one eye icon in the settings password fields
+- only skip version-shaped release commits
+
 ## [1.6.1] - 2026-11-01
 
 ### Added
