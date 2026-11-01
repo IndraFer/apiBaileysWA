@@ -170,14 +170,17 @@ const config = {
   },
 
   /**
-   * Explicit auth-state backend. "auto" keeps the legacy behaviour (Redis when
-   * available, otherwise files); "file"/"redis" make the choice deliberate and
-   * the startup check refuses to run when the data lives in the other backend.
+   * Auth-state backend. Required: "file" or "redis". There is deliberately no
+   * "auto": picking by Redis availability would change where sessions live just
+   * because Redis came up or went down. Startup fails when this is unset.
    */
   authState: {
-    backend: (AUTH_STATE_BACKEND === "file" || AUTH_STATE_BACKEND === "redis"
-      ? AUTH_STATE_BACKEND
-      : "auto") as "auto" | "file" | "redis",
+    backend:
+      AUTH_STATE_BACKEND === "file"
+        ? ("file" as const)
+        : AUTH_STATE_BACKEND === "redis"
+          ? ("redis" as const)
+          : undefined,
   },
 
   baileys: {

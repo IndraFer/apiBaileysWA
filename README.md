@@ -387,11 +387,12 @@ allowlist at the proxy, and expose only `/status` + the REST API publicly.
 
 ## 🧱 Auth-state backend, Redis limits and broadcast persistence
 
-**Backend is explicit or clearly resolved.** `AUTH_STATE_BACKEND` accepts
-`auto` (default: Redis when reachable, else files), `file` or `redis`.
-Choosing one backend means the other store is ignored, so the app refuses to
-start when the configured backend disagrees with where sessions actually live —
-that prevents an "empty dashboard" that looks like lost WhatsApp logins.
+**Backend must be explicit.** `AUTH_STATE_BACKEND` is required and accepts only
+`file` or `redis`; the app refuses to start when it is unset. There is no
+`auto` mode, because deriving the backend from Redis availability would move
+where sessions live whenever Redis comes up or goes down. Startup also fails
+when the chosen backend disagrees with where sessions actually exist, which
+prevents an "empty dashboard" that looks like lost WhatsApp logins.
 
 **Redis must not evict.** The bundled Redis runs with
 `--maxmemory-policy noeviction`. With an eviction policy, hitting the memory cap

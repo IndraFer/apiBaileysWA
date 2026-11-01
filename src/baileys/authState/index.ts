@@ -27,22 +27,23 @@ type AuthBackend = "file" | "redis";
 /**
  * Resolve the auth-store backend.
  *
- * "auto" keeps the legacy behaviour (Redis when reachable). An explicit choice
- * is honoured, and a missing dependency fails loudly instead of silently
- * falling back to an empty store (which would look like "sessions lost").
+ * The choice must be explicit (AUTH_STATE_BACKEND=file|redis). It is never
+ * derived from Redis availability, so a Redis outage cannot silently move the
+ * session store; an unreachable Redis with backend=redis fails loudly.
  */
 function resolveBackend(): AuthBackend {
   const configured = config.authState.backend;
-  if (configured === "file") return "file";
-  if (configured === "redis") {
-    if (!isRedisAvailable()) {
-      throw new Error(
-        "AUTH_STATE_BACKEND=redis but Redis is not available (check REDIS_ENABLED / REDIS_URL). Refusing to start with an empty session store.",
-      );
-    }
-    return "redis";
+  if (!configured) {
+    throw new Error(
+      'AUTH_STATE_BACKEND is not set. Set it explicitly to "file" or "redis" (see .env.example).',
+    );
   }
-  return isRedisAvailable() ? "redis" : "file";
+  if (configured === "redis" && !isRedisAvailable()) {
+    throw new Error(
+      "AUTH_STATE_BACKEND=redis but Redis is not available (check REDIS_ENABLED / REDIS_URL). Refusing to start with an empty session store.",
+    );
+  }
+  return configured;
 }
 
 /**
