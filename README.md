@@ -847,9 +847,37 @@ Success response:
 }
 ```
 
-Errors: `400` validation or receiver not on WhatsApp, `401` missing/invalid
-API key, `403` group sending disabled or not allowlisted, `404` session not
-found, `409` session exists but is not connected.
+Every failure is structured so a calling LLM can correct itself. Nothing
+returns a bare status code:
+
+```json
+{
+  "success": false,
+  "code": "SESSION_NOT_CONNECTED",
+  "message": "Session \"ROG8\" is not connected",
+  "field": "from",
+  "hint": "Reconnect the session from Dashboard → Sessions (scan the QR code), then retry this request.",
+  "details": { "session": "ROG8", "connected": false },
+  "retryable": true,
+  "requestId": "mvxu1abc-9f2k"
+}
+```
+
+| HTTP | `code` | Meaning | What to do |
+|---|---|---|---|
+| 400 | `INVALID_REQUEST` | Body failed validation | Read `field` and `details.issues` (all issues, not just the first) |
+| 400 | `RECEIVER_NOT_ON_WHATSAPP` | Number not registered on WhatsApp | Use international digits (`628123456789`) and confirm WhatsApp exists |
+| 401 | `UNAUTHORIZED` | Missing or revoked API key | Send `Authorization: Bearer <API_KEY>`; create a key in Dashboard → REST API |
+| 403 | `KEY_NOT_SCOPED` | Key cannot use that `from` | Use an allowed `from`; see `details.allowed` |
+| 403 | `GROUP_DISABLED` | Group sending is off | Send 1:1, or enable `ALLOW_GROUP_SEND` |
+| 403 | `GROUP_NOT_ALLOWED` | Group not in the allowlist | Add the JID to `ALLOWED_GROUP_JIDS` |
+| 404 | `SESSION_NOT_FOUND` | `from` did not resolve | Use a session id from `details.available` (or `GET /sessions`) |
+| 409 | `SESSION_NOT_CONNECTED` | Session exists but is offline | Reconnect via Dashboard → Sessions, then retry |
+| 500 | `SEND_FAILED` | Unexpected send failure | Retry once; if it persists, report the `requestId` |
+
+`retryable` is `true` for `409` and `5xx` only: after reconnecting a session a
+retry is sensible, while a bad `receiver` or missing field will fail again until
+the request changes.
 
 **Groups are opt-in.** Send to `...@g.us` only when `ALLOW_GROUP_SEND=true`;
 optionally restrict with `ALLOWED_GROUP_JIDS`. Group blasts are the highest ban

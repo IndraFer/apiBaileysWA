@@ -3,8 +3,9 @@
  *
  * Resolves a session from its id or bound phone number, normalizes the receiver
  * into a JID, applies the group policy and forwards the built content to
- * Baileys. Kept separate from the route so it can be reused by future
- * integrations.
+ * Baileys. Every failure is a MessageSendError carrying a machine-readable code,
+ * the offending field and an actionable hint, so a calling LLM can correct
+ * itself instead of guessing.
  */
 import type { AnyMessageContent, WAMessage } from "@whiskeysockets/baileys";
 import connectionManager from "@/baileys/connectionManager";
@@ -14,13 +15,39 @@ import { extractPhone, formatGroup, formatPhone } from "@/utils/phone";
 
 export type SendErrorStatus = 400 | 403 | 404 | 409;
 
+export type SendErrorCode =
+  | "INVALID_REQUEST"
+  | "SESSION_NOT_FOUND"
+  | "SESSION_NOT_CONNECTED"
+  | "GROUP_DISABLED"
+  | "GROUP_NOT_ALLOWED"
+  | "RECEIVER_NOT_ON_WHATSAPP";
+
+export interface SendErrorOptions {
+  status?: SendErrorStatus;
+  code?: SendErrorCode;
+  /** Request field the caller must fix. */
+  field?: string;
+  /** Actionable next step for the caller (and for an LLM). */
+  hint?: string;
+  details?: Record<string, unknown>;
+}
+
 export class MessageSendError extends Error {
   readonly status: SendErrorStatus;
+  readonly code: SendErrorCode;
+  readonly field?: string;
+  readonly hint?: string;
+  readonly details?: Record<string, unknown>;
 
-  constructor(message: string, status: SendErrorStatus = 400) {
+  constructor(message: string, options: SendErrorOptions = {}) {
     super(message);
     this.name = "MessageSendError";
-    this.status = status;
+    this.status = options.status ?? 400;
+    this.code = options.code ?? "INVALID_REQUEST";
+    this.field = options.field;
+    this.hint = options.hint;
+    this.details = options.details;
   }
 }
 
@@ -38,7 +65,13 @@ export function resolveSessionId(ref: string): string {
     }
   }
 
-  throw new MessageSendError(`Session "${ref}" not found or not connected`, 404);
+  throw new MessageSendError(`Session "${ref}" not found or not connected`, {
+    status: 404,
+    code: "SESSION_NOT_FOUND",
+    field: "from",
+    hint: "Call GET /sessions with the same API key to list available session ids, then pass a session id or its bound phone number as `from`.",
+    details: { from: ref },
+  });
 }
 
 /**
@@ -58,7 +91,13 @@ function resolveTarget(input: UnifiedSendInput): { jid: string; isGroup: boolean
   if (!config.messaging.allowGroupSend) {
     throw new MessageSendError(
       "Group messages are disabled (set ALLOW_GROUP_SEND=true to enable)",
-      403,
+      {
+        status: 403,
+        code: "GROUP_DISABLED",
+        field: "receiver",
+        hint: "Send to a 1:1 number, or enable ALLOW_GROUP_SEND (and optionally ALLOWED_GROUP_JIDS) on the server and retry.",
+        details: { receiver },
+      },
     );
   }
 
@@ -66,7 +105,13 @@ function resolveTarget(input: UnifiedSendInput): { jid: string; isGroup: boolean
   if (allowed.length > 0) {
     const numeric = jid.replace(/@g\.us$/, "");
     if (!allowed.includes(jid) && !allowed.includes(numeric)) {
-      throw new MessageSendError("Group is not in ALLOWED_GROUP_JIDS", 403);
+      throw new MessageSendError("Group is not in ALLOWED_GROUP_JIDS", {
+        status: 403,
+        code: "GROUP_NOT_ALLOWED",
+        field: "receiver",
+        hint: "Ask an administrator to add this group JID to ALLOWED_GROUP_JIDS, or send to an allowlisted group.",
+        details: { receiver, groupJid: jid },
+      });
     }
   }
 
@@ -86,7 +131,14 @@ function contentFor(input: UnifiedSendInput): AnyMessageContent {
       };
     case "location": {
       const location = input.location;
-      if (!location) throw new MessageSendError("location is required", 400);
+      if (!location) {
+        throw new MessageSendError("location is required for location messages", {
+          status: 400,
+          code: "INVALID_REQUEST",
+          field: "location",
+          hint: "Provide location.latitude and location.longitude in decimal degrees.",
+        });
+      }
       return {
         location: {
           degreesLatitude: location.latitude,
@@ -107,7 +159,13 @@ export async function sendUnifiedMessage(input: UnifiedSendInput) {
 
   const status = connectionManager.getSessionStatus(sessionId);
   if (!status.exists || !status.connected) {
-    throw new MessageSendError(`Session "${sessionId}" is not connected`, 409);
+    throw new MessageSendError(`Session "${sessionId}" is not connected`, {
+      status: 409,
+      code: "SESSION_NOT_CONNECTED",
+      field: "from",
+      hint: "Reconnect the session from Dashboard → Sessions (scan the QR code), then retry this request.",
+      details: { session: sessionId, connected: false },
+    });
   }
 
   const session = connectionManager.getSession(sessionId);
@@ -115,7 +173,13 @@ export async function sendUnifiedMessage(input: UnifiedSendInput) {
   if (!isGroup) {
     const exists = await session.isOnWhatsApp(jid);
     if (!exists) {
-      throw new MessageSendError("The receiver number is not registered on WhatsApp", 400);
+      throw new MessageSendError("The receiver number is not registered on WhatsApp", {
+        status: 400,
+        code: "RECEIVER_NOT_ON_WHATSAPP",
+        field: "receiver",
+        hint: "Use the international format with country code and digits only (e.g. 628123456789), and confirm the number has WhatsApp.",
+        details: { receiver: jid },
+      });
     }
   }
 

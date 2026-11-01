@@ -3,11 +3,16 @@
  *
  * POST /messages — one request shape for text, image, document and location.
  * Authentication uses the API key middleware; keys can be scoped to sessions.
- * Every call is audited (without the token and, by default, without the body).
+ *
+ * Failures are never silent: every rejection returns a machine-readable `code`,
+ * the offending `field`, an actionable `hint`, a `retryable` flag and the same
+ * `requestId` recorded in the audit log. That lets a calling LLM correct itself
+ * instead of retrying blindly.
  */
 import { type Context, Hono } from "hono";
+import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
-import { error, success } from "@/lib/response";
+import { success } from "@/lib/response";
 import { type AuthData, authMiddleware } from "@/middleware/auth";
 import { sendRateLimit } from "@/middleware/rateLimit";
 import { unifiedSendSchema } from "@/schemas/message";
@@ -22,11 +27,41 @@ function authPayload(c: Context): AuthData | undefined {
   return c.get("auth") as AuthData | undefined;
 }
 
+interface FailureExtra {
+  status: number;
+  code: string;
+  message: string;
+  requestId: string;
+  field?: string;
+  hint?: string;
+  details?: Record<string, unknown>;
+}
+
+function failure(c: Context, extra: FailureExtra) {
+  c.header("x-request-id", extra.requestId);
+  return c.json(
+    {
+      success: false,
+      code: extra.code,
+      message: extra.message,
+      field: extra.field,
+      hint: extra.hint,
+      details: extra.details,
+      retryable: extra.status === 409 || extra.status >= 500,
+      requestId: extra.requestId,
+    },
+    extra.status as 400,
+  );
+}
+
 messageRoutes.use("*", authMiddleware);
 
 messageRoutes.post("/", sendRateLimit, async (c) => {
   const startedAt = Date.now();
   const auth = authPayload(c);
+  const requestId =
+    c.req.header("x-request-id") ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const body = await c.req.json().catch(() => ({}));
 
   const audit = (
@@ -35,7 +70,7 @@ messageRoutes.post("/", sendRateLimit, async (c) => {
   ) => {
     recordApiCall({
       timestamp: new Date().toISOString(),
-      requestId: c.req.header("x-request-id") ?? "",
+      requestId,
       keyId: auth?.keyId ?? null,
       keyLabel: auth?.label ?? null,
       session: info.session ?? null,
@@ -53,13 +88,22 @@ messageRoutes.post("/", sendRateLimit, async (c) => {
 
   const parsed = unifiedSendSchema.safeParse(body);
   if (!parsed.success) {
-    audit(400, {
-      type:
-        typeof (body as { type?: unknown }).type === "string"
-          ? String((body as { type?: string }).type)
-          : "unknown",
+    const issues = parsed.error.issues.map((issue) => ({
+      field: issue.path.join(".") || "body",
+      message: issue.message,
+    }));
+    const first = issues[0];
+    audit(400, { type: "unknown" });
+
+    return failure(c, {
+      status: 400,
+      code: "INVALID_REQUEST",
+      message: first?.message ?? "Invalid request body",
+      field: first?.field,
+      hint: "Required fields depend on `type`: text → messages; image/document → media.url; location → location.latitude and location.longitude. See the README section 'Unified send'.",
+      details: { issues },
+      requestId,
     });
-    return error(c, parsed.error.issues[0].message, 400);
   }
 
   const input = parsed.data;
@@ -70,28 +114,56 @@ messageRoutes.post("/", sendRateLimit, async (c) => {
 
     if (!keyAllowsSession(auth?.sessions, session)) {
       audit(403, { session, receiver: input.receiver, type: input.type });
-      return error(c, "API key is not scoped to this session", 403);
+      return failure(c, {
+        status: 403,
+        code: "KEY_NOT_SCOPED",
+        message: `API key is not scoped to session "${session}"`,
+        field: "from",
+        hint: "Use a `from` that this key allows, or ask an administrator to create a key scoped to this session.",
+        details: { allowed: auth?.sessions ?? ["*"], requested: session },
+        requestId,
+      });
     }
 
     const data = await sendUnifiedMessage(input);
     audit(200, { session, receiver: data.to, type: input.type });
     return success(c, data, "Message sent successfully");
   } catch (err) {
-    const status = err instanceof MessageSendError ? err.status : 500;
-    audit(status, { session, receiver: input.receiver, type: input.type });
-
     if (err instanceof MessageSendError) {
-      return error(c, err.message, err.status);
+      audit(err.status, { session, receiver: input.receiver, type: input.type });
+
+      const details =
+        err.code === "SESSION_NOT_FOUND"
+          ? {
+              ...err.details,
+              available: connectionManager
+                .listSessions()
+                .map((entry) => entry.sessionId)
+                .filter((id) => keyAllowsSession(auth?.sessions, id)),
+            }
+          : err.details;
+
+      return failure(c, {
+        status: err.status,
+        code: err.code,
+        message: err.message,
+        field: err.field,
+        hint: err.hint,
+        details,
+        requestId,
+      });
     }
 
+    audit(500, { session, receiver: input.receiver, type: input.type });
     const message = (err as Error).message;
-    if (message.includes("not registered on WhatsApp")) {
-      return error(c, message, 400);
-    }
-    if (message.includes("not connected")) {
-      return error(c, message, 409);
-    }
-    return error(c, `Failed to send message: ${message}`);
+    return failure(c, {
+      status: 500,
+      code: "SEND_FAILED",
+      message: `Failed to send message: ${message}`,
+      hint: "Retry once; if it keeps failing, share this requestId with the administrator to check the server logs.",
+      details: { session, type: input.type },
+      requestId,
+    });
   }
 });
 

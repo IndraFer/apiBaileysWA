@@ -98,10 +98,16 @@ export async function authMiddleware(c: Context, next: Next) {
 
   // No simple token and no Redis key → check if simple token was configured
   if (config.auth.globalToken) {
-    return error(c, "Unauthorized: invalid token", 401);
+    return error(c, "Unauthorized: invalid token", 401, undefined, {
+      hint: "Check AUTH_GLOBAL_TOKEN, or use an API key created in Dashboard → REST API.",
+      retryable: false,
+    });
   }
 
-  return error(c, "Unauthorized: API key required", 401);
+  return error(c, "Unauthorized: API key required", 401, undefined, {
+    hint: "Send Authorization: Bearer <API_KEY> or x-api-key. Create and revoke keys in Dashboard → REST API.",
+    retryable: false,
+  });
 }
 
 /**
@@ -112,7 +118,10 @@ export async function adminGuard(c: Context, next: Next) {
 
   const auth = c.get("auth") as AuthData | undefined;
   if (auth?.role !== "admin" && config.env !== "development") {
-    return error(c, "Forbidden: admin access required", 403);
+    return error(c, "Forbidden: admin access required", 403, undefined, {
+      hint: "Use an API key with the admin role.",
+      retryable: false,
+    });
   }
 
   return next();

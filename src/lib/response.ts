@@ -53,6 +53,19 @@ interface ApiResponse<T = unknown> {
   data?: T;
   code?: string;
   requestId?: string;
+  /** Actionable next step for the caller. */
+  hint?: string;
+  /** Request field that caused the rejection. */
+  field?: string;
+  details?: Record<string, unknown>;
+  retryable?: boolean;
+}
+
+export interface ErrorExtra {
+  hint?: string;
+  field?: string;
+  details?: Record<string, unknown>;
+  retryable?: boolean;
 }
 
 export function success<T>(c: Context, data?: T, message = "Success", status = 200) {
@@ -65,13 +78,23 @@ export function success<T>(c: Context, data?: T, message = "Success", status = 2
   return c.json(body, status as 200);
 }
 
-export function error(c: Context, message: string, status = 500, code?: string) {
+export function error(
+  c: Context,
+  message: string,
+  status = 500,
+  code?: string,
+  extra: ErrorExtra = {},
+) {
   const body: ApiResponse = {
     success: false,
     message,
     code: code || codeForStatus(status),
     requestId: requestIdFor(c),
   };
+  if (extra.hint) body.hint = extra.hint;
+  if (extra.field) body.field = extra.field;
+  if (extra.details) body.details = extra.details;
+  if (extra.retryable !== undefined) body.retryable = extra.retryable;
   return c.json(body, status as 500);
 }
 

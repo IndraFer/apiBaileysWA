@@ -54,7 +54,7 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
           type: "apiKey",
           in: "header",
           name: "x-api-key",
-          description: "Redis-stored API key (use manage-api-keys script)",
+          description: "Hashed API key created in Dashboard → REST API (scoped to sessions).",
         },
       },
       schemas: {
@@ -64,6 +64,21 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
             success: { type: "boolean" },
             message: { type: "string" },
             data: { type: "object", nullable: true },
+          },
+        },
+        ApiError: {
+          type: "object",
+          description:
+            "Structured failure. code is stable, field points at the request field, hint explains the fix.",
+          properties: {
+            success: { type: "boolean", example: false },
+            code: { type: "string", example: "SESSION_NOT_CONNECTED" },
+            message: { type: "string" },
+            field: { type: "string", example: "from" },
+            hint: { type: "string" },
+            details: { type: "object", nullable: true },
+            retryable: { type: "boolean" },
+            requestId: { type: "string" },
           },
         },
         SessionCreate: {
@@ -292,11 +307,65 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
             },
           },
           responses: {
-            200: { description: "Message sent" },
-            400: { description: "Validation error or receiver not on WhatsApp" },
-            403: { description: "Group sending disabled or not allowlisted" },
-            404: { description: "Session not found" },
-            409: { description: "Session exists but is not connected" },
+            200: {
+              description: "Message sent",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      message: { type: "string" },
+                      data: {
+                        type: "object",
+                        properties: {
+                          messageId: { type: "string", nullable: true },
+                          to: { type: "string" },
+                          type: { type: "string" },
+                          timestamp: { type: "number" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: {
+              description: "INVALID_REQUEST or RECEIVER_NOT_ON_WHATSAPP",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
+            401: {
+              description: "UNAUTHORIZED",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
+            403: {
+              description: "KEY_NOT_SCOPED, GROUP_DISABLED or GROUP_NOT_ALLOWED",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
+            404: {
+              description: "SESSION_NOT_FOUND",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
+            409: {
+              description: "SESSION_NOT_CONNECTED (retryable)",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
+            500: {
+              description: "SEND_FAILED (retryable)",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
+              },
+            },
           },
         },
       },
