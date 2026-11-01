@@ -251,6 +251,27 @@ pause expires the backlog is answered once. A human reply in the meantime
 extends the pause automatically. `pauseMinutes` is clamped to 1..1440 (default
 30).
 
+#### Dashboard page
+
+A dedicated **AI & Routing** page (`#ai`, requires `manageSessions`) configures
+everything per number — responder mode, window, model/credentials, system
+instruction and knowledge endpoints — and shows live routing metrics. It reuses
+the existing dashboard components (cards, form groups, badges, tables), so it
+looks and behaves like the rest of the dashboard.
+
+#### Routing metrics
+
+```http
+GET  /dashboard/api/ai/metrics?sessionId=<optional>
+POST /dashboard/api/ai/metrics/reset
+```
+
+Counters are kept **in memory** (no database): AI replies, human-handled,
+static replies, failures, tool calls, tokens and latency, plus 24 hourly
+buckets and the most recent decisions. They are visible while the app is
+running and reset on restart. Redis-backed persistence can be added later
+without changing the endpoints.
+
 ## 🐳 Docker Deployment
 
 The project provides configurations for both runtimes. Everything runs in a single

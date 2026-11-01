@@ -27,6 +27,7 @@ import {
   redactCredentials,
 } from "@/lib/secretBox";
 import { aiConfigPatchSchema } from "@/schemas/session";
+import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -426,6 +427,32 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
   }
+});
+
+/**
+ * GET /dashboard/api/ai/metrics
+ *
+ * In-memory routing metrics: AI vs human vs static, hourly buckets, latency,
+ * token usage and the most recent decisions. No database: counters live in
+ * this process and reset on restart.
+ */
+dashboardApi.get("/ai/metrics", (c) => {
+  const denied = requireCapability(c, "viewSessions");
+  if (denied) return denied;
+  const sessionId = c.req.query("sessionId") || undefined;
+  if (sessionId) {
+    const sessionDenied = requireSessionAccess(c, sessionId);
+    if (sessionDenied) return sessionDenied;
+  }
+  return c.json({ success: true, data: getAiMetrics(sessionId) });
+});
+
+/** POST /dashboard/api/ai/metrics/reset — clear all AI routing counters. */
+dashboardApi.post("/ai/metrics/reset", (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  resetAiMetrics();
+  return c.json({ success: true, message: "AI metrics reset" });
 });
 
 /**

@@ -56,6 +56,11 @@
       render: () => EventsPage.render(),
       destroy: () => EventsPage.destroy?.(),
     },
+    ai: {
+      title: "AI & Routing",
+      requires: "manageSessions",
+      render: () => AiPage.render(),
+    },
     settings: { title: "Settings", render: () => SettingsPage.render() },
   };
 

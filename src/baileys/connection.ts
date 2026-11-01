@@ -31,6 +31,7 @@ import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
+import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
 import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
@@ -218,6 +219,12 @@ export class BaileysConnection {
           { text: autoReply.message },
           { quoted: lastMessage },
         );
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId,
+          route: "static",
+          reason: "ai_failed",
+        });
       },
       logger: {
         debug: (message, ...args) => logger.debug(formatLog(message, args)),
@@ -687,6 +694,12 @@ export class BaileysConnection {
 
           logger.info("[%s] Sending auto-reply to %s", this.sessionId, remoteJid);
           await this.sendMessage(remoteJid, { text: autoReply.message }, { quoted: m });
+          recordDecision({
+            sessionId: this.sessionId,
+            conversationId: remoteJid,
+            route: "static",
+            reason: autoReply.type,
+          });
         } catch (err) {
           logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
         }
@@ -713,9 +726,25 @@ export class BaileysConnection {
     const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
     if (lastHumanAt !== null) {
       this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
+      recordDecision({
+        sessionId: this.sessionId,
+        conversationId: remoteJid,
+        route: "human",
+        reason: "human_active",
+      });
     }
 
-    if (!this.isAiEligible()) return false;
+    if (!this.isAiEligible()) {
+      if (lastHumanAt === null) {
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId: remoteJid,
+          route: "paused",
+          reason: this.aiIneligibleReason(),
+        });
+      }
+      return false;
+    }
 
     void this.humanizeReadStep(last);
     this.aiRouter.enqueue(remoteJid, texts, last);
@@ -734,12 +763,24 @@ export class BaileysConnection {
     return isAiWindowActive(resolveRoutingConfig(this.options.routing));
   }
 
+  /** Why the AI is not answering right now (metrics only, never user facing). */
+  private aiIneligibleReason(): string {
+    const ai = resolveAiConfig(this.options.ai);
+    if (!ai.enabled) return "disabled";
+    if (ai.mode === "off") return "mode_off";
+    if (ai.driver === "openai" && !ai.apiKey) return "missing_api_key";
+    if (ai.driver === "webhook" && !ai.agentUrl) return "missing_agent_url";
+    if (!ai.model) return "missing_model";
+    return "outside_window";
+  }
+
   /** Generate a reply, or dispatch the event when the webhook driver is used. */
   private async generateAiReply(input: {
     conversationId: string;
     texts: string[];
   }): Promise<RouterGeneration> {
     const ai = resolveAiConfig(this.options.ai);
+    const startedAt = Date.now();
 
     if (ai.driver === "webhook") {
       const result = await deliverWebhookOnce(
@@ -755,7 +796,21 @@ export class BaileysConnection {
         config.ai.serviceToken,
         ai.timeoutMs,
       );
-      if (!result.ok) return { ok: false, error: result.error ?? `HTTP ${result.status}` };
+      if (!result.ok) {
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId: input.conversationId,
+          route: "failed",
+          reason: result.error ?? `HTTP ${result.status}`,
+        });
+        return { ok: false, error: result.error ?? `HTTP ${result.status}` };
+      }
+      recordDecision({
+        sessionId: this.sessionId,
+        conversationId: input.conversationId,
+        route: "ai",
+        reason: "webhook_dispatched",
+      });
       return { ok: true, text: null };
     }
 
@@ -766,7 +821,24 @@ export class BaileysConnection {
       history: this.buildHistory(input.conversationId, input.texts),
       ai,
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    const latencyMs = Date.now() - startedAt;
+    if (!result.ok) {
+      recordDecision({
+        sessionId: this.sessionId,
+        conversationId: input.conversationId,
+        route: "failed",
+        reason: result.error,
+      });
+      return { ok: false, error: result.error };
+    }
+    recordUsage(result.usage, latencyMs);
+    recordDecision({
+      sessionId: this.sessionId,
+      conversationId: input.conversationId,
+      route: "ai",
+      latencyMs,
+      tools: result.toolsUsed,
+    });
     logger.info(
       "[%s] AI reply to %s (tools: %s)",
       this.sessionId,
@@ -1343,6 +1415,17 @@ export class BaileysConnection {
             );
           }
 
+          // Defense in depth: the queue callback is a new scope, so re-check
+          // the target here before the request is made.
+          const targetCheck = validateWebhookTarget(webhookUrl);
+          if (targetCheck) {
+            lastFailureReason = targetCheck;
+            nonRetryable = true;
+            logger.warn("[%s] Webhook target rejected: %s", this.sessionId, targetCheck);
+            break;
+          }
+
+          // pi-lens-ignore: ts-ssrf -- validated above by validateWebhookTarget()
           const response = await fetch(webhookUrl, {
             method: "POST",
             headers,
@@ -1570,6 +1653,11 @@ export async function deliverWebhookOnce(
     // Per-receiver-URL throttle (token bucket). Fails open after the cap.
     await webhookRateLimiter.waitForSlot(webhookUrl);
 
+    // Re-check immediately before the request (defense in depth).
+    const targetCheck = validateWebhookTarget(webhookUrl);
+    if (targetCheck) return { ok: false, status: 0, error: targetCheck };
+
+    // pi-lens-ignore: ts-ssrf -- validated above by validateWebhookTarget()
     const response = await fetch(webhookUrl, {
       method: "POST",
       headers,
