@@ -1,11 +1,16 @@
-export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
+/** Metadata values come from package.json, so they arrive as unknown. */
+function metaText(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+export function generateOpenApiSpec(pkg: Record<string, unknown>, port: number) {
   return {
     openapi: "3.1.0",
     info: {
-      title: `${pkg.name || "Baileys WA API"}`,
-      version: `${pkg.version || "1.0.0"}`,
+      title: metaText(pkg.name, "Baileys WA API"),
+      version: metaText(pkg.version, "1.0.0"),
       description:
-        `${pkg.description || "Production-ready WhatsApp REST API powered by Baileys WA Socket."}<br><br>\n` +
+        `${metaText(pkg.description, "Production-ready WhatsApp REST API powered by Baileys WA Socket.")}<br><br>\n` +
         "<strong>Features:</strong><br>\n" +
         "- Multi-session management (QR code & pairing code)<br>\n" +
         "- Complete chat operations (send, bulk send, forward, delete, edit, read)<br>\n" +
@@ -17,7 +22,7 @@ export function generateOpenApiSpec(pkg: Record<string, any>, port: number) {
         "- Webhook with retry & exponential backoff<br>\n" +
         "- Dual auth (file-based + Redis)<br>\n" +
         "- API key authentication",
-      contact: { name: `${pkg.author || "KoiN CoDeveloper"}` },
+      contact: { name: metaText(pkg.author, "KoiN CoDeveloper") },
     },
     servers: [
       { url: `http://localhost:${port}`, description: "Local development" },
