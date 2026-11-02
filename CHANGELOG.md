@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-02
+
+### Added
+
+- scope assistants to assigned sessions only
+
 ## [1.13.3] - 2026-11-01
 
 ### Fixed
