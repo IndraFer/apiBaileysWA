@@ -2185,3 +2185,19 @@ details[open] > summary::before {
 .sidebar-meta {
   justify-content: flex-start;
 }
+
+/* Icon left and vertically centred; the two text lines are centred in their block */
+.sidebar-header {
+  flex-direction: row;
+  align-items: center;
+}
+
+.sidebar-brand {
+  flex: 1;
+  align-items: center;
+  text-align: center;
+}
+
+.sidebar-meta {
+  justify-content: center;
+}
