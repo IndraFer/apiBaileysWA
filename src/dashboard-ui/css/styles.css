@@ -2201,3 +2201,20 @@ details[open] > summary::before {
 .sidebar-meta {
   justify-content: center;
 }
+
+/* Keep the icon snug against the centred text block */
+.sidebar-header {
+  justify-content: flex-start;
+  gap: 0.45rem;
+}
+
+.sidebar-brand {
+  flex: 0 1 auto;
+  align-items: center;
+  text-align: center;
+}
+
+.sidebar-meta {
+  gap: 0.25rem;
+  font-size: 0.6rem;
+}
