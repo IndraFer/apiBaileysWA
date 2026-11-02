@@ -220,7 +220,7 @@ PATCH /dashboard/api/sessions/:sessionId/ai-config
     "driver": "openai",
     "baseUrl": "https://openrouter.ai/api/v1",
     "model": "openai/gpt-4o-mini",
-    "systemInstruction": "Anda CS IKA UI. Jawab ramah, singkat, Bahasa Indonesia.",
+    "systemInstruction": "You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Never invent facts; use the available tools when data is required.",
     "ragEndpoints": [],
     "credentialsJson": "{\"apiKey\":\"sk-or-...\",\"endpoints\":{}}"
   }
@@ -238,12 +238,13 @@ converted into tool schemas, so the model decides when to call them.
 
 ```jsonc
 {
-  "name": "cek_anggota",
-  "description": "Cek status anggota IKA UI berdasarkan nama atau nomor anggota.",
+  "name": "web_search",
+  "description": "Search the web for general information.",
   "method": "GET",
-  "url": "https://ika.ui.ac.id/api/members/search",
+  "url": "https://api.duckduckgo.com/",
   "params": [
-    { "name": "q", "type": "string", "description": "Nama lengkap atau nomor anggota (min 2 karakter)", "required": true }
+    { "name": "q", "type": "string", "description": "Search query", "required": true },
+    { "name": "format", "type": "string", "description": "Response format", "default": "json" }
   ],
   "timeoutMs": 6000,
   "maxResponseChars": 1500
@@ -252,31 +253,14 @@ converted into tool schemas, so the model decides when to call them.
 
 ```jsonc
 {
-  "name": "cari_artikel",
-  "description": "Cari artikel atau agenda kegiatan.",
+  "name": "check_weather",
+  "description": "Get the current weather for a location (no API key required).",
   "method": "GET",
-  "url": "https://ika.ui.ac.id/api/articles/search",
+  "url": "https://api.open-meteo.com/v1/forecast",
   "params": [
-    { "name": "q", "type": "string", "description": "Kata kunci", "required": true },
-    { "name": "type", "type": "string", "description": "article atau event", "enum": ["article", "event"] },
-    { "name": "date_from", "type": "string", "description": "Tanggal awal (YYYY-MM-DD)" },
-    { "name": "per_page", "type": "integer", "description": "Jumlah hasil (1-50)", "default": 10 }
-  ]
-}
-```
-
-```jsonc
-{
-  "name": "kirim_aduan",
-  "description": "Kirim aduan anggota. Gunakan hanya setelah data lengkap.",
-  "method": "POST",
-  "url": "https://ika.ui.ac.id/api/complaints",
-  "params": [
-    { "name": "name", "type": "string", "description": "Nama pelapor", "required": true },
-    { "name": "content", "type": "string", "description": "Isi aduan (min 10 karakter)", "required": true },
-    { "name": "category", "type": "string", "description": "Kategori", "required": true,
-      "enum": ["fasilitas", "pelayanan", "keanggotaan", "iuran", "kegiatan", "lainnya"] },
-    { "name": "source", "type": "string", "description": "Sumber", "default": "whatsapp" }
+    { "name": "latitude", "type": "number", "description": "Latitude", "required": true },
+    { "name": "longitude", "type": "number", "description": "Longitude", "required": true },
+    { "name": "current_weather", "type": "string", "description": "Return current weather", "default": "true" }
   ]
 }
 ```
@@ -289,13 +273,13 @@ Prefer the provider's own contract? Pass a raw JSON Schema instead of the
 
 ```jsonc
 {
-  "name": "search_members",
+  "name": "search_users",
   "method": "GET",
-  "url": "https://api.example.com/v1/members/search",
+  "url": "https://api.example.com/v1/users/search",
   "parameters": {
     "type": "object",
     "properties": {
-      "q": { "type": "string", "description": "Nama atau nomor anggota" }
+      "q": { "type": "string", "description": "Name, email or member id" }
     },
     "required": ["q"]
   }
@@ -308,7 +292,7 @@ for GET and as the JSON body otherwise — no per-parameter metadata is needed.
 Credentials per endpoint live in the encrypted blob, never in the prompt:
 
 ```jsonc
-{ "apiKey": "sk-or-...", "endpoints": { "kirim_aduan": { "headers": { "X-API-Key": "..." } } } }
+{ "apiKey": "sk-or-...", "endpoints": { "web_search": { "headers": { "X-API-Key": "..." } } } }
 ```
 
 Safety limits: URL always comes from configuration (never from the model),

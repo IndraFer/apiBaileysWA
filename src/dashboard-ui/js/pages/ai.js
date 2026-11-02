@@ -16,58 +16,47 @@
     muted: "badge-danger",
   };
 
-  /** Ready-to-paste examples: two placeholders + one live free endpoint. */
+  /** Generic, English examples: two live free endpoints plus one placeholder. */
   const EXAMPLE_ENDPOINTS = [
     {
-      name: "search_users",
-      description: "Cari user/anggota berdasarkan nama, email, atau nomor anggota.",
-      method: "GET",
-      url: "https://api.example.com/v1/users/search",
-      params: [
-        { name: "q", type: "string", description: "Kata kunci pencarian", required: true },
-        { name: "page", type: "integer", description: "Halaman hasil", default: 1 },
-      ],
-      timeoutMs: 6000,
-      maxResponseChars: 1500,
-    },
-    {
-      name: "search_events",
-      description: "Cari agenda/kegiatan yang akan datang.",
-      method: "GET",
-      url: "https://api.example.com/v1/events/search",
-      params: [
-        { name: "q", type: "string", description: "Kata kunci", required: true },
-        { name: "date_from", type: "string", description: "Tanggal awal (YYYY-MM-DD)" },
-        { name: "per_page", type: "integer", description: "Jumlah hasil (1-50)", default: 10 },
-      ],
-      timeoutMs: 6000,
-      maxResponseChars: 1500,
-    },
-    {
       name: "web_search",
-      description: "Cari informasi umum di web (contoh nyata, gratis, tanpa API key).",
+      description: "Search the web for general information.",
       method: "GET",
       url: "https://api.duckduckgo.com/",
       params: [
-        { name: "q", type: "string", description: "Query pencarian", required: true },
-        { name: "format", type: "string", description: "json", default: "json" },
+        { name: "q", type: "string", description: "Search query", required: true },
+        { name: "format", type: "string", description: "Response format", default: "json" },
       ],
       timeoutMs: 6000,
       maxResponseChars: 1500,
     },
     {
-      name: "search_members",
-      description:
-        "Cek status anggota memakai JSON Schema dari dokumentasi API (paste apa adanya).",
+      name: "check_weather",
+      description: "Get the current weather for a location (no API key required).",
       method: "GET",
-      url: "https://api.example.com/v1/members/search",
-      parameters: {
-        type: "object",
-        properties: {
-          q: { type: "string", description: "Nama lengkap atau nomor anggota" },
+      url: "https://api.open-meteo.com/v1/forecast",
+      params: [
+        { name: "latitude", type: "number", description: "Latitude", required: true },
+        { name: "longitude", type: "number", description: "Longitude", required: true },
+        {
+          name: "current_weather",
+          type: "string",
+          description: "Return current weather",
+          default: "true",
         },
-        required: ["q"],
-      },
+      ],
+      timeoutMs: 6000,
+      maxResponseChars: 1500,
+    },
+    {
+      name: "search_users",
+      description: "Look up a user by name, email or member id (replace the URL with yours).",
+      method: "GET",
+      url: "https://api.example.com/v1/users/search",
+      params: [
+        { name: "q", type: "string", description: "Name, email or member id", required: true },
+        { name: "page", type: "integer", description: "Page number", default: 1 },
+      ],
       timeoutMs: 6000,
       maxResponseChars: 1500,
     },
@@ -339,22 +328,6 @@
             </div>
             <textarea id="ai-endpoints" class="input" rows="12"
               placeholder='[ { "name": "...", "method": "GET", "url": "https://...", "params": [] } ]'></textarea>
-            <pre class="example-json example-json-sm">[
-  {
-    "name": "search_users",
-    "description": "Cari user berdasarkan nama atau nomor.",
-    "method": "GET",
-    "url": "https://api.example.com/v1/users/search",
-    "params": [
-      {
-        "name": "q",
-        "type": "string",
-        "description": "Kata kunci",
-        "required": true
-      }
-    ]
-  }
-]</pre>
             <small class="text-muted">
               <strong>What to call.</strong> Two shapes are accepted:
               <code>params</code> as a list of <code>{ name, type, description }</code>, or
@@ -365,22 +338,15 @@
 
           <div class="card-header u-mt-15">
             <h3>Endpoint credentials (optional)</h3>
+            <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-example">View example</button>
           </div>
           <div class="form-group">
-            <textarea id="ai-credentials" class="input" rows="6"
-              placeholder='{ "endpoint_name": { "headers": { "X-API-Key": "..." } } }'></textarea>
-            <pre class="example-json example-json-sm">{
-  "search_users": {
-    "headers": {
-      "X-API-Key": "..."
-    }
-  },
-  "search_events": {
-    "query": {
-      "tenant": "..."
-    }
-  }
-}</pre>
+            <textarea id="ai-credentials" class="input" rows="8"
+              placeholder='{
+  "web_search": { "headers": { "X-API-Key": "..." } },
+  "check_weather": { "query": { "appid": "..." } },
+  "search_users": { "headers": { "Authorization": "Bearer ..." } }
+}'></textarea>
             <small class="text-muted" id="ai-credentials-hint"></small>
             <small class="text-muted">
               <strong>How to authenticate those endpoints.</strong> Keys are endpoint names;
@@ -413,6 +379,9 @@
         .getElementById("ai-reset-metrics")
         .addEventListener("click", () => this.resetMetrics());
       document.getElementById("ai-example").addEventListener("click", () => this.showExample());
+      document
+        .getElementById("ai-credentials-example")
+        .addEventListener("click", () => this.showCredentialsExample());
       document.getElementById("ai-mode").addEventListener("change", (event) => {
         const hint = document.getElementById("ai-mode-hint");
         if (hint) hint.textContent = MODE_HINTS[event.target.value] || "";
@@ -716,6 +685,45 @@
       });
 
       document.getElementById("ai-example-copy").addEventListener("click", async () => {
+        const copied = await copyText(json);
+        if (copied) Toast.success("JSON copied to clipboard");
+        else Toast.error("Copy failed — select the text manually");
+      });
+    },
+
+    showCredentialsExample() {
+      const json = JSON.stringify(
+        {
+          web_search: { headers: { "X-API-Key": "<your-search-key>" } },
+          check_weather: { query: { appid: "<your-weather-appid>" } },
+          search_users: { headers: { Authorization: "Bearer <your-token>" } },
+        },
+        null,
+        2,
+      );
+
+      Modal.show(
+        "Endpoint credentials example",
+        `<p class="text-muted text-xs">
+           Keys are endpoint names from <strong>Knowledge endpoints</strong>. Values add
+           <code>headers</code>, <code>query</code> or <code>body</code> for that endpoint only.
+           Omit a section when the endpoint needs no key.
+         </p>
+         <pre class="example-json">${escapeHtml(json)}</pre>
+         <div class="flex gap-1 u-end-mt-1">
+           <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-use">Use example</button>
+           <button type="button" class="btn btn-primary btn-sm" id="ai-credentials-copy">Copy JSON</button>
+         </div>`,
+      );
+
+      document.getElementById("ai-credentials-use").addEventListener("click", () => {
+        const field = document.getElementById("ai-credentials");
+        if (field) field.value = json;
+        Modal.hide();
+        Toast.success("Example loaded into the form");
+      });
+
+      document.getElementById("ai-credentials-copy").addEventListener("click", async () => {
         const copied = await copyText(json);
         if (copied) Toast.success("JSON copied to clipboard");
         else Toast.error("Copy failed — select the text manually");
