@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-11-02
+
+### Added
+
+- safe rotation with grace window, no receiver downtime
+
 ## [1.21.0] - 2026-11-02
 
 ### Added
