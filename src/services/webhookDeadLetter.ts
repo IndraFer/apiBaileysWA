@@ -55,9 +55,11 @@ function persistAppend(entry: DeadLetterEntry): void {
   if (!dir) return;
   try {
     ensureDir(dir);
+    // Do not persist the signing secret: replay resolves the current one from
+    // the session, and an on-disk JSONL must not become a credential leak.
     fs.appendFileSync(
       path.join(dir, "webhook-dead-letter.jsonl"),
-      `${JSON.stringify(entry)}\n`,
+      `${JSON.stringify({ ...entry, webhookSecret: undefined })}\n`,
       "utf8",
     );
   } catch (err) {

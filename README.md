@@ -1641,6 +1641,14 @@ Webhook secrets are **never returned** by list endpoints; the dashboard shows
 only `hasWebhookSecret` and the last four characters. Submitting an empty secret
 keeps the stored one (use `clearWebhookSecret: true` to remove it).
 
+Secrets are encrypted at rest in session metadata when `CONFIG_ENC_KEY` is set
+(otherwise they carry a `plain:` prefix for backward compatibility).
+`POST /dashboard/api/sessions/:sessionId/webhook/rotate` generates a 32-byte
+secret, stores the encrypted value and returns the plaintext **once**. The
+previous secret becomes invalid immediately. Rotation is manual: there is no
+24-hour expiry and nothing rotates on its own. Dead-letter JSONL persistence
+omits the secret; replay resolves the current one from the session.
+
 Fallback order for webhook auth/signing secret:
 
 1. Per-session webhook secret

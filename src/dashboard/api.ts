@@ -2,6 +2,7 @@
  * Dashboard-specific API routes — SSE events, webhook config, stats.
  */
 
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { proto, WAPresence } from "@whiskeysockets/baileys";
@@ -369,6 +370,36 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
     await updateSessionMetadata(sessionId, nextMetadata);
 
     return c.json({ success: true, message: "Webhook config updated" });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * POST /dashboard/api/sessions/:sessionId/webhook/rotate
+ *
+ * Generate a new webhook secret. The previous secret stops working as soon as
+ * this returns; the new value is shown once. This is manual rotation, not a
+ * 24-hour expiry: nothing rotates unless an operator asks for it.
+ */
+dashboardApi.post("/sessions/:sessionId/webhook/rotate", async (c) => {
+  const denied = requireCapability(c, "manageWebhooks");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const webhookSecret = randomBytes(32).toString("base64url");
+    session.updateOptions({ webhookSecret });
+    await updateSessionMetadata(sessionId, session.getSessionMetadata());
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      success: true,
+      message: "Webhook secret rotated — update the receiver now",
+      data: { webhookSecret },
+    });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

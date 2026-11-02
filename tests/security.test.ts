@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeMetadataSecrets, encodeMetadataSecrets } from "@/baileys/authState/metadataSecrets";
 import { publicErrorMessage } from "@/lib/errorMessage";
 import { isPathInside } from "@/lib/pathSafe";
 import { isValidSessionId } from "@/lib/sessionId";
@@ -141,6 +142,41 @@ describe("webhook delivery guard", () => {
       expect(result.error).toBe("Redirect not followed");
     } finally {
       server.stop(true);
+    }
+  });
+});
+
+describe("webhook secret at rest", () => {
+  test("encrypts, decrypts and migrates legacy plaintext", () => {
+    const previous = process.env.CONFIG_ENC_KEY;
+    process.env.CONFIG_ENC_KEY = "unit-test-key";
+    try {
+      const stored = encodeMetadataSecrets({
+        webhookSecret: "super-secret-value",
+        webhookUrl: "https://example.com/hook",
+      });
+      expect(typeof stored.webhookSecret).toBe("string");
+      expect(stored.webhookSecret).not.toContain("super-secret-value");
+      expect(decodeMetadataSecrets(stored).webhookSecret).toBe("super-secret-value");
+
+      const legacy = decodeMetadataSecrets({ webhookSecret: "legacy-plain" });
+      expect(legacy.webhookSecret).toBe("legacy-plain");
+      expect(encodeMetadataSecrets(legacy).webhookSecret).not.toBe("legacy-plain");
+    } finally {
+      if (previous === undefined) delete process.env.CONFIG_ENC_KEY;
+      else process.env.CONFIG_ENC_KEY = previous;
+    }
+  });
+
+  test("falls back to a plain prefix without CONFIG_ENC_KEY", () => {
+    const previous = process.env.CONFIG_ENC_KEY;
+    delete process.env.CONFIG_ENC_KEY;
+    try {
+      const stored = encodeMetadataSecrets({ webhookSecret: "no-key" });
+      expect(String(stored.webhookSecret)).toStartWith("plain:");
+      expect(decodeMetadataSecrets(stored).webhookSecret).toBe("no-key");
+    } finally {
+      if (previous !== undefined) process.env.CONFIG_ENC_KEY = previous;
     }
   });
 });

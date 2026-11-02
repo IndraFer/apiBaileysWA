@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { type AuthenticationState, useMultiFileAuthState } from "@whiskeysockets/baileys";
+import { decodeMetadataSecrets, encodeMetadataSecrets } from "@/baileys/authState/metadataSecrets";
 import config from "@/config";
 import logger from "@/lib/logger";
 import { isRedisAvailable } from "@/lib/redis";
@@ -73,7 +74,7 @@ export function saveFileSessionMetadata(sessionId: string, metadata: unknown): v
     mkdirSync(sessionDir, { recursive: true });
   }
   const metadataFile = getMetadataFile(sessionId);
-  writeFileSync(metadataFile, JSON.stringify(metadata), "utf-8");
+  writeFileSync(metadataFile, JSON.stringify(encodeMetadataSecrets(metadata)), "utf-8");
 }
 
 export function getFileSavedSessionsWithMetadata<T>(): Array<{ id: string; metadata: T | null }> {
@@ -86,7 +87,7 @@ export function getFileSavedSessionsWithMetadata<T>(): Array<{ id: string; metad
     try {
       const raw = readFileSync(metadataFile, "utf-8");
       const parsed = JSON.parse(raw) as T;
-      return { id, metadata: parsed };
+      return { id, metadata: decodeMetadataSecrets(parsed) };
     } catch {
       return { id, metadata: null };
     }

@@ -300,6 +300,12 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
             return;
           }
 
+          const rotate = event.target.closest("button[data-action='rotate-webhook-secret']");
+          if (rotate) {
+            this.rotateWebhookSecret(rotate.getAttribute("data-session-id"));
+            return;
+          }
+
           const button = event.target.closest("button[data-action='test-webhook']");
           if (!button) return;
           this.testWebhook(button.getAttribute("data-session-id"));
@@ -371,6 +377,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
             <div class="flex gap-1">
               <button type="submit" class="btn btn-primary btn-sm">Save Webhook</button>
               <button type="button" class="btn btn-outline btn-sm" data-action="test-webhook" data-session-id="${sid}">Test Connection</button>
+              <button type="button" class="btn btn-outline btn-sm" data-action="rotate-webhook-secret" data-session-id="${sid}">Rotate Secret</button>
             </div>
           </form>
         </div>`;
@@ -397,6 +404,36 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
       } else {
         Toast.error(result.message);
       }
+    },
+
+    async rotateWebhookSecret(sessionId) {
+      const confirmed = await Modal.confirm(
+        "Rotate Webhook Secret",
+        "A new secret is generated and the previous one stops working immediately. Update your receiver before the next delivery. This is manual rotation — there is no automatic expiry.",
+        { confirmText: "Rotate", variant: "primary" },
+      );
+      if (!confirmed) return;
+
+      const result = await API.post(`/sessions/${sessionId}/webhook/rotate`, {});
+      if (!result.success) {
+        Toast.error(result.message || "Failed to rotate secret");
+        return;
+      }
+
+      const newSecret = String(result.data?.webhookSecret || "");
+      const target = webhookSessions.find((s) => (s.sessionId || s.id) === sessionId);
+      if (target) {
+        target.hasWebhookSecret = true;
+        target.webhookSecretLast4 = newSecret.slice(-4);
+        this.renderWebhookConfig();
+      }
+
+      Modal.show(
+        "New Webhook Secret",
+        `<p class="u-mb-1">Copy this now — it is shown only once. Update your receiver, then test the connection.</p>
+         <code class="u-break-all">${escapeHtml(newSecret)}</code>
+         <p class="text-muted u-block-mt-1">The previous secret is already invalid. Nothing expires automatically; rotate again whenever you need to.</p>`,
+      );
     },
 
     async testWebhook(sessionId) {

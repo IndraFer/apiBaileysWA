@@ -6,6 +6,7 @@ import {
   proto,
   type SignalDataTypeMap,
 } from "@whiskeysockets/baileys";
+import { decodeMetadataSecrets, encodeMetadataSecrets } from "@/baileys/authState/metadataSecrets";
 import logger from "@/lib/logger";
 import { getRedis } from "@/lib/redis";
 import { assertValidSessionId } from "@/lib/sessionId";
@@ -37,7 +38,11 @@ export async function useRedisAuthState(
 
   // Store metadata (webhook URL, options, etc.)
   if (metadata) {
-    await redis.hSet(createKey("authState"), "metadata", JSON.stringify(metadata));
+    await redis.hSet(
+      createKey("authState"),
+      "metadata",
+      JSON.stringify(encodeMetadataSecrets(metadata)),
+    );
   }
 
   return {
@@ -60,7 +65,6 @@ export async function useRedisAuthState(
           return data;
         },
         set: async (data) => {
-          type DataKey = keyof typeof data;
           const multi = redis.multi();
           for (const [category, categoryData] of Object.entries(data) as Array<
             [string, Partial<Record<string, unknown>>]
@@ -121,7 +125,7 @@ export async function getRedisSavedSessionIds<T>(): Promise<Array<{ id: string; 
     if (typeof raw !== "string" || !raw) return { id, metadata: null as T };
 
     try {
-      return { id, metadata: JSON.parse(raw) as T };
+      return { id, metadata: decodeMetadataSecrets(JSON.parse(raw) as T) };
     } catch {
       return { id, metadata: null as T };
     }
@@ -146,6 +150,6 @@ export async function updateRedisSessionMetadata(
   await redis.hSet(
     `${REDIS_KEY_PREFIX}:${sessionId}:authState`,
     "metadata",
-    JSON.stringify(metadata),
+    JSON.stringify(encodeMetadataSecrets(metadata)),
   );
 }
