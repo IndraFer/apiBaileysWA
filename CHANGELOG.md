@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-11-02
+
+### Added
+
+- let managers choose all sessions or an assigned subset
+
 ## [1.14.0] - 2026-11-02
 
 ### Added
