@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.11] - 2026-11-02
+
+### Changed
+
+- centre the sidebar group and compact the login header
+
 ## [1.19.10] - 2026-11-02
 
 ### Changed
