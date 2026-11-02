@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-02
+
+### Added
+
+- clear all is local-only to avoid WhatsApp spam
+
 ## [1.16.1] - 2026-11-02
 
 ### Fixed
