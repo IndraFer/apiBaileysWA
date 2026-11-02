@@ -1653,6 +1653,17 @@ invalidate the old secret immediately. Rotation is manual: there is no
 recurring 24-hour expiry and nothing rotates on its own. Dead-letter JSONL
 persistence omits the secret; replay resolves the active one from the session.
 
+**Token auth is not replay protection.** TLS protects the wire only: a bearer
+token (`Authorization`, `x-webhook-secret`) captured in receiver, reverse-proxy,
+APM or error-report logs remains usable even without intercepting TLS. Redact
+those headers everywhere, never put secrets in URLs, and rotate if a log dump
+may have been exposed. `x-webhook-signature` + `x-webhook-timestamp` +
+`x-webhook-id` only add replay resistance when the receiver enforces freshness
+(for example ±5 minutes) and deduplicates delivery IDs; the headers themselves
+do not reject an old request. Prefer HMAC and stop sending the token when the
+receiver supports it, but token auth with strict log hygiene is an accepted
+tradeoff for simpler integrations.
+
 Fallback order for webhook auth/signing secret:
 
 1. Per-session webhook secret
