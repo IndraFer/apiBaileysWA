@@ -2118,3 +2118,34 @@ details[open] > summary::before {
 .chat-action-item svg {
   flex: 0 0 auto;
 }
+
+/* Sidebar brand: icon stays vertically centered beside a 3-line label */
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.sidebar-tagline,
+.sidebar-version {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-version {
+  opacity: 0.85;
+}
+
+.auth-tagline {
+  margin: 0.15rem 0 0.4rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}

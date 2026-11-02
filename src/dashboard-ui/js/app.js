@@ -185,10 +185,23 @@
       this.renderUserBadge(user?.username || "User");
       await loadSessionsForNav();
       this.applyRoleAccess(user || {});
+      this.loadBrandInfo();
 
       // Navigate to hash or default
       const hash = window.location.hash.replace("#", "") || "overview";
       this.navigate(hash);
+    },
+
+    /** Fill the sidebar version from /about; cosmetic, never blocks the UI. */
+    async loadBrandInfo() {
+      try {
+        const result = await API.get("/about");
+        const version = result?.success ? result.data?.version : "";
+        const element = document.getElementById("sidebar-version");
+        if (element && version) element.textContent = version;
+      } catch {
+        // Branding is cosmetic.
+      }
     },
 
     getUserCapabilities(user) {
