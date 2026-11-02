@@ -353,7 +353,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
 						<div class="form-group">
 							<label>Webhook Secret</label>
 							<div class="webhook-secret-input-wrap">
-								<input type="password" id="wh-secret-${sid}" placeholder="Optional x-webhook-secret value" value="${session.webhookSecret || ""}" autocomplete="off" />
+								<input type="password" id="wh-secret-${sid}" placeholder="${session.hasWebhookSecret ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep` : "Optional x-webhook-secret value"}" value="" autocomplete="off" />
 								<button type="button" class="btn btn-outline btn-sm webhook-secret-toggle" data-action="toggle-webhook-secret" data-session-id="${sid}">Show</button>
 							</div>
 						</div>

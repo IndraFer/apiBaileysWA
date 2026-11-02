@@ -51,6 +51,7 @@ const {
   WEBHOOK_RETRY_INTERVAL,
   WEBHOOK_BACKOFF_FACTOR,
   WEBHOOK_SIGNATURE_MODE,
+  WEBHOOK_INCLUDE_TOKEN,
   WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK,
   WEBHOOK_CONCURRENCY,
   WEBHOOK_RETRY_HTTP_429,
@@ -248,6 +249,8 @@ const config = {
       WEBHOOK_ALLOWED_EVENTS ? WEBHOOK_ALLOWED_EVENTS.split(",").map((e) => e.trim()) : ["ALL"],
     ),
     signatureMode: (WEBHOOK_SIGNATURE_MODE || "optional") as "off" | "optional" | "required",
+    /** Legacy static-token headers; disable once the receiver verifies HMAC. */
+    includeToken: WEBHOOK_INCLUDE_TOKEN !== "false",
     allowGlobalTokenFallback:
       WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK !== undefined
         ? WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK === "true"
@@ -431,7 +434,7 @@ const config = {
   /** Maximum concurrent sessions allowed */
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
   /** Per-chat in-memory/snapshot message cap (AI context uses its own limit). */
-  maxMessagesPerChat: MAX_MESSAGES_PER_CHAT ? Number(MAX_MESSAGES_PER_CHAT) : 25,
+  maxMessagesPerChat: MAX_MESSAGES_PER_CHAT ? Number(MAX_MESSAGES_PER_CHAT) : 50,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
 

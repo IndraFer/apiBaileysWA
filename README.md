@@ -439,7 +439,7 @@ old key.
   touched. It runs at startup and daily; run it manually with
   `bun run cleanup-sessions`.
 - **Snapshots only write when state changed** (dirty flag) instead of rewriting
-  the JSON every 60 s. `MAX_MESSAGES_PER_CHAT` (default 25) caps messages kept
+  the JSON every 60 s. `MAX_MESSAGES_PER_CHAT` (default 50) caps messages kept
   per chat; it is per chat, so other chats are never skipped — only older
   messages in each chat are dropped (AI context has its own limit).
 - **5xx messages are sanitized in production**: callers get
@@ -1629,8 +1629,17 @@ control the receiver and trust the shared secret.)
 
 Controlled by:
 
-- `WEBHOOK_SIGNATURE_MODE=off|optional|required`
+- `WEBHOOK_SIGNATURE_MODE=off|optional|required` (default `optional`;
+  `required` once the receiver verifies signatures)
+- `WEBHOOK_INCLUDE_TOKEN=true|false` — legacy static-token headers. Set
+  `false` after the receiver verifies `X-Webhook-Signature`; the secret then
+  stays off the wire. Requests also carry a stable `X-Webhook-Id` for
+  deduplication.
 - `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK=true|false`
+
+Webhook secrets are **never returned** by list endpoints; the dashboard shows
+only `hasWebhookSecret` and the last four characters. Submitting an empty secret
+keeps the stored one (use `clearWebhookSecret: true` to remove it).
 
 Fallback order for webhook auth/signing secret:
 
@@ -1658,7 +1667,10 @@ Outbound delivery is hardened per receiver URL (see `.env.example`):
 - **Dead-letter** — `WEBHOOK_DEAD_LETTER_ENABLED` keeps deliveries that
   exhausted retries (in-memory, optionally persisted as JSONL to
   `WEBHOOK_DEAD_LETTER_DIR`) for manual replay via the dashboard.
-- **SSRF guard** — `WEBHOOK_BLOCK_INTERNAL=true` rejects webhook URLs
+- **SSRF guard** — redirects are never followed, and when
+  `WEBHOOK_BLOCK_INTERNAL=true` the hostname is resolved and every answer is
+  checked against private/loopback/link-local ranges (textual checks alone miss
+  DNS rebinding). `WEBHOOK_BLOCK_INTERNAL=true` rejects webhook URLs
   pointing at localhost / private networks (off by default so local testing
   works).
 
@@ -1782,7 +1794,8 @@ baileys-wa-api/
 | `MAX_SESSIONS`                            | `50`                             | Maximum concurrent WhatsApp sessions                                     |
 | `WEBHOOK_URL`                             | —                                | Default webhook URL                                                      |
 | `WEBHOOK_CONCURRENCY`                     | `20`                             | Max concurrent outbound webhook requests globally                        |
-| `WEBHOOK_SIGNATURE_MODE`                  | `off`                            | Webhook signature mode (`off`, `optional`, `required`)                   |
+| `WEBHOOK_SIGNATURE_MODE`                  | `optional`                       | Webhook signature mode (`off`, `optional`, `required`)                   |
+| `WEBHOOK_INCLUDE_TOKEN`                   | `true`                           | Legacy static-token headers; `false` after receivers verify HMAC         |
 | `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | `true`                           | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
 | `WEBHOOK_ALLOWED_EVENTS`                  | `ALL`                            | Comma-separated event filter                                             |
 | `WEBHOOK_RETRY_MAX`                       | `3`                              | Webhook delivery retry count                                             |

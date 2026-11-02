@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { publicErrorMessage } from "@/lib/errorMessage";
 import { isPathInside } from "@/lib/pathSafe";
 import { isValidSessionId } from "@/lib/sessionId";
-import { validateOutboundUrl } from "@/lib/urlGuard";
+import { isPrivateAddress, validateOutboundUrl } from "@/lib/urlGuard";
 import { hashToken, keyAllowsSession } from "@/services/apiKeys";
 
 describe("session id validation", () => {
@@ -37,6 +37,27 @@ describe("outbound URL guard (SSRF)", () => {
     expect(validateOutboundUrl("https://example.com/file.pdf", { blockInternal: true })).toBeNull();
     expect(validateOutboundUrl("file:///etc/passwd", { blockInternal: true })).not.toBeNull();
     expect(validateOutboundUrl("gopher://example.com", { blockInternal: true })).not.toBeNull();
+  });
+
+  test("resolved private addresses are classified for DNS answers", () => {
+    for (const ip of [
+      "127.0.0.1",
+      "10.1.2.3",
+      "172.20.0.1",
+      "192.168.1.1",
+      "169.254.169.254",
+      "100.64.0.1",
+      "0.0.0.0",
+      "::1",
+      "fd00::1",
+      "fe80::1",
+      "::ffff:127.0.0.1",
+    ]) {
+      expect(isPrivateAddress(ip)).toBe(true);
+    }
+    for (const ip of ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"]) {
+      expect(isPrivateAddress(ip)).toBe(false);
+    }
   });
 
   test("internal hosts stay allowed when the block is disabled", () => {
@@ -79,5 +100,47 @@ describe("api key helpers", () => {
     expect(keyAllowsSession(["a"], "a")).toBe(true);
     expect(keyAllowsSession(["a"], "b")).toBe(false);
     expect(keyAllowsSession(undefined, "b")).toBe(true);
+  });
+});
+
+describe("webhook delivery guard", () => {
+  test("resolver rejects literal private hosts when blocking is on", async () => {
+    const config = (await import("@/config")).default;
+    const { resolveWebhookTarget } = await import("@/baileys/connection");
+    const previous = config.webhook.blockInternal;
+    config.webhook.blockInternal = true;
+    try {
+      expect(await resolveWebhookTarget("http://127.0.0.1/x")).toContain("Blocked");
+      expect(await resolveWebhookTarget("http://10.1.2.3/x")).toContain("Blocked");
+      expect(await resolveWebhookTarget("http://[::1]/x")).toContain("Blocked");
+      expect(await resolveWebhookTarget("file:///etc/passwd")).toContain("scheme");
+    } finally {
+      config.webhook.blockInternal = previous;
+    }
+  });
+
+  test("a 3xx response is not followed", async () => {
+    const { deliverWebhookOnce } = await import("@/baileys/connection");
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(null, {
+          status: 302,
+          headers: { Location: "http://169.254.169.254/latest/meta-data" },
+        }),
+    });
+    try {
+      const result = await deliverWebhookOnce(
+        `http://127.0.0.1:${server.port}/hook`,
+        { probe: true },
+        "",
+        3000,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(302);
+      expect(result.error).toBe("Redirect not followed");
+    } finally {
+      server.stop(true);
+    }
   });
 });

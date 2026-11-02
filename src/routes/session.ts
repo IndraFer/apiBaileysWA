@@ -112,10 +112,12 @@ sessionRoutes.patch("/:sessionId/settings", async (c) => {
   const body = parsed.data;
 
   try {
+    const currentSecret = connectionManager.getSession(sessionId).getOptions().webhookSecret;
     await connectionManager.updateSessionSettings(sessionId, {
       clientName: body.clientName,
       webhookUrl: body.webhookUrl || undefined,
-      webhookSecret: body.webhookSecret || undefined,
+      // Blank keeps the existing secret; there is no secret in list responses.
+      webhookSecret: body.webhookSecret?.trim() || currentSecret,
       includeMedia: body.includeMedia,
       syncFullHistory: body.syncFullHistory,
       autoReply: body.autoReply,

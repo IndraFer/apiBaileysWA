@@ -1,4 +1,6 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { gzipSync } from "node:zlib";
 import type { Boom } from "@hapi/boom";
 import makeWASocket, {
@@ -30,6 +32,7 @@ import type { SessionMetadata, SessionOptions, WebhookPayload } from "@/baileys/
 import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
+import { isPrivateAddress } from "@/lib/urlGuard";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
 import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
@@ -163,6 +166,9 @@ export function validateWebhookTarget(webhookUrl: string): string | null {
   }
   if (!config.webhook.blockInternal) return null;
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (isIP(host) !== 0 && isPrivateAddress(host)) {
+    return `Blocked internal/private webhook target: ${host}`;
+  }
   const isInternal =
     host === "localhost" ||
     host.endsWith(".localhost") ||
@@ -177,6 +183,43 @@ export function validateWebhookTarget(webhookUrl: string): string | null {
     host.endsWith(".local") ||
     host === "metadata.google.internal";
   return isInternal ? `Blocked internal/private webhook target: ${host}` : null;
+}
+
+/**
+ * DNS-aware variant of validateWebhookTarget: resolves the hostname and
+ * rejects if ANY answer is private. Textual checks alone miss a public name
+ * that points at 127.0.0.1 or a DNS-rebinding answer. Fails closed on lookup
+ * errors when internal blocking is enabled.
+ *
+ * Residual TOCTOU: fetch resolves again after this check. Stage 2 should pin
+ * the validated address (egress proxy or a custom dispatcher).
+ */
+export async function resolveWebhookTarget(webhookUrl: string): Promise<string | null> {
+  const baseError = validateWebhookTarget(webhookUrl);
+  if (baseError) return baseError;
+  if (!config.webhook.blockInternal) return null;
+
+  let host: string;
+  try {
+    host = new URL(webhookUrl).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return "Invalid webhook URL";
+  }
+
+  try {
+    if (isIP(host) !== 0) {
+      return isPrivateAddress(host) ? `Blocked internal/private webhook target: ${host}` : null;
+    }
+    const addresses = await lookup(host, { all: true, verbatim: true });
+    if (addresses.length === 0) return `Webhook target did not resolve: ${host}`;
+    if (addresses.some((entry) => isPrivateAddress(entry.address))) {
+      return `Blocked webhook target: ${host} resolves to a private address`;
+    }
+  } catch {
+    return `Webhook target could not be resolved: ${host}`;
+  }
+
+  return null;
 }
 
 export class BaileysConnection {
@@ -1494,7 +1537,7 @@ export class BaileysConnection {
 
           // Defense in depth: the queue callback is a new scope, so re-check
           // the target here before the request is made.
-          const targetCheck = validateWebhookTarget(webhookUrl);
+          const targetCheck = await resolveWebhookTarget(webhookUrl);
           if (targetCheck) {
             lastFailureReason = targetCheck;
             nonRetryable = true;
@@ -1507,8 +1550,15 @@ export class BaileysConnection {
             method: "POST",
             headers,
             body,
+            redirect: "manual",
             signal: AbortSignal.timeout(30000), // 30s timeout per attempt
           });
+
+          if (response.status >= 300 && response.status < 400) {
+            lastFailureReason = `HTTP ${response.status} redirect not followed`;
+            nonRetryable = true;
+            break;
+          }
 
           if (response.ok) {
             logger.debug("[%s] Webhook delivered successfully", this.sessionId);
@@ -1684,8 +1734,14 @@ export function buildWebhookHeaders(
   secret: string,
   rawBody: string,
 ): { headers: Record<string, string>; error?: string } {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (secret) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    // Stable across retries of the same payload so receivers can deduplicate.
+    "x-webhook-id": createHash("sha256").update(rawBody).digest("hex").slice(0, 32),
+  };
+  // Legacy static token. Set WEBHOOK_INCLUDE_TOKEN=false once the receiver
+  // verifies the HMAC signature; the secret then never travels on the wire.
+  if (secret && config.webhook.includeToken) {
     headers["x-webhook-secret"] = secret;
     headers.Authorization = `Bearer ${secret}`;
   }
@@ -1711,8 +1767,8 @@ export async function deliverWebhookOnce(
   secret: string,
   timeoutMs = 30000,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
-  // SSRF guard: validate the target before fetching.
-  const invalid = validateWebhookTarget(webhookUrl);
+  // SSRF guard: validate the target before fetching (DNS-aware).
+  const invalid = await resolveWebhookTarget(webhookUrl);
   if (invalid) {
     return { ok: false, status: 0, error: invalid };
   }
@@ -1731,7 +1787,7 @@ export async function deliverWebhookOnce(
     await webhookRateLimiter.waitForSlot(webhookUrl);
 
     // Re-check immediately before the request (defense in depth).
-    const targetCheck = validateWebhookTarget(webhookUrl);
+    const targetCheck = await resolveWebhookTarget(webhookUrl);
     if (targetCheck) return { ok: false, status: 0, error: targetCheck };
 
     // pi-lens-ignore: ts-ssrf -- validated above by validateWebhookTarget()
@@ -1739,8 +1795,13 @@ export async function deliverWebhookOnce(
       method: "POST",
       headers,
       body,
+      // Receivers must not redirect; following one would bypass the URL check.
+      redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (response.status >= 300 && response.status < 400) {
+      return { ok: false, status: response.status, error: "Redirect not followed" };
+    }
     return { ok: response.ok, status: response.status };
   } catch (error) {
     return { ok: false, status: 0, error: errorToString(error) };

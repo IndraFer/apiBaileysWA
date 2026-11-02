@@ -357,6 +357,9 @@
       if (!session) return Toast.error("Session data not found");
 
       const ar = session.autoReply || {};
+      const secretHint = session.hasWebhookSecret
+        ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep`
+        : "Optional secret key";
 
       Modal.show(
         `Update Settings — ${escapeHtml(sessionId)}`,
@@ -368,7 +371,7 @@
           </div>
 					<div class="form-group">
 						<label for="update-secret">Webhook Secret Header</label>
-						<input type="text" id="update-secret" placeholder="Optional secret key" value="${escapeHtml(session.webhookSecret || "")}" />
+						<input type="password" id="update-secret" placeholder="${escapeHtml(secretHint)}" value="" autocomplete="off" />
 					</div>
 
 					<div class="u-section-divider">

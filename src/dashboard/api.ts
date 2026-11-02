@@ -348,21 +348,24 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
   // Use undefined (not empty string) when secret is blank so sendToWebhook
   // falls back to AUTH_GLOBAL_TOKEN.
   const rawSecret = String(body.webhookSecret ?? "").trim();
-  const webhookSecret = rawSecret || undefined;
+  const clearSecret = body.clearWebhookSecret === true;
   const events = Array.isArray(body.events)
     ? body.events.map((e: unknown) => String(e).trim()).filter(Boolean)
     : [];
 
   try {
     const session = connectionManager.getSession(sessionId);
+    // Blank means "keep the stored secret": clients only receive a masked
+    // value, so re-saving the form must not wipe it. Clear explicitly instead.
+    const nextSecret = clearSecret ? undefined : rawSecret || session.getOptions().webhookSecret;
     const nextMetadata = {
       ...session.getSessionMetadata(),
       webhookUrl,
-      webhookSecret,
+      webhookSecret: nextSecret,
       webhookEvents: events,
     };
 
-    session.updateOptions({ webhookUrl, webhookSecret, webhookEvents: events });
+    session.updateOptions({ webhookUrl, webhookSecret: nextSecret, webhookEvents: events });
     await updateSessionMetadata(sessionId, nextMetadata);
 
     return c.json({ success: true, message: "Webhook config updated" });
@@ -772,7 +775,12 @@ dashboardApi.get("/webhooks/dead-letter", (c) => {
   if (denied) return denied;
   const limit = Number(c.req.query("limit") || "50");
   const sessionId = c.req.query("sessionId") || undefined;
-  return c.json({ success: true, data: getDeadLetters(limit, sessionId) });
+  // Replay reads the secret internally; never expose it through the API.
+  const entries = getDeadLetters(limit, sessionId).map(({ webhookSecret, ...entry }) => ({
+    ...entry,
+    hasWebhookSecret: Boolean(webhookSecret),
+  }));
+  return c.json({ success: true, data: entries });
 });
 
 /**

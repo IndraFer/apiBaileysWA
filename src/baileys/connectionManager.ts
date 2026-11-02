@@ -151,20 +151,25 @@ class ConnectionManager {
     connected: boolean;
     user: unknown;
     webhookUrl: string;
-    webhookSecret: string;
+    hasWebhookSecret: boolean;
+    webhookSecretLast4: string;
     webhookEvents: string[];
     autoReply: SessionMetadata["autoReply"];
   }> {
-    return [...this.connections.entries()].map(([id, conn]) => ({
-      sessionId: id,
-      ownerId: conn.getOptions().ownerId || "",
-      connected: conn.isConnected,
-      user: conn.user,
-      webhookUrl: conn.getOptions().webhookUrl || "",
-      webhookSecret: conn.getOptions().webhookSecret || "",
-      webhookEvents: conn.getOptions().webhookEvents || [],
-      autoReply: conn.getOptions().autoReply,
-    }));
+    return [...this.connections.entries()].map(([id, conn]) => {
+      const secret = conn.getOptions().webhookSecret || "";
+      return {
+        sessionId: id,
+        ownerId: conn.getOptions().ownerId || "",
+        connected: conn.isConnected,
+        user: conn.user,
+        webhookUrl: conn.getOptions().webhookUrl || "",
+        hasWebhookSecret: secret.length > 0,
+        webhookSecretLast4: secret ? secret.slice(-4) : "",
+        webhookEvents: conn.getOptions().webhookEvents || [],
+        autoReply: conn.getOptions().autoReply,
+      };
+    });
   }
 
   /**
