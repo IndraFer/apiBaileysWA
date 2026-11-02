@@ -929,20 +929,20 @@ the same text in **REST API → Integration snippet**).
 
 **Method & URL**
 
-\`\`\`
+```
 POST https://your-domain.com/api/v1/messages
-\`\`\`
+```
 
 **Headers**
 
-\`\`\`
+```
 Authorization: Bearer <API_KEY>
 Content-Type: application/json
-\`\`\`
+```
 
 **JSON Schema (tool parameters)**
 
-\`\`\`json
+```json
 {
   "description": "Send a WhatsApp message from a connected session. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
   "type": "object",
@@ -976,18 +976,18 @@ Content-Type: application/json
     "isGroup": { "type": "boolean", "description": "Force group semantics when receiver is not an @g.us JID." }
   }
 }
-\`\`\`
+```
 
 **Example body**
 
-\`\`\`json
+```json
 {
   "from": "ROG8",
   "receiver": "628123456789",
   "type": "text",
   "messages": "Halo, ini pesan dari bot."
 }
-\`\`\`
+```
 
 #### Full tool definition (download)
 
