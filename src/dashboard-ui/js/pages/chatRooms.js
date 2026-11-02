@@ -431,6 +431,7 @@
 							<div class="chatrooms-action-buttons">
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
+							<button class="btn btn-danger btn-sm" id="chatrooms-clear-all" type="button">Clear All</button>
 							</div>
 							
 							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
@@ -525,6 +526,34 @@
         if (selectedJid) {
           await this.loadConversation(selectedJid);
         }
+      });
+
+      document.getElementById("chatrooms-clear-all")?.addEventListener("click", async () => {
+        if (!selectedSessionId) return;
+
+        const confirmed = confirm(
+          "Clear all chats on WhatsApp and in this dashboard?\n\nThis deletes the history on the linked phone too and cannot be undone.",
+        );
+        if (!confirmed) return;
+
+        const result = await API.post(
+          `/sessions/${encodeURIComponent(selectedSessionId)}/chats/clear`,
+          { all: true },
+        );
+
+        if (!result.success) {
+          Toast.error(result.message || "Failed to clear chats");
+          return;
+        }
+
+        const data = result.data ?? { clearedChats: 0, clearedMessages: 0, failedChats: 0 };
+        chatCache = [];
+        Toast.success(
+          `Cleared ${data.clearedMessages} messages in ${data.clearedChats} chats${
+            data.failedChats ? ` · ${data.failedChats} chats kept (WhatsApp rejected)` : ""
+          }`,
+        );
+        await this.loadChatList(false);
       });
 
       pollToggleBtn.addEventListener("click", () => {

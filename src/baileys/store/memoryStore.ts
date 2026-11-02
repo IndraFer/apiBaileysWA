@@ -49,6 +49,26 @@ export class MemoryStore extends EventEmitter {
   }
 
   bind(ev: BaileysEventEmitter) {
+    ev.on("messages.delete", (item) => {
+      // { jid, all: true } arrives when a chat is cleared on the account;
+      // per-key deletions arrive for individual messages.
+      const keys = "keys" in item ? item.keys : [];
+
+      if (keys.length === 0 && "all" in item && item.all === true && item.jid) {
+        const jid = jidNormalizedUser(item.jid);
+        this.messages.delete(jid);
+        const chat = this.chats.get(jid);
+        if (chat) chat.unreadCount = 0;
+        return;
+      }
+
+      for (const key of keys) {
+        if (!key?.remoteJid || !key.id) continue;
+        const jid = jidNormalizedUser(key.remoteJid);
+        this.messages.get(jid)?.delete(key.id);
+      }
+    });
+
     ev.on("messages.upsert", ({ messages: newMessages, type }) => {
       for (const msg of newMessages) {
         try {
@@ -214,6 +234,30 @@ export class MemoryStore extends EventEmitter {
         chat.unreadCount = 0;
       }
     }
+  }
+
+  /** Remove stored messages for one chat, keeping the room in the list. */
+  clearChat(jid: string): number {
+    const target = normalizeJidKey(jid);
+    let removed = 0;
+    for (const [key, map] of this.messages) {
+      if (normalizeJidKey(key) === target) {
+        removed += map.size;
+        map.clear();
+      }
+    }
+    this.markChatRead(jid);
+    return removed;
+  }
+
+  /** Remove every stored chat and message for this session. */
+  clearAllChats(): { chats: number; messages: number } {
+    let messages = 0;
+    for (const map of this.messages.values()) messages += map.size;
+    const chats = this.chats.size;
+    this.messages.clear();
+    this.chats.clear();
+    return { chats, messages };
   }
 
   getContactList(): string[] {

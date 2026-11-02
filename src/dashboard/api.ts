@@ -1032,6 +1032,78 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
 });
 
 /**
+ * POST /dashboard/api/sessions/:sessionId/chats/clear
+ *
+ * Clear is always two-way: the same chats are cleared on WhatsApp (via
+ * chatModify) and in the local store. A chat whose remote clear fails keeps its
+ * local history so the two sides do not silently diverge.
+ */
+dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const body = await c.req.json().catch(() => ({}));
+  const all = body.all === true;
+  const jid = typeof body.jid === "string" ? body.jid : "";
+  if (!all && !jid) {
+    return c.json({ success: false, message: "Provide jid or all=true" }, 400);
+  }
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const status = connectionManager.getSessionStatus(sessionId);
+    if (!status.connected) {
+      return c.json(
+        {
+          success: false,
+          message: "Session is not connected; reconnect it before clearing",
+          retryable: true,
+        },
+        409,
+      );
+    }
+
+    const store = session.getStore();
+    const targets = all
+      ? [...store.getChatList(false), ...store.getChatList(true)].map((chat) => String(chat.id))
+      : [jid];
+
+    let clearedChats = 0;
+    let clearedMessages = 0;
+    let failedChats = 0;
+
+    for (const target of targets.slice(0, 100)) {
+      const lastMessages = store
+        .loadMessages(target, 5)
+        .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
+
+      if (lastMessages.length === 0) continue;
+
+      try {
+        await session.chatModify({ clear: true, lastMessages }, target);
+        clearedMessages += store.clearChat(target);
+        clearedChats += 1;
+      } catch {
+        // Keep the local copy for this chat: the phone still has the history.
+        failedChats += 1;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+
+    return c.json({
+      success: true,
+      message: "Chats cleared on WhatsApp and locally",
+      data: { clearedChats, clearedMessages, failedChats },
+    });
+  } catch (err) {
+    return c.json({ success: false, message: (err as Error).message }, 500);
+  }
+});
+
+/**
  * POST /dashboard/api/sessions/:sessionId/chats/:jid/read
  * Mark unread messages in the chat as read (dashboard safety helper).
  */

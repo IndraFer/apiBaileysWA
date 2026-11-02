@@ -409,6 +409,21 @@ For a public deployment, also put a limiter in front: nginx
 repeated 401/429s. In-process limits protect one instance; the proxy protects
 the whole fleet.
 
+### Clearing chats (two-way sync)
+
+**Chatrooms → Clear All** clears on WhatsApp *and* locally in one action. For
+each chat the server sends `chatModify({ clear: true, lastMessages })`, then
+drops the cached messages for that chat. A chat whose remote clear fails keeps
+its local copy, so the dashboard never shows less history than the phone.
+
+Clearing from the phone is mirrored back: Baileys emits `messages.delete` with
+`{ jid, all: true }` for a cleared chat (and `chats.delete` for a deleted one),
+and the store applies both. This is why a phone-side clear now disappears from
+the dashboard on the next event instead of lingering as a stale cache.
+
+Bulk clears are capped at 100 chats per request and paced at 150 ms per chat to
+avoid hammering the socket.
+
 ### Session config persistence & cleanup
 
 Per-number settings (webhook, AI/routing, autoReply, owner) are written to
