@@ -2167,29 +2167,21 @@ details[open] > summary::before {
   opacity: 0.85;
 }
 
-/* Sidebar brand centred: icon, title, tagline · version */
+/* Sidebar brand: icon left, vertically centred against title + meta line */
 .sidebar-header {
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 0.25rem;
-  padding: 0.85rem 1rem;
-  position: relative;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 0.6rem;
+  padding: 0 0.85rem;
 }
 
 .sidebar-brand {
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .sidebar-meta {
-  justify-content: center;
-}
-
-.sidebar-header .sidebar-close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  margin-left: 0;
+  justify-content: flex-start;
 }
