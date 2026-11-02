@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-11-02
+
+### Added
+
+- encrypt secrets at rest and add manual rotation
+
 ## [1.20.2] - 2026-11-02
 
 ### Fixed
