@@ -425,6 +425,12 @@ session returns `409`. There is deliberately no "clear/delete every chat"
 button: doing that through the socket would mean hundreds of requests and a real
 ban risk. To clean another chat, open it and act on it individually.
 
+The **Groups** page offers the same pair per group: **Clear Chat** (clears the
+group chat on WhatsApp and locally) and **Exit & Delete** (`POST
+/groups/:sessionId/leave-and-delete/:jid`, which deletes the chat, leaves the
+group and removes it locally). Both use the dashboard confirmation modal — the
+same dialog as chat clear/delete — instead of a native browser prompt.
+
 Changes made on the phone are mirrored back automatically: `messages.delete`
 with `{ jid, all: true }` empties the cache for a cleared chat, and
 `chats.delete` removes the room locally.

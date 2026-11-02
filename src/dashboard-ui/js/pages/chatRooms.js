@@ -432,7 +432,7 @@
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-clear-all" type="button">Clear Chat</button>
-							<button class="btn btn-danger btn-sm" id="chatrooms-delete-chat" type="button">Delete Chat</button>
+							<button class="btn btn-outline-danger btn-sm" id="chatrooms-delete-chat" type="button">Delete Chat</button>
 							</div>
 							
 							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
@@ -536,8 +536,10 @@
           return;
         }
 
-        const confirmed = confirm(
-          `Clear this chat's history on WhatsApp and in the dashboard?\n\n${selectedJid}\n\nThis cannot be undone.`,
+        const confirmed = await Modal.confirm(
+          "Clear Chat",
+          `Clear this chat's history on WhatsApp and in the dashboard?<br><br><strong>${UI.escapeHtml(selectedJid)}</strong><br><br>This cannot be undone.`,
+          { confirmText: "Clear chat", variant: "danger" },
         );
         if (!confirmed) return;
 
@@ -582,8 +584,10 @@
           return;
         }
 
-        const confirmed = confirm(
-          `Delete this chat on WhatsApp and in the dashboard?\n\n${selectedJid}\n\nThe chat and its history will be removed. This cannot be undone.`,
+        const confirmed = await Modal.confirm(
+          "Delete Chat",
+          `Delete this chat on WhatsApp and in the dashboard?<br><br><strong>${UI.escapeHtml(selectedJid)}</strong><br><br>The chat and its history will be removed. This cannot be undone.`,
+          { confirmText: "Delete chat", variant: "danger" },
         );
         if (!confirmed) return;
 

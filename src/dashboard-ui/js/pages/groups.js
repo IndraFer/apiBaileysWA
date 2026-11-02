@@ -51,19 +51,79 @@
       UI.setHtml(
         el,
         `<div class="table-wrapper"><table>
-        <thead><tr><th>Name</th><th>JID</th><th>Size</th></tr></thead>
+        <thead><tr><th>Name</th><th>JID</th><th>Size</th><th class="u-text-right">Actions</th></tr></thead>
         <tbody>${groups
-          .map(
-            (g) => `
+          .map((g) => {
+            const jid = String(g.id || g.jid || "");
+            const name = g.subject || g.name || jid;
+            return `
           <tr>
-            <td><strong>${UI.escapeHtml(g.subject || g.name || "—")}</strong></td>
-            <td class="text-muted font-mono text-xs">${UI.escapeHtml(g.id || g.jid || "")}</td>
+            <td><strong>${UI.escapeHtml(name)}</strong></td>
+            <td class="text-muted font-mono text-xs">${UI.escapeHtml(jid)}</td>
             <td>${UI.escapeHtml(g.size || g.participants?.length || "—")}</td>
-          </tr>`,
-          )
+            <td class="u-text-right">
+              <button class="btn btn-outline btn-sm" data-group-clear="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Clear Chat</button>
+              <button class="btn btn-outline-danger btn-sm" data-group-exit="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Exit &amp; Delete</button>
+            </td>
+          </tr>`;
+          })
           .join("")}
         </tbody></table></div>`,
       );
+
+      const sessionId = document.getElementById("group-session")?.value || "";
+
+      el.querySelectorAll("[data-group-clear]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const jid = button.dataset.groupClear;
+          const name = button.dataset.groupName || jid;
+          const ok = await Modal.confirm(
+            "Clear Chat",
+            `Clear this group's history on WhatsApp and in the dashboard?<br><br><strong>${UI.escapeHtml(name)}</strong><br><br>This cannot be undone.`,
+            { confirmText: "Clear chat", variant: "danger" },
+          );
+          if (!ok) return;
+
+          button.disabled = true;
+          const result = await API.post(`/sessions/${encodeURIComponent(sessionId)}/chats/clear`, {
+            jid,
+          });
+          button.disabled = false;
+
+          if (result.success) {
+            Toast.success(`Cleared ${result.data?.clearedMessages ?? 0} messages in this group`);
+          } else {
+            Toast.error(result.message || "Failed to clear this group");
+          }
+        });
+      });
+
+      el.querySelectorAll("[data-group-exit]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const jid = button.dataset.groupExit;
+          const name = button.dataset.groupName || jid;
+          const ok = await Modal.confirm(
+            "Exit & Delete Group",
+            `Leave <strong>${UI.escapeHtml(name)}</strong> and delete its chat?<br><br>You will stop receiving messages from this group and the chat is removed on WhatsApp and here.`,
+            { confirmText: "Exit & delete", variant: "danger" },
+          );
+          if (!ok) return;
+
+          button.disabled = true;
+          const result = await API.post(
+            `/groups/${encodeURIComponent(sessionId)}/leave-and-delete/${encodeURIComponent(jid)}`,
+            {},
+          );
+          button.disabled = false;
+
+          if (result.success) {
+            Toast.success("Left and deleted the group");
+            this.loadGroups();
+          } else {
+            Toast.error(result.message || "Failed to exit the group");
+          }
+        });
+      });
     },
 
     showCreateModal() {

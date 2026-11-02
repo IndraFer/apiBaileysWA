@@ -2035,3 +2035,14 @@ details[open] > summary::before {
 .hidden {
   display: none;
 }
+
+.btn-outline-danger {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.btn-outline-danger:hover {
+  background: var(--danger);
+  color: #fff;
+}

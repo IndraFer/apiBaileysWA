@@ -217,6 +217,38 @@ groupRoutes.post("/:sessionId/leave/:jid", sessionValidator, async (c) => {
 });
 
 /**
+ * POST /groups/:sessionId/leave-and-delete/:jid
+ * Leave the group and remove its chat, locally and on WhatsApp.
+ */
+groupRoutes.post("/:sessionId/leave-and-delete/:jid", sessionValidator, async (c) => {
+  const sessionId = c.req.param("sessionId") ?? "";
+  const jid = formatGroup(c.req.param("jid") ?? "");
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const store = session.getStore();
+    const lastMessages = store
+      .loadMessages(jid, 5)
+      .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
+
+    if (lastMessages.length > 0) {
+      try {
+        await session.chatModify({ delete: true, lastMessages }, jid);
+      } catch {
+        // Leaving still proceeds; the local copy is removed below.
+      }
+    }
+
+    await session.groupLeave(jid);
+    store.deleteChat(jid);
+
+    return success(c, { jid }, "Left and deleted the group");
+  } catch (err) {
+    return error(c, `Failed to exit and delete group: ${(err as Error).message}`);
+  }
+});
+
+/**
  * GET /groups/:sessionId/invite-code/:jid
  */
 groupRoutes.get("/:sessionId/invite-code/:jid", sessionValidator, async (c) => {
