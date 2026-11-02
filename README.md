@@ -395,8 +395,10 @@ the whole fleet.
 
 ### Clearing vs deleting a chat
 
-Both actions target the **currently open chat** and stay in sync with WhatsApp;
-neither is a bulk operation, so they do not create a spam pattern.
+Both actions live in the **⋯ menu** attached to a chat — either in the chat header
+or on each row of the chat list — so they apply to that chat only. They stay in
+sync with WhatsApp and are never bulk operations, so they do not create a spam
+pattern. The same menu offers Reload and Mark Read.
 
 | Action | WhatsApp | Dashboard |
 |---|---|---|

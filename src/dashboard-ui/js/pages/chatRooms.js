@@ -230,6 +230,120 @@
     return null;
   }
 
+  let chatMenuElement = null;
+  let chatMenuCleanup = null;
+
+  function closeChatMenu() {
+    chatMenuElement?.remove();
+    chatMenuElement = null;
+    if (chatMenuCleanup) {
+      chatMenuCleanup();
+      chatMenuCleanup = null;
+    }
+  }
+
+  function openChatMenu(anchor, jid) {
+    closeChatMenu();
+
+    const rect = anchor.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "chat-action-menu";
+    UI.setHtml(
+      menu,
+      `
+      <button type="button" class="chat-action-item" data-action="reload"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg><span>Reload</span></button>
+      <button type="button" class="chat-action-item" data-action="read"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Mark Read</span></button>
+      <button type="button" class="chat-action-item" data-action="clear"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><span>Clear Chat</span></button>
+      <button type="button" class="chat-action-item chat-action-danger" data-action="delete"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span>Delete Chat</span></button>
+    `,
+    );
+    menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 200)}px`;
+    menu.style.left = `${Math.min(rect.left, window.innerWidth - 190)}px`;
+    document.body.appendChild(menu);
+    chatMenuElement = menu;
+
+    menu.querySelectorAll("[data-action]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const action = button.dataset.action;
+        closeChatMenu();
+        await runChatAction(action, jid);
+      });
+    });
+
+    const onOutside = (event) => {
+      if (!menu.contains(event.target)) closeChatMenu();
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") closeChatMenu();
+    };
+    setTimeout(() => document.addEventListener("click", onOutside), 0);
+    document.addEventListener("keydown", onKey);
+    chatMenuCleanup = () => {
+      document.removeEventListener("click", onOutside);
+      document.removeEventListener("keydown", onKey);
+    };
+  }
+
+  async function runChatAction(action, jid) {
+    const page = window.ChatRoomsPage;
+    if (!page || !selectedSessionId) return;
+
+    if (action === "reload") {
+      selectedJid = jid;
+      await page.loadConversation(jid, false);
+      await page.loadChatList(false);
+      return;
+    }
+
+    if (action === "read") {
+      await page.markRoomAsRead(jid, true, true);
+      return;
+    }
+
+    const isClear = action === "clear";
+    const confirmed = await window.Modal.confirm(
+      isClear ? "Clear Chat" : "Delete Chat",
+      `${
+        isClear
+          ? "Clear this chat's history on WhatsApp and in the dashboard?"
+          : "Delete this chat on WhatsApp and in the dashboard?"
+      }<br><br><strong>${escapeHtml(jid)}</strong><br><br>${
+        isClear
+          ? "This cannot be undone."
+          : "The chat and its history will be removed. This cannot be undone."
+      }`,
+      { confirmText: isClear ? "Clear chat" : "Delete chat", variant: "danger" },
+    );
+    if (!confirmed) return;
+
+    const result = await API.post(
+      `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${isClear ? "clear" : "delete"}`,
+      { jid },
+    );
+    if (!result.success) {
+      Toast.error(result.message || "Action failed");
+      return;
+    }
+
+    if (isClear) {
+      Toast.success(`Cleared ${result.data?.clearedMessages ?? 0} messages in this chat`);
+      if (jid === selectedJid) await page.loadConversation(jid, false);
+      await page.loadChatList(false);
+      return;
+    }
+
+    Toast.success("Chat deleted on WhatsApp and in the dashboard");
+    if (jid === selectedJid) {
+      selectedJid = "";
+      UI.setHtml(
+        document.getElementById("chatroom-messages"),
+        '<div class="chatrooms-empty">Chat deleted.</div>',
+      );
+    }
+    await page.loadChatList(false);
+  }
+
   window.ChatRoomsPage = {
     setReadSyncStatus(text = "", kind = "") {
       const el = document.getElementById("chatroom-read-status");
@@ -431,8 +545,6 @@
 							<div class="chatrooms-action-buttons">
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
-							<button class="btn btn-outline btn-sm" id="chatrooms-clear-all" type="button">Clear Chat</button>
-							<button class="btn btn-outline-danger btn-sm" id="chatrooms-delete-chat" type="button">Delete Chat</button>
 							</div>
 							
 							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
@@ -526,101 +638,6 @@
         await this.loadChatList();
         if (selectedJid) {
           await this.loadConversation(selectedJid);
-        }
-      });
-
-      document.getElementById("chatrooms-clear-all")?.addEventListener("click", async () => {
-        if (!selectedSessionId) return;
-        if (!selectedJid) {
-          Toast.error("Open a chat first");
-          return;
-        }
-
-        const confirmed = await Modal.confirm(
-          "Clear Chat",
-          `Clear this chat's history on WhatsApp and in the dashboard?<br><br><strong>${UI.escapeHtml(selectedJid)}</strong><br><br>This cannot be undone.`,
-          { confirmText: "Clear chat", variant: "danger" },
-        );
-        if (!confirmed) return;
-
-        const button = document.getElementById("chatrooms-clear-all");
-        if (button) {
-          button.disabled = true;
-          button.textContent = "Clearing...";
-        }
-
-        try {
-          const result = await API.post(
-            `/sessions/${encodeURIComponent(selectedSessionId)}/chats/clear`,
-            { jid: selectedJid },
-          );
-
-          if (!result.success) {
-            Toast.error(result.message || "Failed to clear this chat");
-            return;
-          }
-
-          UI.setHtml(
-            document.getElementById("chatroom-messages"),
-            '<div class="chatrooms-empty">Chat history cleared.</div>',
-          );
-          Toast.success(
-            `Cleared ${result.data?.clearedMessages ?? 0} messages in this chat${
-              result.data?.remote === false ? " (nothing to send to WhatsApp)" : ""
-            }`,
-          );
-          await this.loadChatList(false);
-        } finally {
-          if (button) {
-            button.disabled = false;
-            button.textContent = "Clear Chat";
-          }
-        }
-      });
-      document.getElementById("chatrooms-delete-chat")?.addEventListener("click", async () => {
-        if (!selectedSessionId) return;
-        if (!selectedJid) {
-          Toast.error("Open a chat first");
-          return;
-        }
-
-        const confirmed = await Modal.confirm(
-          "Delete Chat",
-          `Delete this chat on WhatsApp and in the dashboard?<br><br><strong>${UI.escapeHtml(selectedJid)}</strong><br><br>The chat and its history will be removed. This cannot be undone.`,
-          { confirmText: "Delete chat", variant: "danger" },
-        );
-        if (!confirmed) return;
-
-        const button = document.getElementById("chatrooms-delete-chat");
-        if (button) {
-          button.disabled = true;
-          button.textContent = "Deleting...";
-        }
-
-        try {
-          const result = await API.post(
-            `/sessions/${encodeURIComponent(selectedSessionId)}/chats/delete`,
-            { jid: selectedJid },
-          );
-
-          if (!result.success) {
-            Toast.error(result.message || "Failed to delete this chat");
-            return;
-          }
-
-          selectedJid = "";
-          chatCache = [];
-          Toast.success("Chat deleted on WhatsApp and in the dashboard");
-          await this.loadChatList(false);
-          UI.setHtml(
-            document.getElementById("chatroom-messages"),
-            '<div class="chatrooms-empty">Chat deleted.</div>',
-          );
-        } finally {
-          if (button) {
-            button.disabled = false;
-            button.textContent = "Delete Chat";
-          }
         }
       });
 
@@ -969,17 +986,27 @@
               ? `Last activity: ${formatMessageTime(chat.lastMessageRecvTimestamp)}`
               : "Open room to load messages";
             return `
-            <button class="chatroom-item ${active}" data-jid="${jid}">
-              <div class="chatroom-item-header">
-                <span class="chatroom-name">${name}</span>
-                <span class="chatroom-time">${time}</span>
-              </div>
-              <div class="chatroom-item-sub">${escapeHtml(subtitle)}</div>
-              ${unread > 0 ? `<span class="chatroom-unread">${unread}</span>` : ""}
-            </button>`;
+            <div class="chatroom-row">
+              <button class="chatroom-item ${active}" data-jid="${jid}">
+                <div class="chatroom-item-header">
+                  <span class="chatroom-name">${name}</span>
+                  <span class="chatroom-time">${time}</span>
+                </div>
+                <div class="chatroom-item-sub">${escapeHtml(subtitle)}</div>
+                ${unread > 0 ? `<span class="chatroom-unread">${unread}</span>` : ""}
+              </button>
+              <button class="chatroom-kebab chat-menu-trigger" type="button" data-jid="${jid}" title="Chat actions">⋯</button>
+            </div>`;
           })
           .join(""),
       );
+
+      sidebar.querySelectorAll(".chatroom-kebab").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openChatMenu(btn, btn.dataset.jid);
+        });
+      });
 
       sidebar.querySelectorAll(".chatroom-item").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1194,8 +1221,7 @@
           </div>
           <div class="chatroom-header-actions">
             ${isGroupMode ? '<button class="btn btn-outline btn-sm" id="chatroom-load-members">Members</button>' : ""}
-            <button class="btn btn-outline btn-sm" id="chatroom-mark-read">Mark Read</button>
-            <button class="btn btn-outline btn-sm" id="chatroom-reload-msg">Reload</button>
+            <button class="btn btn-outline btn-sm chat-menu-trigger" id="chatroom-menu" type="button" title="Chat actions">⋯</button>
           </div>
         </div>
         ${isGroupMode ? '<div class="group-members-panel" id="group-members-panel"></div>' : ""}
@@ -1206,12 +1232,9 @@
         </form>`,
       );
 
-      document.getElementById("chatroom-reload-msg").addEventListener("click", async () => {
-        await this.loadConversation(jid, false);
-      });
-
-      document.getElementById("chatroom-mark-read").addEventListener("click", async () => {
-        await this.markRoomAsRead(jid, true, true);
+      document.getElementById("chatroom-menu").addEventListener("click", (event) => {
+        event.stopPropagation();
+        openChatMenu(event.currentTarget, jid);
       });
 
       if (isGroupMode) {

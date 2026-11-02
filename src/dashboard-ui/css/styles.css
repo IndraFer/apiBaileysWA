@@ -2046,3 +2046,75 @@ details[open] > summary::before {
   background: var(--danger);
   color: #fff;
 }
+
+/* Per-chat actions: kebab trigger + floating menu */
+.chatroom-row {
+  position: relative;
+}
+
+.chatroom-kebab {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1.1;
+  transition: opacity var(--transition);
+}
+
+.chatroom-row:hover .chatroom-kebab,
+.chatroom-kebab:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-action-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 170px;
+  padding: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-action-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chat-action-item:hover {
+  background: var(--bg-input);
+}
+
+.chat-action-danger {
+  color: var(--danger);
+}
+
+.chat-action-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-action-item svg {
+  flex: 0 0 auto;
+}
