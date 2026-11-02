@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.12] - 2026-11-02
+
+### Changed
+
+- centre the login title and tagline inside the brand block
+
 ## [1.19.11] - 2026-11-02
 
 ### Changed
