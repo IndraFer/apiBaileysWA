@@ -2324,3 +2324,21 @@ details[open] > summary::before {
     width: 100%;
   }
 }
+
+/* Webhook session picker keeps a stable width instead of hugging its label */
+.webhook-config-header .form-group {
+  min-width: 18rem;
+}
+
+#webhook-session-select {
+  width: 100%;
+  min-width: 18rem;
+}
+
+@media (max-width: 640px) {
+  .webhook-config-header .form-group,
+  #webhook-session-select {
+    min-width: 0;
+    width: 100%;
+  }
+}
