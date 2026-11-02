@@ -536,24 +536,57 @@
         );
         if (!confirmed) return;
 
-        const result = await API.post(
-          `/sessions/${encodeURIComponent(selectedSessionId)}/chats/clear`,
-          { all: true },
-        );
+        const button = document.getElementById("chatrooms-clear-all");
+        const endpoint = `/sessions/${encodeURIComponent(selectedSessionId)}/chats/clear`;
+        const aggregate = { clearedChats: 0, clearedMessages: 0, failedChats: 0 };
+        let offset = 0;
+        let done = false;
+        let guard = 0;
 
-        if (!result.success) {
-          Toast.error(result.message || "Failed to clear chats");
-          return;
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Clearing...";
         }
 
-        const data = result.data ?? { clearedChats: 0, clearedMessages: 0, failedChats: 0 };
-        chatCache = [];
-        Toast.success(
-          `Cleared ${data.clearedMessages} messages in ${data.clearedChats} chats${
-            data.failedChats ? ` · ${data.failedChats} chats kept (WhatsApp rejected)` : ""
-          }`,
-        );
-        await this.loadChatList(false);
+        try {
+          // Large accounts are cleared in batches: keep requesting the next slice
+          // until the server reports done, aggregating every batch.
+          while (!done && guard < 400) {
+            guard += 1;
+            const result = await API.post(endpoint, { all: true, offset, limit: 25 });
+            if (!result.success) {
+              Toast.error(result.message || "Failed to clear chats");
+              return;
+            }
+
+            const data = result.data ?? {};
+            aggregate.clearedChats += Number(data.clearedChats || 0);
+            aggregate.clearedMessages += Number(data.clearedMessages || 0);
+            aggregate.failedChats += Number(data.failedChats || 0);
+            done = data.done !== false;
+            offset = Number(data.nextOffset ?? offset + Number(data.processed || 0));
+
+            if (button && data.total) {
+              button.textContent = `Clearing ${Math.min(offset, Number(data.total))}/${data.total}...`;
+            }
+            if (!done) await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+
+          chatCache = [];
+          Toast.success(
+            `Cleared ${aggregate.clearedMessages} messages in ${aggregate.clearedChats} chats${
+              aggregate.failedChats
+                ? ` · ${aggregate.failedChats} chats kept (WhatsApp rejected)`
+                : ""
+            }`,
+          );
+          await this.loadChatList(false);
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Clear All";
+          }
+        }
       });
 
       pollToggleBtn.addEventListener("click", () => {

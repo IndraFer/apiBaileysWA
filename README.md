@@ -421,8 +421,10 @@ Clearing from the phone is mirrored back: Baileys emits `messages.delete` with
 and the store applies both. This is why a phone-side clear now disappears from
 the dashboard on the next event instead of lingering as a stale cache.
 
-Bulk clears are capped at 100 chats per request and paced at 150 ms per chat to
-avoid hammering the socket.
+Large accounts are cleared in batches (25 per request, server limit 100) and
+paced at 150 ms per chat. The dashboard keeps requesting the next slice until
+the server reports `done`, then shows the aggregate cleared/failed counts, so no
+chat is skipped just because the account has more than one batch.
 
 ### Session config persistence & cleanup
 
