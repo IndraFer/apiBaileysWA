@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-02
+
+### Added
+
+- per-chat clear and delete, both synced with WhatsApp
+
 ## [1.17.0] - 2026-11-02
 
 ### Added
