@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-11-02
+
+### Changed
+
+- remove inline examples and use generic English samples
+
 ## [1.19.0] - 2026-11-02
 
 ### Added
