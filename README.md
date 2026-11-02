@@ -644,14 +644,17 @@ CSP_REPORT_ONLY=false
 
 ### Role & Access Model
 
-- `admin`: full dashboard access (users/approval/roles, session lifecycle, webhooks, all messaging).
-- `manager`: chats/outbound/groups **and session lifecycle**, capped by
-  `MAX_SESSIONS_PER_MANAGER`; still no account controls.
-- `assistant`: reply-focused dashboard role (no session lifecycle, no proactive
-  outbound), capped by `MAX_SESSIONS_PER_USER` if the role ever gains creation.
-- Sessions created from the dashboard record their creator (`ownerId`);
-  non-admins see their own sessions plus any `assignedSessions`. Legacy sessions
-  without an owner keep the previous assignment semantics.
+- `admin`: **all sessions** plus users/approval/roles, session lifecycle, webhooks
+  and every messaging capability.
+- `manager`: **all sessions** for chats/outbound/groups and session lifecycle,
+  capped by `MAX_SESSIONS_PER_MANAGER`; no account controls.
+- `assistant`: **only the sessions assigned to that account**. An empty
+  assignment grants no session at all, so unassigned numbers never appear in
+  their dashboard or API responses. Reply-focused: no session lifecycle and no
+  proactive outbound.
+- Sessions record their creator (`ownerId`) for quotas and audit, but ownership
+  does not widen an assistant beyond its assignment. Admin and manager are the
+  all-session roles.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 

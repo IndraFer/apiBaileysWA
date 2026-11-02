@@ -114,23 +114,15 @@ function normalizeChatJid(value: unknown): string {
 
 function hasSessionAccess(c: Context, sessionId: string): boolean {
   const role = getDashboardRole(c);
-  if (role === "admin") return true;
 
+  // Admins and managers are all-session roles by policy.
+  if (role === "admin" || role === "manager") return true;
+
+  // Assistants only ever see explicitly assigned sessions. An empty assignment
+  // grants nothing, so unassigned numbers cannot leak into their dashboard.
   const userPayload = c.get("dashboardUser") as DashboardUserPayload;
   const user = findDashboardUserById(String(userPayload?.sub || ""));
-  const ownerId = connectionManager
-    .listSessions()
-    .find((session) => session.sessionId === sessionId)?.ownerId;
-
-  // Owned sessions belong to their creator unless explicitly assigned.
-  if (ownerId) {
-    if (ownerId === user?.id) return true;
-    return (user?.assignedSessions || []).includes(sessionId);
-  }
-
-  // Legacy sessions have no owner: keep the previous assignment semantics.
-  const assignedSessions = user?.assignedSessions || [];
-  return assignedSessions.length === 0 || assignedSessions.includes(sessionId);
+  return (user?.assignedSessions || []).includes(sessionId);
 }
 
 function requireSessionAccess(c: Context, sessionId: string) {

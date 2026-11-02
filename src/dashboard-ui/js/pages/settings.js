@@ -577,7 +577,25 @@
 									</label>`;
               })
               .join("")
-          : '<div class="text-muted text-xs u-py-035">No sessions yet. Empty assignment means future sessions remain visible.</div>';
+          : '<div class="text-muted text-xs u-py-035">No sessions yet.</div>';
+
+        const assignmentCell =
+          u.role === "assistant"
+            ? `
+                        <details class="user-sessions-picker u-relative" data-id="${escapeHtml(u.id)}">
+							<summary class="u-user-sessions-summary" data-locked="${isCurrentUser ? "true" : "false"}">
+								<span class="user-sessions-summary u-truncate" data-id="${escapeHtml(u.id)}">${escapeHtml(assignedSummary)}</span>
+								<span class="text-muted">${isCurrentUser ? "Locked" : "Edit"}</span>
+							</summary>
+							<div class="u-settings-popover">
+								<p class="text-muted text-xs u-m-0-045">Assistants only see assigned sessions. An empty selection means no access at all.</p>
+								<div class="u-scroll-170">${sessionSelector}</div>
+								<div class="flex gap-1 u-mt-065-end">
+									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${escapeHtml(u.id)}">Clear</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${escapeHtml(u.id)}">Save</button>`}
+								</div>
+							</div>
+						</details>`
+            : `<span class="text-muted text-sm">All sessions (${escapeHtml(u.role)})</span>`;
 
         html += `
                 <tr>
@@ -592,21 +610,7 @@
                             <option value="admin" ${u.role === "admin" ? "selected" : ""}>ADMIN</option>
                         </select>
                     </td>
-					<td>
-                        <details class="user-sessions-picker u-relative" data-id="${escapeHtml(u.id)}">
-							<summary class="u-user-sessions-summary" data-locked="${isCurrentUser ? "true" : "false"}">
-								<span class="user-sessions-summary u-truncate" data-id="${escapeHtml(u.id)}">${escapeHtml(assignedSummary)}</span>
-								<span class="text-muted">${isCurrentUser ? "Locked" : "Edit"}</span>
-							</summary>
-							<div class="u-settings-popover">
-								<p class="text-muted text-xs u-m-0-045">Own sessions are always visible. This list only adds access to sessions owned by someone else.</p>
-								<div class="u-scroll-170">${sessionSelector}</div>
-								<div class="flex gap-1 u-mt-065-end">
-									${isCurrentUser ? "" : `<button type="button" class="btn btn-outline btn-sm btn-user-sessions-all" data-id="${escapeHtml(u.id)}">Use All</button><button type="button" class="btn btn-primary btn-sm btn-user-sessions-save" data-id="${escapeHtml(u.id)}">Save</button>`}
-								</div>
-							</div>
-						</details>
-					</td>
+					<td>${assignmentCell}</td>
                     <td class="text-muted">${date}</td>
                     <td class="u-text-right">
 						${!isCurrentUser && u.status === "pending" ? `<button class="btn btn-outline btn-sm text-xs btn-approve-user u-pill-mr" data-id="${escapeHtml(u.id)}" data-username="${u.username}">Approve</button>` : ""}
@@ -626,6 +630,7 @@
           });
           if (res.success) {
             Toast.success(`Role updated to ${role.toUpperCase()}`);
+            this.loadUsers();
 
             // If they changed their own role somehow, reload the app (though UI disables it)
             const currentId = currentUserId();
