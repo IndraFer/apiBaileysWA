@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.6] - 2026-11-02
+
+### Changed
+
+- consistent branding with tagline and live version
+
 ## [1.19.5] - 2026-11-02
 
 ### Changed
