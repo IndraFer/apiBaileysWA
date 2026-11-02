@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.13] - 2026-11-02
+
+### Added
+
+- configure one session at a time
+
 ## [1.19.12] - 2026-11-02
 
 ### Changed
