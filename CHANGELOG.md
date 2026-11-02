@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.14] - 2026-11-02
+
+### Added
+
+- tidy the REST API header/actions and filter webhook logs by session
+
 ## [1.19.13] - 2026-11-02
 
 ### Added
