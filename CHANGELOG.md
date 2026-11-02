@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.15] - 2026-11-02
+
+### Changed
+
+- tidy webhook header, keep the create row on one line, neutral label hint
+
 ## [1.19.14] - 2026-11-02
 
 ### Added
