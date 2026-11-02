@@ -409,22 +409,22 @@ For a public deployment, also put a limiter in front: nginx
 repeated 401/429s. In-process limits protect one instance; the proxy protects
 the whole fleet.
 
-### Clearing chats (two-way sync)
+### Clearing chats
 
-**Chatrooms → Clear All** clears on WhatsApp *and* locally in one action. For
-each chat the server sends `chatModify({ clear: true, lastMessages })`, then
-drops the cached messages for that chat. A chat whose remote clear fails keeps
-its local copy, so the dashboard never shows less history than the phone.
+**Chatrooms → Clear All** clears the dashboard cache only. It sends one request
+and never bulk-calls WhatsApp: clearing thousands of chats through the socket
+would be a spam pattern and a real ban risk. The local store is emptied and the
+sidebar refreshes immediately.
 
-Clearing from the phone is mirrored back: Baileys emits `messages.delete` with
-`{ jid, all: true }` for a cleared chat (and `chats.delete` for a deleted one),
-and the store applies both. This is why a phone-side clear now disappears from
-the dashboard on the next event instead of lingering as a stale cache.
+The opposite direction stays automatic. When a chat is cleared on the phone,
+Baileys emits `messages.delete` with `{ jid, all: true }` (and `chats.delete`
+for a deleted chat); the store removes the cached messages and resets the unread
+badge. Per-message deletes are applied the same way.
 
-Large accounts are cleared in batches (25 per request, server limit 100) and
-paced at 150 ms per chat. The dashboard keeps requesting the next slice until
-the server reports `done`, then shows the aggregate cleared/failed counts, so no
-chat is skipped just because the account has more than one batch.
+Accepted limitation: clearing from the dashboard does **not** delete the history
+on WhatsApp. To remove it from the account, clear (or delete) the chat on the
+phone — the dashboard follows through the events above. The single-chat form
+(`{ jid }`) is local-only for the same reason.
 
 ### Session config persistence & cleanup
 

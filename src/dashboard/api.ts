@@ -1034,12 +1034,10 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
 /**
  * POST /dashboard/api/sessions/:sessionId/chats/clear
  *
- * Clear is always two-way: the same chats are cleared on WhatsApp (via
- * chatModify) and in the local store. A chat whose remote clear fails keeps its
- * local history so the two sides do not silently diverge.
- *
- * Large accounts are cleared in batches: pass offset/limit and the caller keeps
- * calling until done=true, aggregating clearedChats/clearedMessages/failedChats.
+ * Clears the dashboard cache only. Bulk-clearing WhatsApp would mean one
+ * chatModify per chat, which is a ban risk on large accounts; WhatsApp history
+ * is left untouched. The opposite direction stays automatic: when the phone
+ * clears a chat, Baileys emits messages.delete and the store follows.
  */
 dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
   const denied = requireCapability(c, "manageSessions");
@@ -1055,73 +1053,14 @@ dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
     return c.json({ success: false, message: "Provide jid or all=true" }, 400);
   }
 
-  const offset = Math.max(0, Number(body.offset ?? 0) || 0);
-  const limitRaw = Number(body.limit ?? 25);
-  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 25, 1), 100);
-
   try {
-    const session = connectionManager.getSession(sessionId);
-    const status = connectionManager.getSessionStatus(sessionId);
-    if (!status.connected) {
-      return c.json(
-        {
-          success: false,
-          message: "Session is not connected; reconnect it before clearing",
-          retryable: true,
-        },
-        409,
-      );
-    }
-
-    const store = session.getStore();
-    const allTargets = all
-      ? [...store.getChatList(false), ...store.getChatList(true)]
-          .map((chat) => String(chat.id))
-          .sort()
-      : [jid];
-    const total = allTargets.length;
-    const batch = all ? allTargets.slice(offset, offset + limit) : allTargets;
-
-    let clearedChats = 0;
-    let clearedMessages = 0;
-    let failedChats = 0;
-
-    for (const target of batch) {
-      const lastMessages = store
-        .loadMessages(target, 5)
-        .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
-
-      if (lastMessages.length === 0) continue;
-
-      try {
-        await session.chatModify({ clear: true, lastMessages }, target);
-        clearedMessages += store.clearChat(target);
-        clearedChats += 1;
-      } catch {
-        // Keep the local copy for this chat: the phone still has the history.
-        failedChats += 1;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-
-    const processed = batch.length;
-    const nextOffset = offset + processed;
-    const done = !all || nextOffset >= total || processed === 0;
+    const store = connectionManager.getSession(sessionId).getStore();
+    const cleared = all ? store.clearAllChats() : { chats: 1, messages: store.clearChat(jid) };
 
     return c.json({
       success: true,
-      message: done
-        ? "Chats cleared on WhatsApp and locally"
-        : "Batch cleared; call again with the nextOffset to continue",
-      data: {
-        clearedChats,
-        clearedMessages,
-        failedChats,
-        total,
-        processed,
-        nextOffset,
-        done,
-      },
+      message: "Dashboard cache cleared; WhatsApp history was not touched",
+      data: { local: cleared },
     });
   } catch (err) {
     return c.json({ success: false, message: (err as Error).message }, 500);
