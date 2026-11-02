@@ -60,6 +60,7 @@
 
   let webhookSessions = [];
   let selectedWebhookSessionId = "";
+  let selectedLogSessionId = "";
 
   function buildRealtimePayload(sessionId, eventName) {
     const fallbackData = {
@@ -200,6 +201,17 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
           <div class="card-header">
             <h3>Webhook Delivery Logs</h3>
             <div class="flex gap-1">
+              <select id="webhook-log-session" class="input input-sm" title="Filter logs by session">
+                <option value="">All sessions</option>
+                ${sessions
+                  .map((entry) => {
+                    const id = entry.sessionId || entry.id;
+                    return `<option value="${id}" ${
+                      id === selectedLogSessionId ? "selected" : ""
+                    }>${id}</option>`;
+                  })
+                  .join("")}
+              </select>
               <button class="btn btn-outline btn-sm" id="btn-refresh-wh-logs">Refresh Logs</button>
               <button class="btn btn-danger btn-sm" id="btn-clear-wh-logs">Clear Logs</button>
             </div>
@@ -208,6 +220,10 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
         </div>`,
       );
 
+      document.getElementById("webhook-log-session")?.addEventListener("change", (event) => {
+        selectedLogSessionId = event.target.value;
+        this.refreshLogs();
+      });
       document
         .getElementById("btn-refresh-wh-logs")
         .addEventListener("click", () => this.refreshLogs());
@@ -463,7 +479,9 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
     },
 
     async getWebhookLogs() {
-      const result = await API.get("/webhooks/logs?limit=100");
+      const params = new URLSearchParams({ limit: "100" });
+      if (selectedLogSessionId) params.set("sessionId", selectedLogSessionId);
+      const result = await API.get(`/webhooks/logs?${params.toString()}`);
       return result.success ? result.data || [] : [];
     },
 

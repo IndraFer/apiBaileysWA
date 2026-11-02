@@ -390,7 +390,7 @@
             <h1>REST API</h1>
             <p class="text-muted">Send WhatsApp messages from widgets, chatbots and other services. Keys are scoped per session and every call is audited.</p>
           </div>
-          <button class="btn btn-outline btn-sm" id="btn-integration">Integration snippet</button>
+          <button class="btn btn-outline btn-sm" id="btn-integration">Integration Snippet</button>
         </div>
 
         <div class="card">

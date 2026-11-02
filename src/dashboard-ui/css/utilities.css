@@ -603,3 +603,34 @@ textarea.input::-webkit-scrollbar-thumb {
 textarea.input::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Page header: title on the left, action on the right, same line */
+.page-header {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.page-header > .btn {
+  flex: 0 0 auto;
+}
+
+/* Section headers that pair a title with an action */
+.u-between-center {
+  display: flex !important;
+}
+
+/* Create-key row: the action matches the input height and baseline */
+.u-row-create .btn {
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Create-key action: ignore the shared form-group bottom margin */
+.u-row-create .form-group {
+  margin-bottom: 0 !important;
+}
