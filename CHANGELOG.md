@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.16] - 2026-11-02
+
+### Changed
+
+- give the webhook session picker a stable width
+
 ## [1.19.15] - 2026-11-02
 
 ### Changed
