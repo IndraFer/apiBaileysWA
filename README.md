@@ -409,22 +409,25 @@ For a public deployment, also put a limiter in front: nginx
 repeated 401/429s. In-process limits protect one instance; the proxy protects
 the whole fleet.
 
-### Clearing chats
+### Clearing vs deleting a chat
 
-**Chatrooms → Clear All** clears the dashboard cache only. It sends one request
-and never bulk-calls WhatsApp: clearing thousands of chats through the socket
-would be a spam pattern and a real ban risk. The local store is emptied and the
-sidebar refreshes immediately.
+Both actions target the **currently open chat** and stay in sync with WhatsApp;
+neither is a bulk operation, so they do not create a spam pattern.
 
-The opposite direction stays automatic. When a chat is cleared on the phone,
-Baileys emits `messages.delete` with `{ jid, all: true }` (and `chats.delete`
-for a deleted chat); the store removes the cached messages and resets the unread
-badge. Per-message deletes are applied the same way.
+| Action | WhatsApp | Dashboard |
+|---|---|---|
+| **Clear Chat** | `chatModify({ clear: true })` — history removed, chat stays | messages removed, room stays open and empty |
+| **Delete Chat** | `chatModify({ delete: true })` — chat removed | room and messages removed from the list |
 
-Accepted limitation: clearing from the dashboard does **not** delete the history
-on WhatsApp. To remove it from the account, clear (or delete) the chat on the
-phone — the dashboard follows through the events above. The single-chat form
-(`{ jid }`) is local-only for the same reason.
+One request per action. If the remote call fails the dashboard keeps its local
+copy and returns `502`, so the two sides never diverge silently. A disconnected
+session returns `409`. There is deliberately no "clear/delete every chat"
+button: doing that through the socket would mean hundreds of requests and a real
+ban risk. To clean another chat, open it and act on it individually.
+
+Changes made on the phone are mirrored back automatically: `messages.delete`
+with `{ jid, all: true }` empties the cache for a cleared chat, and
+`chats.delete` removes the room locally.
 
 ### Session config persistence & cleanup
 

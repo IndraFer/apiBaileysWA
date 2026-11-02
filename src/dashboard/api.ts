@@ -1032,12 +1032,74 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
 });
 
 /**
+ * POST /dashboard/api/sessions/:sessionId/chats/delete
+ *
+ * Deletes ONE chat on WhatsApp (chatModify { delete: true }) and removes it from
+ * the dashboard. Unlike clear, the room itself is gone. Per-chat only: bulk
+ * deletion would be the same spam pattern as bulk clearing.
+ */
+dashboardApi.post("/sessions/:sessionId/chats/delete", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const body = await c.req.json().catch(() => ({}));
+  const jid = typeof body.jid === "string" ? body.jid.trim() : "";
+  if (!jid) {
+    return c.json({ success: false, message: "Provide the jid of the open chat" }, 400);
+  }
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const status = connectionManager.getSessionStatus(sessionId);
+    if (!status.connected) {
+      return c.json(
+        {
+          success: false,
+          message: "Session is not connected; reconnect it before deleting this chat",
+          retryable: true,
+        },
+        409,
+      );
+    }
+
+    const store = session.getStore();
+    const lastMessages = store
+      .loadMessages(jid, 5)
+      .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
+
+    if (lastMessages.length > 0) {
+      await session.chatModify({ delete: true, lastMessages }, jid);
+    }
+
+    const local = store.deleteChat(jid);
+
+    return c.json({
+      success: true,
+      message: "Chat deleted on WhatsApp and in the dashboard",
+      data: { jid, ...local, remote: lastMessages.length > 0 },
+    });
+  } catch (err) {
+    return c.json(
+      {
+        success: false,
+        message: `Failed to delete this chat: ${(err as Error).message}`,
+        retryable: true,
+      },
+      502,
+    );
+  }
+});
+
+/**
  * POST /dashboard/api/sessions/:sessionId/chats/clear
  *
- * Clears the dashboard cache only. Bulk-clearing WhatsApp would mean one
- * chatModify per chat, which is a ban risk on large accounts; WhatsApp history
- * is left untouched. The opposite direction stays automatic: when the phone
- * clears a chat, Baileys emits messages.delete and the store follows.
+ * Clears the history of ONE chat, in both directions: chatModify({ clear }) on
+ * WhatsApp and the cached messages locally. A single request for a single JID is
+ * safe; there is deliberately no bulk "clear every chat" endpoint because that
+ * would be a spam pattern.
  */
 dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
   const denied = requireCapability(c, "manageSessions");
@@ -1047,23 +1109,52 @@ dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
   if (sessionDenied) return sessionDenied;
 
   const body = await c.req.json().catch(() => ({}));
-  const all = body.all === true;
-  const jid = typeof body.jid === "string" ? body.jid : "";
-  if (!all && !jid) {
-    return c.json({ success: false, message: "Provide jid or all=true" }, 400);
+  const jid = typeof body.jid === "string" ? body.jid.trim() : "";
+  if (!jid) {
+    return c.json({ success: false, message: "Provide the jid of the open chat" }, 400);
   }
 
   try {
-    const store = connectionManager.getSession(sessionId).getStore();
-    const cleared = all ? store.clearAllChats() : { chats: 1, messages: store.clearChat(jid) };
+    const session = connectionManager.getSession(sessionId);
+    const status = connectionManager.getSessionStatus(sessionId);
+    if (!status.connected) {
+      return c.json(
+        {
+          success: false,
+          message: "Session is not connected; reconnect it before clearing this chat",
+          retryable: true,
+        },
+        409,
+      );
+    }
+
+    const store = session.getStore();
+    const lastMessages = store
+      .loadMessages(jid, 5)
+      .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
+
+    // Clear on WhatsApp first: if it fails, the local copy stays so the two
+    // sides never diverge silently.
+    if (lastMessages.length > 0) {
+      await session.chatModify({ clear: true, lastMessages }, jid);
+    }
+
+    const clearedMessages = store.clearChat(jid);
 
     return c.json({
       success: true,
-      message: "Dashboard cache cleared; WhatsApp history was not touched",
-      data: { local: cleared },
+      message: "Chat history cleared on WhatsApp and in the dashboard",
+      data: { jid, clearedMessages, remote: lastMessages.length > 0 },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return c.json(
+      {
+        success: false,
+        message: `Failed to clear this chat: ${(err as Error).message}`,
+        retryable: true,
+      },
+      502,
+    );
   }
 });
 

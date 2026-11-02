@@ -250,6 +250,25 @@ export class MemoryStore extends EventEmitter {
     return removed;
   }
 
+  /** Remove one chat entry and its messages (used after a remote delete). */
+  deleteChat(jid: string): { chats: number; messages: number } {
+    const target = normalizeJidKey(jid);
+    let messages = 0;
+    for (const [key, map] of this.messages) {
+      if (normalizeJidKey(key) !== target) continue;
+      messages += map.size;
+      this.messages.delete(key);
+    }
+    let chats = 0;
+    for (const key of [...this.chats.keys()]) {
+      if (normalizeJidKey(key) === target) {
+        this.chats.delete(key);
+        chats += 1;
+      }
+    }
+    return { chats, messages };
+  }
+
   /** Remove every stored chat and message for this session. */
   clearAllChats(): { chats: number; messages: number } {
     let messages = 0;
