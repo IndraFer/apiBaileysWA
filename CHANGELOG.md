@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.4] - 2026-11-02
+
+### Added
+
+- per-chat action menu instead of global buttons
+
 ## [1.19.3] - 2026-11-02
 
 ### Changed
