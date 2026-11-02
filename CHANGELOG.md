@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-11-02
+
+### Added
+
+- modal confirmations and group clear/exit actions
+
 ## [1.18.0] - 2026-11-02
 
 ### Added
