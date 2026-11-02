@@ -430,6 +430,22 @@ removes its auth folder, metadata and store file, and revokes every API key
 scoped to that session so a recreated session with the same id cannot reuse an
 old key.
 
+### Session janitor, snapshots and error messages
+
+- **Startup janitor** removes leftovers deletion/reconnect can leave behind:
+  temp files older than an hour, store JSON without an auth directory (file
+  backend only) older than an hour, and `md_<id>` directories without
+  `creds.json` older than a day. Valid sessions (creds present) are never
+  touched. It runs at startup and daily; run it manually with
+  `bun run cleanup-sessions`.
+- **Snapshots only write when state changed** (dirty flag) instead of rewriting
+  the JSON every 60 s. `MAX_MESSAGES_PER_CHAT` (default 25) caps messages kept
+  per chat; it is per chat, so other chats are never skipped — only older
+  messages in each chat are dropped (AI context has its own limit).
+- **5xx messages are sanitized in production**: callers get
+  "Internal server error" while the original message is logged. 4xx validation
+  messages and development output stay detailed.
+
 ### Storage, SSRF and credential handling
 
 - **Session ids are validated at every storage boundary** (`^[A-Za-z0-9_-]{1,64}# API Baileys WA Socket

@@ -1,4 +1,7 @@
 import type { Context } from "hono";
+import config from "@/config";
+import { publicErrorMessage } from "@/lib/errorMessage";
+import logger from "@/lib/logger";
 
 /**
  * Standardized API response envelope.
@@ -85,9 +88,14 @@ export function error(
   code?: string,
   extra: ErrorExtra = {},
 ) {
+  const safeMessage = publicErrorMessage(message, status, config.env);
+  if (safeMessage !== message) {
+    logger.error("[api] suppressed internal error (status %d): %s", status, message);
+  }
+
   const body: ApiResponse = {
     success: false,
-    message,
+    message: safeMessage,
     code: code || codeForStatus(status),
     requestId: requestIdFor(c),
   };

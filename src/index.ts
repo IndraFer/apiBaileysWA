@@ -1,5 +1,6 @@
 import app from "@/app";
 import { assertAuthStateBackendConsistency } from "@/baileys/authState";
+import { cleanupOrphanSessionFiles } from "@/baileys/authState/file";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { hasUsers } from "@/dashboard/auth";
@@ -120,6 +121,22 @@ if (config.dashboard.enabled) {
   if (config.media.cleanupEnabled) {
     mediaCleanup.start();
   }
+
+  // Reap leftovers from interrupted creates/deletes; never touches valid creds.
+  const janitor = cleanupOrphanSessionFiles();
+  if (janitor.removed.length > 0) {
+    logger.info("Cleaned %d orphan session file(s): %o", janitor.removed.length, janitor.removed);
+  }
+  const janitorTimer = setInterval(
+    () => {
+      const result = cleanupOrphanSessionFiles();
+      if (result.removed.length > 0) {
+        logger.info("Cleaned %d orphan session file(s): %o", result.removed.length, result.removed);
+      }
+    },
+    24 * 60 * 60 * 1000,
+  );
+  janitorTimer.unref?.();
 
   // Reconnect saved sessions
   await connectionManager.reconnectSavedSessions().catch((error) => {

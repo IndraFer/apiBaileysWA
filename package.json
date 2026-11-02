@@ -19,7 +19,9 @@
 		"manage-api-keys:node": "LOG_LEVEL=warn tsx scripts/manage-api-keys.ts",
 		"release:patch": "node scripts/release.mjs patch",
 		"release:minor": "node scripts/release.mjs minor",
-		"release:major": "node scripts/release.mjs major"
+		"release:major": "node scripts/release.mjs major",
+		"test": "bun test",
+		"cleanup-sessions": "bun scripts/cleanup-sessions.ts"
 	},
 	"dependencies": {
 		"@hono/node-server": "^2.1.5",

@@ -23,6 +23,7 @@ export class MemoryStore extends EventEmitter {
   private storeFile: string;
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private deleted = false;
+  private dirty = false;
 
   public chats = new Map<string, Record<string, unknown>>();
   public messages = new Map<string, Map<string, WAMessage>>();
@@ -50,6 +51,7 @@ export class MemoryStore extends EventEmitter {
 
   bind(ev: BaileysEventEmitter) {
     ev.on("messages.delete", (item) => {
+      this.dirty = true;
       // { jid, all: true } arrives when a chat is cleared on the account;
       // per-key deletions arrive for individual messages.
       const keys = "keys" in item ? item.keys : [];
@@ -70,6 +72,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("messages.upsert", ({ messages: newMessages, type }) => {
+      this.dirty = true;
       for (const msg of newMessages) {
         try {
           if (!msg.key.remoteJid) continue;
@@ -101,6 +104,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+      this.dirty = true;
       for (const chat of chats || []) {
         if (!chat.id) continue;
         if (!this.chats.has(chat.id)) {
@@ -128,6 +132,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("chats.upsert", (newChats) => {
+      this.dirty = true;
       for (const chat of newChats) {
         if (!chat.id) continue;
         const existing = this.chats.get(chat.id);
@@ -136,6 +141,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("chats.update", (updates) => {
+      this.dirty = true;
       for (const update of updates) {
         if (!update.id) continue;
         const existing = this.chats.get(update.id);
@@ -146,6 +152,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("chats.delete", (deletions) => {
+      this.dirty = true;
       for (const chatId of deletions) {
         this.chats.delete(chatId);
         this.messages.delete(chatId);
@@ -153,6 +160,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("contacts.upsert", (newContacts) => {
+      this.dirty = true;
       for (const contact of newContacts) {
         try {
           const jid = jidNormalizedUser(contact.id);
@@ -165,6 +173,7 @@ export class MemoryStore extends EventEmitter {
     });
 
     ev.on("groups.update", (updates) => {
+      this.dirty = true;
       for (const update of updates) {
         if (update.id) {
           const existing = this.groupMetadata.get(update.id);
@@ -286,6 +295,7 @@ export class MemoryStore extends EventEmitter {
   /** Mark the session deleted: late close events must not resurrect the file. */
   markDeleted(): void {
     this.deleted = true;
+    this.dirty = false;
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = null;
@@ -297,8 +307,9 @@ export class MemoryStore extends EventEmitter {
     }
   }
 
-  async writeToFile() {
+  async writeToFile(force = false) {
     if (this.deleted) return;
+    if (!force && !this.dirty) return;
     try {
       const data = {
         version: "1.0",
@@ -322,6 +333,7 @@ export class MemoryStore extends EventEmitter {
       const { writeFile, rename } = await import("node:fs/promises");
       await writeFile(tempFile, jsonStr);
       await rename(tempFile, this.storeFile);
+      this.dirty = false;
     } catch (error) {
       logger.error("[Store:%s] Write error: %s", this.sessionId, (error as Error).message);
     }
@@ -380,7 +392,7 @@ export class MemoryStore extends EventEmitter {
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
     }
-    await this.writeToFile();
+    await this.writeToFile(true);
   }
 }
 

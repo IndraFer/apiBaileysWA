@@ -19,6 +19,7 @@ import config from "@/config";
 import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import logger from "@/lib/logger";
+import { error } from "@/lib/response";
 import { isBun } from "@/lib/runtime";
 import {
   encryptionConfigured,
@@ -295,7 +296,7 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       data: result,
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -327,7 +328,7 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
     await connectionManager.deleteSession(sessionId);
     return c.json({ success: true, message: "Session deleted" });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -366,7 +367,7 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
 
     return c.json({ success: true, message: "Webhook config updated" });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -528,7 +529,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -718,7 +719,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
       );
     }
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -859,7 +860,7 @@ dashboardApi.post("/sessions/:sessionId/send", async (c) => {
       data: { key: result?.key },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -887,7 +888,7 @@ dashboardApi.get("/sessions/:sessionId/chats", (c) => {
       .filter((chat) => !selfIds.has(normalizeChatJid(chat.id)));
     return c.json({ success: true, data: chats });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -910,7 +911,7 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
     const messages = session.getStore().loadMessages(jid, limit);
     return c.json({ success: true, data: messages });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -989,7 +990,7 @@ dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
       data: { key: result?.key, messageTimestamp: result?.messageTimestamp },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1032,7 +1033,7 @@ dashboardApi.post("/sessions/:sessionId/chats/presence", async (c) => {
     await session.sendPresenceUpdate(type as WAPresence, targetJid);
     return c.json({ success: true, message: "Presence updated" });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1200,7 +1201,7 @@ dashboardApi.post("/sessions/:sessionId/chats/:jid/read", async (c) => {
       data: { readCount: unreadKeys.length },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1232,7 +1233,7 @@ dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
       },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1262,7 +1263,7 @@ dashboardApi.get("/groups/:sessionId/list", async (c) => {
 
     return c.json({ success: true, data: groupList });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1306,7 +1307,7 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
       },
     });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1403,7 +1404,7 @@ dashboardApi.get("/api-keys", async (c) => {
   try {
     return c.json({ success: true, data: await listApiKeys() });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1455,7 +1456,7 @@ dashboardApi.post("/api-keys", async (c) => {
       201,
     );
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 
@@ -1470,7 +1471,7 @@ dashboardApi.delete("/api-keys/:id", async (c) => {
     if (!revoked) return c.json({ success: false, message: "API key not found" }, 404);
     return c.json({ success: true, message: "API key revoked" });
   } catch (err) {
-    return c.json({ success: false, message: (err as Error).message }, 500);
+    return error(c, (err as Error).message, 500);
   }
 });
 

@@ -87,6 +87,7 @@ const {
   AUTO_READ_DELAY_MAX_MS,
   AUTO_MARK_ONLINE,
   MAX_SESSIONS,
+  MAX_MESSAGES_PER_CHAT,
   MAX_SESSIONS_PER_USER,
   MAX_SESSIONS_PER_MANAGER,
   REJECT_CALLS,
@@ -429,6 +430,8 @@ const config = {
 
   /** Maximum concurrent sessions allowed */
   maxSessions: MAX_SESSIONS ? Number(MAX_SESSIONS) : 50,
+  /** Per-chat in-memory/snapshot message cap (AI context uses its own limit). */
+  maxMessagesPerChat: MAX_MESSAGES_PER_CHAT ? Number(MAX_MESSAGES_PER_CHAT) : 25,
   /** Report violations without enforcing them (useful for a clean dev console). */
   cspReportOnly: CSP_REPORT_ONLY === "true" || CSP_REPORT_ONLY === "1",
 
