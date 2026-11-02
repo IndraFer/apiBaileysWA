@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.10] - 2026-11-02
+
+### Changed
+
+- keep the sidebar icon snug against the centred text
+
 ## [1.19.9] - 2026-11-02
 
 ### Changed
