@@ -646,8 +646,10 @@ CSP_REPORT_ONLY=false
 
 - `admin`: **all sessions** plus users/approval/roles, session lifecycle, webhooks
   and every messaging capability.
-- `manager`: **all sessions** for chats/outbound/groups and session lifecycle,
-  capped by `MAX_SESSIONS_PER_MANAGER`; no account controls.
+- `manager`: chats/outbound/groups and session lifecycle, capped by
+  `MAX_SESSIONS_PER_MANAGER`. Session access is either **All sessions** (a
+  checkbox in the user row) or only the assigned list; still no account
+  controls.
 - `assistant`: **only the sessions assigned to that account**. An empty
   assignment grants no session at all, so unassigned numbers never appear in
   their dashboard or API responses. Reply-focused: no session lifecycle and no

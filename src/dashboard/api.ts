@@ -114,14 +114,15 @@ function normalizeChatJid(value: unknown): string {
 
 function hasSessionAccess(c: Context, sessionId: string): boolean {
   const role = getDashboardRole(c);
+  if (role === "admin") return true;
 
-  // Admins and managers are all-session roles by policy.
-  if (role === "admin" || role === "manager") return true;
-
-  // Assistants only ever see explicitly assigned sessions. An empty assignment
-  // grants nothing, so unassigned numbers cannot leak into their dashboard.
   const userPayload = c.get("dashboardUser") as DashboardUserPayload;
   const user = findDashboardUserById(String(userPayload?.sub || ""));
+
+  // Managers may be granted every session explicitly; otherwise they follow the
+  // same assignment list as assistants.
+  if (role === "manager" && user?.allSessions === true) return true;
+
   return (user?.assignedSessions || []).includes(sessionId);
 }
 

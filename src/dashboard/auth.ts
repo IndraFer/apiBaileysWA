@@ -56,6 +56,8 @@ interface DashboardUser {
   role: "admin" | "manager" | "assistant";
   status?: "active" | "pending";
   assignedSessions?: string[];
+  /** Manager-only: true grants every session; false uses assignedSessions. */
+  allSessions?: boolean;
   createdAt: string;
 }
 
@@ -93,6 +95,7 @@ function loadUsers(): DashboardUser[] {
       role: u.role === "admin" ? "admin" : u.role === "manager" ? "manager" : "assistant",
       status: u.status === "pending" ? "pending" : "active",
       assignedSessions: normalizeAssignedSessions(u.assignedSessions),
+      allSessions: u.allSessions === true,
       createdAt: String(u.createdAt || new Date().toISOString()),
     }));
   } catch {
@@ -276,6 +279,7 @@ dashboardAuth.post("/register", authRateLimit, async (c) => {
     role,
     status,
     assignedSessions: [],
+    allSessions: false,
     createdAt: new Date().toISOString(),
   };
 
@@ -534,6 +538,7 @@ dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
     role: u.role,
     status: getUserStatus(u),
     assignedSessions: u.assignedSessions || [],
+    allSessions: u.allSessions === true,
     sessionCount: ownedCounts.get(u.id) || 0,
     createdAt: u.createdAt,
   }));
@@ -558,6 +563,8 @@ dashboardAuth.put("/users/:id/sessions", dashboardAuthMiddleware, async (c) => {
   if (userIndex === -1) return c.json({ success: false, message: "User not found" }, 404);
 
   users[userIndex].assignedSessions = assignedSessions;
+  // Only managers can be granted every session; assistants always use the list.
+  users[userIndex].allSessions = users[userIndex].role === "manager" && body.allSessions === true;
   saveUsers(users);
 
   return c.json({ success: true, message: "Assigned sessions updated" });
@@ -616,6 +623,7 @@ dashboardAuth.put("/users/:id/role", dashboardAuthMiddleware, async (c) => {
   if (userIndex === -1) return c.json({ success: false, message: "User not found" }, 404);
 
   users[userIndex].role = body.role;
+  if (body.role !== "manager") users[userIndex].allSessions = false;
   saveUsers(users);
 
   return c.json({ success: true, message: "Role updated" });
