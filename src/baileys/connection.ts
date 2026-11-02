@@ -33,6 +33,7 @@ import config from "@/config";
 import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { isPrivateAddress } from "@/lib/urlGuard";
+import { activeWebhookSecrets } from "@/lib/webhookSecrets";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
 import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
@@ -313,6 +314,8 @@ export class BaileysConnection {
       clientName: this.options.clientName,
       webhookUrl: this.options.webhookUrl,
       webhookSecret: this.options.webhookSecret,
+      webhookSecretPrevious: this.options.webhookSecretPrevious,
+      webhookSecretPreviousExpiresAt: this.options.webhookSecretPreviousExpiresAt,
       webhookEvents: this.options.webhookEvents,
       includeMedia: this.options.includeMedia,
       syncFullHistory: this.options.syncFullHistory,
@@ -1407,6 +1410,10 @@ export class BaileysConnection {
     const webhookSecret =
       this.options.webhookSecret ||
       (config.webhook.allowGlobalTokenFallback ? config.auth.globalToken : "");
+    const activeSecrets = this.options.webhookSecret
+      ? activeWebhookSecrets(this.options)
+      : { primary: webhookSecret };
+    const primarySecret = activeSecrets.primary || webhookSecret;
     if (!webhookUrl) {
       return "disabled";
     }
@@ -1504,7 +1511,11 @@ export class BaileysConnection {
         const currentAttempt = attempt + 1;
         try {
           const rawBody = JSON.stringify(payload);
-          const { headers, error: headerError } = buildWebhookHeaders(webhookSecret, rawBody);
+          const { headers, error: headerError } = buildWebhookHeaders(
+            primarySecret,
+            rawBody,
+            activeSecrets.secondary,
+          );
           if (headerError) {
             const reason = headerError;
             addWebhookLog({
@@ -1733,6 +1744,7 @@ function maybeGzipBody(rawBody: string): { body: string | ArrayBuffer; contentEn
 export function buildWebhookHeaders(
   secret: string,
   rawBody: string,
+  secondarySecret?: string,
 ): { headers: Record<string, string>; error?: string } {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -1758,6 +1770,19 @@ export function buildWebhookHeaders(
       headers["x-webhook-signature"] = `sha256=${signature}`;
     }
   }
+  // Rotation grace: the new secret is available immediately without making the
+  // primary headers unknown to receivers that have not been updated yet.
+  if (secondarySecret) {
+    if (config.webhook.includeToken) headers["x-webhook-secret-new"] = secondarySecret;
+    if (config.webhook.signatureMode !== "off") {
+      const timestamp = String(Date.now());
+      const signature = createHmac("sha256", secondarySecret)
+        .update(`${timestamp}.${rawBody}`)
+        .digest("hex");
+      headers["x-webhook-timestamp-new"] = timestamp;
+      headers["x-webhook-signature-new"] = `sha256=${signature}`;
+    }
+  }
   return { headers };
 }
 
@@ -1766,6 +1791,7 @@ export async function deliverWebhookOnce(
   payload: unknown,
   secret: string,
   timeoutMs = 30000,
+  secondarySecret?: string,
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   // SSRF guard: validate the target before fetching (DNS-aware).
   const invalid = await resolveWebhookTarget(webhookUrl);
@@ -1774,7 +1800,7 @@ export async function deliverWebhookOnce(
   }
   try {
     const rawBody = JSON.stringify(payload);
-    const { headers, error: headerError } = buildWebhookHeaders(secret, rawBody);
+    const { headers, error: headerError } = buildWebhookHeaders(secret, rawBody, secondarySecret);
     if (headerError) {
       return { ok: false, status: 0, error: headerError };
     }

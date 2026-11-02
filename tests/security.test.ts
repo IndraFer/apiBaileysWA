@@ -4,6 +4,7 @@ import { publicErrorMessage } from "@/lib/errorMessage";
 import { isPathInside } from "@/lib/pathSafe";
 import { isValidSessionId } from "@/lib/sessionId";
 import { isPrivateAddress, validateOutboundUrl } from "@/lib/urlGuard";
+import { activeWebhookSecrets } from "@/lib/webhookSecrets";
 import { hashToken, keyAllowsSession } from "@/services/apiKeys";
 
 describe("session id validation", () => {
@@ -153,11 +154,14 @@ describe("webhook secret at rest", () => {
     try {
       const stored = encodeMetadataSecrets({
         webhookSecret: "super-secret-value",
+        webhookSecretPrevious: "old-secret-value",
         webhookUrl: "https://example.com/hook",
       });
       expect(typeof stored.webhookSecret).toBe("string");
       expect(stored.webhookSecret).not.toContain("super-secret-value");
+      expect(stored.webhookSecretPrevious).not.toContain("old-secret-value");
       expect(decodeMetadataSecrets(stored).webhookSecret).toBe("super-secret-value");
+      expect(decodeMetadataSecrets(stored).webhookSecretPrevious).toBe("old-secret-value");
 
       const legacy = decodeMetadataSecrets({ webhookSecret: "legacy-plain" });
       expect(legacy.webhookSecret).toBe("legacy-plain");
@@ -177,6 +181,69 @@ describe("webhook secret at rest", () => {
       expect(decodeMetadataSecrets(stored).webhookSecret).toBe("no-key");
     } finally {
       if (previous !== undefined) process.env.CONFIG_ENC_KEY = previous;
+    }
+  });
+});
+
+describe("rotation grace window", () => {
+  test("previous secret stays primary until it expires, new one is secondary", () => {
+    const now = 1_000_000;
+    const active = activeWebhookSecrets(
+      {
+        webhookSecret: "new-secret",
+        webhookSecretPrevious: "old-secret",
+        webhookSecretPreviousExpiresAt: now + 60_000,
+      },
+      now,
+    );
+    expect(active.primary).toBe("old-secret");
+    expect(active.secondary).toBe("new-secret");
+    expect(active.previousValidUntil).toBe(now + 60_000);
+
+    const after = activeWebhookSecrets(
+      {
+        webhookSecret: "new-secret",
+        webhookSecretPrevious: "old-secret",
+        webhookSecretPreviousExpiresAt: now + 60_000,
+      },
+      now + 60_001,
+    );
+    expect(after.primary).toBe("new-secret");
+    expect(after.secondary).toBeUndefined();
+  });
+
+  test("no rotation means no previous secret and no expiry", () => {
+    const active = activeWebhookSecrets({ webhookSecret: "only" }, 1_000);
+    expect(active.primary).toBe("only");
+    expect(active.secondary).toBeUndefined();
+  });
+
+  test("dual headers verify with old and new secrets respectively", async () => {
+    const config = (await import("@/config")).default;
+    const { buildWebhookHeaders } = await import("@/baileys/connection");
+    const { createHmac } = await import("node:crypto");
+    const previousMode = config.webhook.signatureMode;
+    const previousToken = config.webhook.includeToken;
+    config.webhook.signatureMode = "optional";
+    config.webhook.includeToken = true;
+    try {
+      const body = JSON.stringify({ probe: true });
+      const { headers, error } = buildWebhookHeaders("old-secret", body, "new-secret");
+      expect(error).toBeUndefined();
+
+      const hmac = (secret: string, timestamp: string) =>
+        `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
+      expect(headers["x-webhook-signature"]).toBe(
+        hmac("old-secret", headers["x-webhook-timestamp"]),
+      );
+      expect(headers["x-webhook-signature-new"]).toBe(
+        hmac("new-secret", headers["x-webhook-timestamp-new"]),
+      );
+      expect(headers["x-webhook-secret"]).toBe("old-secret");
+      expect(headers["x-webhook-secret-new"]).toBe("new-secret");
+    } finally {
+      config.webhook.signatureMode = previousMode;
+      config.webhook.includeToken = previousToken;
     }
   });
 });

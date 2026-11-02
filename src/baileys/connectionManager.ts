@@ -43,6 +43,8 @@ class ConnectionManager {
           clientName: metadata?.clientName,
           webhookUrl: metadata?.webhookUrl,
           webhookSecret: metadata?.webhookSecret,
+          webhookSecretPrevious: metadata?.webhookSecretPrevious,
+          webhookSecretPreviousExpiresAt: metadata?.webhookSecretPreviousExpiresAt,
           webhookEvents: metadata?.webhookEvents,
           includeMedia: metadata?.includeMedia,
           syncFullHistory: metadata?.syncFullHistory,

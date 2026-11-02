@@ -12,7 +12,7 @@ import { updateSessionMetadata } from "@/baileys/authState";
 import {
   buildWebhookHeaders,
   deliverWebhookOnce,
-  validateWebhookTarget,
+  resolveWebhookTarget,
 } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
 import type { AiAgentConfig, RoutingConfig } from "@/baileys/types";
@@ -30,6 +30,7 @@ import {
   redactCredentials,
 } from "@/lib/secretBox";
 import { isValidSessionId } from "@/lib/sessionId";
+import { activeWebhookSecrets } from "@/lib/webhookSecrets";
 import { aiConfigPatchSchema } from "@/schemas/session";
 import {
   parseEndpointCredentials,
@@ -378,9 +379,11 @@ dashboardApi.put("/sessions/:sessionId/webhook", async (c) => {
 /**
  * POST /dashboard/api/sessions/:sessionId/webhook/rotate
  *
- * Generate a new webhook secret. The previous secret stops working as soon as
- * this returns; the new value is shown once. This is manual rotation, not a
- * 24-hour expiry: nothing rotates unless an operator asks for it.
+ * Generate a new webhook secret and show it once. By default the previous
+ * secret stays PRIMARY for WEBHOOK_SECRET_GRACE_MS (24 h), so existing
+ * receivers keep working while they are updated; the new secret is offered in
+ * the -new headers. Nothing rotates or expires unless this endpoint is called.
+ * Pass graceMs: 0 to invalidate the old secret immediately (e.g. after a leak).
  */
 dashboardApi.post("/sessions/:sessionId/webhook/rotate", async (c) => {
   const denied = requireCapability(c, "manageWebhooks");
@@ -390,15 +393,35 @@ dashboardApi.post("/sessions/:sessionId/webhook/rotate", async (c) => {
   if (sessionDenied) return sessionDenied;
 
   try {
+    const body = await c.req.json().catch(() => ({}));
+    const requestedGrace = Number(body.graceMs ?? config.webhook.secretGraceMs);
+    const graceMs = Number.isFinite(requestedGrace)
+      ? Math.min(Math.max(requestedGrace, 0), 7 * 24 * 60 * 60 * 1000)
+      : config.webhook.secretGraceMs;
+
     const session = connectionManager.getSession(sessionId);
+    const currentSecret = session.getOptions().webhookSecret || "";
     const webhookSecret = randomBytes(32).toString("base64url");
-    session.updateOptions({ webhookSecret });
+    const previousValidUntil = currentSecret && graceMs > 0 ? Date.now() + graceMs : undefined;
+
+    session.updateOptions({
+      webhookSecret,
+      webhookSecretPrevious: previousValidUntil ? currentSecret : undefined,
+      webhookSecretPreviousExpiresAt: previousValidUntil,
+    });
     await updateSessionMetadata(sessionId, session.getSessionMetadata());
     c.header("Cache-Control", "no-store");
     return c.json({
       success: true,
-      message: "Webhook secret rotated — update the receiver now",
-      data: { webhookSecret },
+      message:
+        previousValidUntil === undefined
+          ? "Webhook secret rotated — the old secret is no longer valid"
+          : "Webhook secret rotated — the old secret remains valid during the grace window",
+      data: {
+        webhookSecret,
+        graceMs,
+        previousValidUntil: previousValidUntil ?? null,
+      },
     });
   } catch (err) {
     return error(c, (err as Error).message, 500);
@@ -608,10 +631,14 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const configuredUrl = session.getOptions().webhookUrl || "";
-    const configuredSecret = session.getOptions().webhookSecret || config.auth.globalToken || "";
+    const options = session.getOptions();
+    const configuredUrl = options.webhookUrl || "";
+    const activeSecrets = activeWebhookSecrets(options);
+    const configuredSecret = activeSecrets.primary || config.auth.globalToken || "";
     const webhookUrl = String(body.webhookUrl || configuredUrl).trim();
-    const webhookSecret = String(body.webhookSecret || configuredSecret).trim();
+    const bodySecret = String(body.webhookSecret || "").trim();
+    const webhookSecret = bodySecret || configuredSecret;
+    const secondarySecret = bodySecret ? undefined : activeSecrets.secondary;
 
     if (!webhookUrl) {
       return c.json({ success: false, message: "Webhook URL is empty" }, 400);
@@ -630,8 +657,8 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
       );
     }
 
-    // SSRF guard (same policy as live webhook delivery).
-    const targetError = validateWebhookTarget(webhookUrl);
+    // SSRF guard (same DNS-aware policy as live webhook delivery).
+    const targetError = await resolveWebhookTarget(webhookUrl);
     if (targetError) {
       return c.json({ success: false, message: targetError }, 400);
     }
@@ -648,7 +675,11 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
     const startedAt = Date.now();
     try {
       const rawBody = JSON.stringify(payload);
-      const { headers, error: headerError } = buildWebhookHeaders(webhookSecret, rawBody);
+      const { headers, error: headerError } = buildWebhookHeaders(
+        webhookSecret,
+        rawBody,
+        secondarySecret,
+      );
       if (headerError) {
         return c.json(
           {
@@ -665,8 +696,19 @@ dashboardApi.post("/sessions/:sessionId/webhook/test", async (c) => {
         method: "POST",
         headers,
         body: rawBody,
+        redirect: "manual",
         signal: AbortSignal.timeout(15000), // 15s timeout for test
       });
+
+      if (response.status >= 300 && response.status < 400) {
+        return c.json(
+          {
+            success: false,
+            message: `Receiver returned HTTP ${response.status} redirect (not followed)`,
+          },
+          400,
+        );
+      }
 
       if (!response.ok) {
         const latencyMs = Date.now() - startedAt;
@@ -797,6 +839,19 @@ dashboardApi.post("/webhooks/logs/clear", (c) => {
   return c.json({ success: true, message: "Webhook logs cleared" });
 });
 
+/** Resolve the secret pair currently valid for a dead-letter replay. */
+function deadLetterSecrets(entry: { sessionId: string; webhookSecret?: string }): {
+  primary: string;
+  secondary?: string;
+} {
+  try {
+    const active = activeWebhookSecrets(connectionManager.getSession(entry.sessionId).getOptions());
+    return { primary: active.primary || entry.webhookSecret || "", secondary: active.secondary };
+  } catch {
+    return { primary: entry.webhookSecret || "" };
+  }
+}
+
 /**
  * GET /dashboard/api/webhooks/dead-letter
  * Read dead-letter entries (webhooks that exhausted all retries).
@@ -823,11 +878,13 @@ dashboardApi.post("/webhooks/dead-letter/:id/retry", async (c) => {
   if (denied) return denied;
   const id = c.req.param("id");
   const deliver = async (entry: DeadLetterEntry) => {
+    const secrets = deadLetterSecrets(entry);
     const res = await deliverWebhookOnce(
       entry.webhookUrl,
       entry.payload,
-      entry.webhookSecret || "",
+      secrets.primary,
       15000,
+      secrets.secondary,
     );
     return res.ok ? "success" : "failed";
   };
@@ -849,11 +906,13 @@ dashboardApi.post("/webhooks/dead-letter/retry-all", async (c) => {
   const denied = requireCapability(c, "manageWebhooks");
   if (denied) return denied;
   const { replayed, succeeded } = await replayAllDeadLetters(async (entry: DeadLetterEntry) => {
+    const secrets = deadLetterSecrets(entry);
     const res = await deliverWebhookOnce(
       entry.webhookUrl,
       entry.payload,
-      entry.webhookSecret || "",
+      secrets.primary,
       15000,
+      secrets.secondary,
     );
     return res.ok ? "success" : "failed";
   });

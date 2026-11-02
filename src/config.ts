@@ -52,6 +52,7 @@ const {
   WEBHOOK_BACKOFF_FACTOR,
   WEBHOOK_SIGNATURE_MODE,
   WEBHOOK_INCLUDE_TOKEN,
+  WEBHOOK_SECRET_GRACE_MS,
   WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK,
   WEBHOOK_CONCURRENCY,
   WEBHOOK_RETRY_HTTP_429,
@@ -251,6 +252,15 @@ const config = {
     signatureMode: (WEBHOOK_SIGNATURE_MODE || "optional") as "off" | "optional" | "required",
     /** Legacy static-token headers; disable once the receiver verifies HMAC. */
     includeToken: WEBHOOK_INCLUDE_TOKEN !== "false",
+    /**
+     * After a manual rotation the previous secret stays primary for this long,
+     * so receivers keep working while they are updated. 0 = invalidate at once.
+     */
+    secretGraceMs: (() => {
+      const raw = Number(WEBHOOK_SECRET_GRACE_MS);
+      if (!Number.isFinite(raw) || raw < 0) return 24 * 60 * 60 * 1000;
+      return Math.min(raw, 7 * 24 * 60 * 60 * 1000);
+    })(),
     allowGlobalTokenFallback:
       WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK !== undefined
         ? WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK === "true"

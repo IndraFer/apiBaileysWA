@@ -409,7 +409,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
     async rotateWebhookSecret(sessionId) {
       const confirmed = await Modal.confirm(
         "Rotate Webhook Secret",
-        "A new secret is generated and the previous one stops working immediately. Update your receiver before the next delivery. This is manual rotation — there is no automatic expiry.",
+        "A new secret is generated. By default the old secret stays valid during a grace window (24 hours), so existing receivers keep working while you update them. Rotation is manual — nothing expires unless you rotate.",
         { confirmText: "Rotate", variant: "primary" },
       );
       if (!confirmed) return;
@@ -428,11 +428,16 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
         this.renderWebhookConfig();
       }
 
+      const previousUntil = Number(result.data?.previousValidUntil || 0);
+      const graceNote =
+        previousUntil > 0
+          ? `The old secret remains valid until ${escapeHtml(new Date(previousUntil).toLocaleString())}. Update the receiver before then; after that the new secret becomes primary.`
+          : "The old secret is invalid immediately.";
       Modal.show(
         "New Webhook Secret",
         `<p class="u-mb-1">Copy this now — it is shown only once. Update your receiver, then test the connection.</p>
          <code class="u-break-all">${escapeHtml(newSecret)}</code>
-         <p class="text-muted u-block-mt-1">The previous secret is already invalid. Nothing expires automatically; rotate again whenever you need to.</p>`,
+         <p class="text-muted u-block-mt-1">${graceNote} Nothing rotates automatically.</p>`,
       );
     },
 

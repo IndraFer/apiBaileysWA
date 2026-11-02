@@ -1645,9 +1645,13 @@ Secrets are encrypted at rest in session metadata when `CONFIG_ENC_KEY` is set
 (otherwise they carry a `plain:` prefix for backward compatibility).
 `POST /dashboard/api/sessions/:sessionId/webhook/rotate` generates a 32-byte
 secret, stores the encrypted value and returns the plaintext **once**. The
-previous secret becomes invalid immediately. Rotation is manual: there is no
-24-hour expiry and nothing rotates on its own. Dead-letter JSONL persistence
-omits the secret; replay resolves the current one from the session.
+previous secret remains **primary** for `WEBHOOK_SECRET_GRACE_MS` (default
+24 h), so existing receivers keep working while they are updated; the new
+secret is sent in `x-webhook-secret-new` and `x-webhook-signature-new`. After
+the grace window the new secret becomes primary. Pass `graceMs: 0` (API) to
+invalidate the old secret immediately. Rotation is manual: there is no
+recurring 24-hour expiry and nothing rotates on its own. Dead-letter JSONL
+persistence omits the secret; replay resolves the active one from the session.
 
 Fallback order for webhook auth/signing secret:
 
@@ -1804,6 +1808,7 @@ baileys-wa-api/
 | `WEBHOOK_CONCURRENCY`                     | `20`                             | Max concurrent outbound webhook requests globally                        |
 | `WEBHOOK_SIGNATURE_MODE`                  | `optional`                       | Webhook signature mode (`off`, `optional`, `required`)                   |
 | `WEBHOOK_INCLUDE_TOKEN`                   | `true`                           | Legacy static-token headers; `false` after receivers verify HMAC         |
+| `WEBHOOK_SECRET_GRACE_MS`                 | `86400000`                       | After rotation, keep the old secret primary this long (0 = immediate)    |
 | `WEBHOOK_ALLOW_GLOBAL_TOKEN_FALLBACK`     | `true`                           | Allow fallback to `AUTH_GLOBAL_TOKEN` for webhook secret/signature       |
 | `WEBHOOK_ALLOWED_EVENTS`                  | `ALL`                            | Comma-separated event filter                                             |
 | `WEBHOOK_RETRY_MAX`                       | `3`                              | Webhook delivery retry count                                             |

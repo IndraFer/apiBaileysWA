@@ -20,20 +20,25 @@ function isRecord(value: unknown): value is MetadataRecord {
 
 export function encodeMetadataSecrets<T>(metadata: T): T {
   if (!isRecord(metadata)) return metadata;
-  const secret = metadata.webhookSecret;
-  if (typeof secret !== "string" || secret.length === 0) return metadata;
-  // Already stored in a recognized format: do not double-encrypt on every save.
-  if (isEncrypted(secret) || secret.startsWith("plain:")) return metadata;
-  return { ...metadata, webhookSecret: encryptSecret(secret) } as T;
+  let next = metadata;
+  for (const key of ["webhookSecret", "webhookSecretPrevious"] as const) {
+    const secret = next[key];
+    if (typeof secret !== "string" || secret.length === 0) continue;
+    // Already stored in a recognized format: do not double-encrypt on every save.
+    if (isEncrypted(secret) || secret.startsWith("plain:")) continue;
+    next = { ...next, [key]: encryptSecret(secret) };
+  }
+  return next as T;
 }
 
 export function decodeMetadataSecrets<T>(metadata: T): T {
   if (!isRecord(metadata)) return metadata;
-  const secret = metadata.webhookSecret;
-  if (typeof secret !== "string" || secret.length === 0) return metadata;
-  if (!isEncrypted(secret) && !secret.startsWith("plain:")) {
-    // Legacy plaintext from an older build; keep it usable and migrate on save.
-    return metadata;
+  let next = metadata;
+  for (const key of ["webhookSecret", "webhookSecretPrevious"] as const) {
+    const secret = next[key];
+    if (typeof secret !== "string" || secret.length === 0) continue;
+    if (!isEncrypted(secret) && !secret.startsWith("plain:")) continue; // legacy
+    next = { ...next, [key]: decryptSecret(secret) ?? undefined };
   }
-  return { ...metadata, webhookSecret: decryptSecret(secret) ?? undefined } as T;
+  return next as T;
 }
