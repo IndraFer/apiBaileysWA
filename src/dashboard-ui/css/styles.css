@@ -2128,18 +2128,7 @@ details[open] > summary::before {
   line-height: 1.15;
 }
 
-.sidebar-tagline,
-.sidebar-version {
-  font-size: 0.66rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar-version {
-  opacity: 0.85;
-}
+/* line styles live in .sidebar-meta */
 
 .auth-tagline {
   margin: 0.15rem 0 0.4rem;
@@ -2148,4 +2137,59 @@ details[open] > summary::before {
   text-transform: uppercase;
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Tagline and version share one tidy line */
+.sidebar-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  line-height: 1.2;
+  font-size: 0.64rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sidebar-meta .sidebar-tagline {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-sep {
+  opacity: 0.6;
+  flex: 0 0 auto;
+}
+
+.sidebar-meta .sidebar-version {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+/* Sidebar brand centred: icon, title, tagline · version */
+.sidebar-header {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  position: relative;
+}
+
+.sidebar-brand {
+  align-items: center;
+  text-align: center;
+}
+
+.sidebar-meta {
+  justify-content: center;
+}
+
+.sidebar-header .sidebar-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  margin-left: 0;
 }
