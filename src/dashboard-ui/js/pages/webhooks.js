@@ -58,6 +58,9 @@
       .replace(/'/g, "&#39;");
   }
 
+  let webhookSessions = [];
+  let selectedWebhookSessionId = "";
+
   function buildRealtimePayload(sessionId, eventName) {
     const fallbackData = {
       note: "Sample payload for this event is not explicitly defined yet.",
@@ -83,6 +86,15 @@
   window.WebhooksPage = {
     async render() {
       const sessions = await this.getSessions();
+      webhookSessions = sessions;
+
+      if (
+        !selectedWebhookSessionId ||
+        !sessions.some((entry) => (entry.sessionId || entry.id) === selectedWebhookSessionId)
+      ) {
+        selectedWebhookSessionId = sessions[0]?.sessionId || sessions[0]?.id || "";
+      }
+
       const logs = await this.getWebhookLogs();
       const meta = await this.getWebhookMeta();
       const sampleSessionId = "YOUR_SESSION_ID";
@@ -128,7 +140,22 @@
           ${
             sessions.length === 0
               ? '<div class="empty-state"><p class="text-muted">No sessions available</p></div>'
-              : sessions.map((s) => this.renderSessionWebhook(s)).join("")
+              : `<div class="toolbar">
+                   <div class="form-group mb-0 u-minw-200">
+                     <label for="webhook-session-select">Session</label>
+                     <select id="webhook-session-select" class="input">
+                       ${sessions
+                         .map((entry) => {
+                           const id = entry.sessionId || entry.id;
+                           return `<option value="${id}" ${
+                             id === selectedWebhookSessionId ? "selected" : ""
+                           }>${id}</option>`;
+                         })
+                         .join("")}
+                     </select>
+                   </div>
+                 </div>
+                 <div id="webhook-session-config"></div>`
           }
         </div>
 
@@ -214,18 +241,6 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
         payloadRefDetails.setAttribute("hidden", "hidden");
         payloadRefToggle.textContent = "Show Details";
       });
-      document.querySelectorAll(".webhook-secret-toggle").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const sessionId = btn.getAttribute("data-session-id");
-          if (!sessionId) return;
-          const input = document.getElementById(`wh-secret-${sessionId}`);
-          if (!input) return;
-          const shouldShow = input.type === "password";
-          input.type = shouldShow ? "text" : "password";
-          btn.textContent = shouldShow ? "Hide" : "Show";
-        });
-      });
-
       // Delegated handlers kept out of the markup so CSP can keep script-src 'self'.
       pageListeners?.abort();
       pageListeners = new AbortController();
@@ -240,15 +255,55 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
         },
         { signal: pageListeners.signal },
       );
+      const sessionSelect = document.getElementById("webhook-session-select");
+      if (sessionSelect) {
+        sessionSelect.addEventListener("change", (event) => {
+          selectedWebhookSessionId = event.target.value;
+          this.renderWebhookConfig();
+        });
+        this.renderWebhookConfig();
+      }
+
       pageContent.addEventListener(
         "click",
         (event) => {
+          const toggle = event.target.closest("button[data-action='toggle-webhook-secret']");
+          if (toggle) {
+            const sessionId = toggle.getAttribute("data-session-id");
+            const input = document.getElementById(`wh-secret-${sessionId}`);
+            if (input) {
+              const shouldShow = input.type === "password";
+              input.type = shouldShow ? "text" : "password";
+              toggle.textContent = shouldShow ? "Hide" : "Show";
+            }
+            return;
+          }
+
           const button = event.target.closest("button[data-action='test-webhook']");
           if (!button) return;
           this.testWebhook(button.getAttribute("data-session-id"));
         },
         { signal: pageListeners.signal },
       );
+    },
+
+    renderWebhookConfig() {
+      const container = document.getElementById("webhook-session-config");
+      if (!container) return;
+
+      const session = webhookSessions.find(
+        (entry) => (entry.sessionId || entry.id) === selectedWebhookSessionId,
+      );
+
+      if (!session) {
+        UI.setHtml(
+          container,
+          '<div class="empty-state"><p class="text-muted">Select a session to configure its webhook.</p></div>',
+        );
+        return;
+      }
+
+      UI.setHtml(container, this.renderSessionWebhook(session));
     },
 
     renderSessionWebhook(session) {
@@ -278,7 +333,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
 							<label>Webhook Secret</label>
 							<div class="webhook-secret-input-wrap">
 								<input type="password" id="wh-secret-${sid}" placeholder="Optional x-webhook-secret value" value="${session.webhookSecret || ""}" autocomplete="off" />
-								<button type="button" class="btn btn-outline btn-sm webhook-secret-toggle" data-session-id="${sid}">Show</button>
+								<button type="button" class="btn btn-outline btn-sm webhook-secret-toggle" data-action="toggle-webhook-secret" data-session-id="${sid}">Show</button>
 							</div>
 						</div>
             <div class="form-group">
