@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-11-02
+
+### Added
+
+- two-way clear that keeps WhatsApp and the dashboard in sync
+
 ## [1.15.0] - 2026-11-02
 
 ### Added
