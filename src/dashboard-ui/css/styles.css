@@ -2218,3 +2218,45 @@ details[open] > summary::before {
   gap: 0.25rem;
   font-size: 0.6rem;
 }
+
+/* Sidebar: the icon + text block is centred as one group */
+.sidebar-header {
+  justify-content: center;
+}
+
+/* Login: icon and brand share one row for a compact header */
+.auth-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  text-align: left;
+  margin-bottom: 0.5rem;
+}
+
+.auth-logo svg {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.auth-logo h1 {
+  font-size: 1.35rem;
+  margin-bottom: 0;
+  line-height: 1.15;
+}
+
+.auth-logo .auth-tagline {
+  margin: 0.1rem 0 0;
+  font-size: 0.64rem;
+}
+
+.auth-subtitle {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
