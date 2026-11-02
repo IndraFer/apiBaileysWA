@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.19.3] - 2026-11-02
+
+### Changed
+
+- eliminate horizontal scroll inside modal fields and textareas
+
 ## [1.19.2] - 2026-11-02
 
 ### Changed
