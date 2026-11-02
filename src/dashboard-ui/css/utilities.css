@@ -569,3 +569,37 @@
 #ai-instruction {
   min-height: 22rem;
 }
+
+/* Textareas and code blocks always wrap; no oversized horizontal bar anywhere. */
+#modal pre,
+#modal textarea,
+.example-json,
+.webhook-ref-code,
+textarea.input {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word;
+  overflow-x: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+#modal pre::-webkit-scrollbar,
+#modal textarea::-webkit-scrollbar,
+textarea.input::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#modal pre::-webkit-scrollbar-thumb,
+#modal textarea::-webkit-scrollbar-thumb,
+textarea.input::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+#modal pre::-webkit-scrollbar-track,
+#modal textarea::-webkit-scrollbar-track,
+textarea.input::-webkit-scrollbar-track {
+  background: transparent;
+}
