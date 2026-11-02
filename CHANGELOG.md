@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-11-02
+
+### Security
+
+- close traversal/SSRF gaps and remove O(N) work from auth
+
 ## [1.19.16] - 2026-11-02
 
 ### Changed
