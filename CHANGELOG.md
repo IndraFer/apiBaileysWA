@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.20.2] - 2026-11-02
+
+### Fixed
+
+- DNS-aware SSRF guard, no redirects, masked secrets, delivery id
+
 ## [1.20.1] - 2026-11-02
 
 ### Fixed
