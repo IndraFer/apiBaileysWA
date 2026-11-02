@@ -430,6 +430,454 @@ removes its auth folder, metadata and store file, and revokes every API key
 scoped to that session so a recreated session with the same id cannot reuse an
 old key.
 
+### Storage, SSRF and credential handling
+
+- **Session ids are validated at every storage boundary** (`^[A-Za-z0-9_-]{1,64}# API Baileys WA Socket
+
+**WhatsApp REST API** powered by [Baileys WA Sockets](https://github.com/WhiskeySockets/Baileys). Built with **Hono + TypeScript** and features **Dual-Runtime Support** (runs natively on **Bun** or **Node.js**). Includes a built-in Visual Dashboard for easy management, keep clean simple and avoid heavy over-engineering.
+
+> [!NOTE]
+> This project is not meant to be a full-fledged WhatsApp server. It is a wrapper around the Baileys library, providing an HTTP interface for easier integration with other applications, don't use it for spamming or any activities that's prohibited by **WhatsApp META**.
+>
+> **Disclaimer:** This project is 100% AI-assisted and intended for educational purposes only. It will be maintained as a side project in spare time only, with no guarantees of ongoing support, updates, or production readiness.
+>
+> Thus, we do not store WhatsApp messages or any other data (aside from credentials for auto-reconnecting).
+
+---
+
+## ✨ Features
+
+| Feature                     | Description                                                       |
+| --------------------------- | ----------------------------------------------------------------- |
+| **Dual Runtime Support**    | Run on ultra-fast Bun or standard Node.js (cPanel/VPS compatible) |
+| **Visual Dashboard**        | Built-in UI to manage sessions, webhooks, and send messages       |
+| **Dashboard RBAC**          | Role-based access (`admin`, `manager`, `assistant`) + approvals   |
+| **Session Assignment ACL**  | Optional per-user assigned sessions (dashboard scope only)        |
+| **Multi-Session**           | Manage multiple WhatsApp accounts simultaneously                  |
+| **QR Code & Pairing Code**  | Connect via QR scan or 8-digit pairing code                       |
+| **Complete Chat API**       | Send text, media, forward, delete, read messages                  |
+| **Broadcast Queue**         | Bulk message sending with anti-spam delays                        |
+| **Group & Profile**         | Full management (create, participants, status, picture)           |
+| **Media Handling**          | Download, process, retrieve, and auto-cleanup old media           |
+| **Webhook System**          | Retries, exponential backoff, and signature modes                 |
+| **Dual Auth State**         | Save session data to Files (dev) or Redis (production)            |
+| **API Authentication**      | Bearer token or Redis-stored API keys with roles                  |
+| **Hardened Dashboard Auth** | JWT auth, stream token for SSE, password policy, approval flow    |
+| **Swagger/OpenAPI**         | Built-in interactive API documentation at `/docs`                 |
+| **Docker Support**          | Ready-to-use Dockerfiles for both Bun and Node.js                 |
+
+---
+
+## 🆕 What changed in 1.6
+
+- **AI auto-response per number** — responder mode \`off/window/always\`, IANA
+  time window (cross-midnight), OpenAI-compatible driver, tool-calling RAG,
+  debounce, human takeover, handoff, prompt-injection guard, routing metrics.
+- **Admin panel** — add users, approvals, roles, session ownership
+  (\`ownerId\`), per-role quotas (\`MAX_SESSIONS_PER_USER\`,
+  \`MAX_SESSIONS_PER_MANAGER\`), and delete-with-revoke of sessions+credentials.
+- **Security hardening** — HttpOnly cookie sessions, strict CSP with violation
+  reporting, HSTS/HTTPS redirect behind a trusted proxy, same-origin dashboard
+  APIs, DOMPurify-sanitized rendering.
+- **Webhook reliability** — per-URL circuit breaker and gzip payloads above a
+  configurable threshold, with retries and dead-letter handling.
+- **Cleaner UI** — no inline styles/handlers, shared utility classes, nav gating
+  by session/webhook/role, and a consistent control height.
+
+## 🚀 Quick Start
+
+### 1. Prerequisite (Choose One Runtime)
+
+- **Bun**: Ultra-fast, ideal for VPS or Home Servers (Recommended).
+- **Node.js**: Standard, portable, ideal for cPanel VPS or traditional Node.js hosting.
+- **Docker**: Containerized deployment. Ensure you have Docker Compose installed.
+
+### 2. Local Setup (Bun OR Node.js)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd baileys-wa-api
+
+# Configure Environment
+cp .env.example .env
+# Edit .env and configure DASHBOARD_JWT_SECRET
+```
+
+#### Running with Bun (Fastest)
+
+```bash
+bun install
+
+# Development (Auto-reload)
+bun run dev
+
+# Production Build
+bun run start
+```
+
+#### Running with Node.js (Highest Compatibility)
+
+```bash
+npm install
+
+# Development (via tsx watch)
+npm run dev:node
+
+# Production Build
+npm run start:node
+```
+
+The API will start at `http://localhost:3000`. Access the following default routes:
+
+- 🖥️ **Dashboard**: `http://localhost:3000/dashboard/`
+- 📖 **Swagger Docs**: `http://localhost:3000/docs`
+- 💚 **Health Check**: `http://localhost:3000/status`
+
+---
+
+## 🤖 AI Auto-Response (time-based routing + RAG tools)
+
+Inside a configured window the AI answers; outside it humans do. Per-number
+settings live in the session metadata (dashboard), so every WhatsApp number has
+its own window, model, instruction and knowledge endpoints.
+
+**Routing rule** — the AI only replies when all are true:
+
+1. `ai.enabled` is on for that number (dashboard).
+2. The current time is inside `AI_WINDOW_START`–`AI_WINDOW_END`, evaluated in
+   `ROUTING_TZ` (cross-midnight supported: `16:00`→`08:00`).
+3. **No human replied recently** in that conversation. A reply typed on the
+   phone, WhatsApp Web or the dashboard counts; messages sent through this API
+   do not. Silence lasts `ROUTING_HUMAN_IDLE_MS` (default 15 min).
+
+If a call fails, the static away message (`AUTO_REPLY_*`) is used instead, so
+the customer is never left without an answer.
+
+#### Responder chain (one owner per message)
+
+Replies are decided by a single chain, not three independent switches:
+
+1. **AI & Routing** — answers when enabled and eligible (`mode`: window/always),
+   unless a human is active or the conversation is muted.
+2. **Static auto-reply** — its `role` decides when it steps in:
+
+   | `role` | Behaviour |
+   |---|---|
+   | `both` (default) | primary when the AI is off/outside its window, fallback when the AI call fails |
+   | `primary` | answers whenever it is enabled; the AI only runs when static is off |
+   | `fallback` | answers only when the AI fails (no credit, API error, guard block) |
+
+3. **Webhook** — never answers; it delivers events. Every `messages.upsert`
+   payload carries a `routing` block (`aiEnabled`, `aiMode`, `window`,
+   `timezone`, `staticRole`) so an external system can skip replying.
+
+The ordering is intentional: the AI is the most capable but most fragile layer,
+static is the cheap always-available net, and the webhook observes rather than
+competes.
+
+#### Response modes: static vs LLM
+
+The static auto-reply and the LLM coexist; the mode decides who answers.
+
+| Setting | Behaviour |
+|---|---|
+| `ai.mode = "off"` (or `ai.enabled = false`) | Static rules (`AUTO_REPLY_*`) own the conversation |
+| `ai.mode = "window"` (default) | LLM inside the window; outside it the static rules apply |
+| `ai.mode = "always"` | LLM answers 24/7 — “full handle” |
+
+Humans win in every mode: a reply typed from the phone, WhatsApp Web or the
+dashboard pauses the AI for `ROUTING_HUMAN_IDLE_MS`, and
+`POST /chats/:id/handoff` pauses it longer — including in `always` mode.
+
+Precedence: **AI path → static rules → nothing**. If the AI call fails, the
+static away message is sent instead, so the customer always gets an answer.
+
+#### Tuning (env defaults, overridable per number in the UI)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AI_MODE` | `window` | `off` / `window` / `always` |
+| `AI_TEMPERATURE` | `0.6` | Sampling temperature |
+| `AI_TOP_P` | `0.95` | Nucleus sampling |
+| `AI_MIN_P` | `0.05` | Min-p (sent only to OpenRouter bases) |
+| `AI_MAX_TOKENS` | `1024` | Reply budget |
+| `AI_TIMEOUT_MS` | `25000` | Provider request timeout |
+| `AI_TOOL_MAX_ROUNDS` | `2` | Tool-call rounds per reply |
+| `AI_HISTORY_MAX_MESSAGES` | `12` | Prior messages sent as context |
+| `AI_HISTORY_MAX_AGE_MS` | `21600000` | Ignore history older than 6 hours |
+| `AI_HISTORY_MAX_CHARS` | `8000` | Character budget for the history block |
+| `AI_GUARD_ENABLED` | `true` | Prompt-injection guard on/off |
+| `AI_GUARD_MAX_INPUT_CHARS` | `4000` | Input cap before refusal |
+| `ROUTING_BATCH_IDLE_MS` | `20000` | Debounce window per conversation |
+| `ROUTING_BATCH_MAX_WAIT_MS` | `60000` | Hard cap from the first message |
+| `ROUTING_HUMAN_IDLE_MS` | `900000` | Human-activity pause |
+
+Precedence: **session metadata overrides env**, and the dashboard UI writes
+session metadata. Nothing requires a database.
+
+#### Drivers
+
+| `AI_DRIVER` | Talks to | Needs |
+|---|---|---|
+| `openai` (default) | any OpenAI-compatible `/chat/completions` — OpenRouter, OpenAI, Groq, Together, Ollama | `AI_BASE_URL`, `AI_MODEL`, per-number key |
+| `webhook` | your own agent gateway (e.g. `apiLLM`) | `AI_AGENT_URL` |
+
+Both drivers produce the same output (one reply text), so switching later is a
+configuration change.
+
+The dashboard exposes the OpenAI-compatible driver only. The `webhook` driver is
+an advanced/env-only option for gateways that speak the custom event contract
+instead of OpenAI's; if your gateway is OpenAI-compatible, point `Base URL` at
+it and keep the default driver.
+
+Default sampling values: `temperature 0.6`, `top_p 0.95`, `min_p 0.05`
+(sent only when the base URL is OpenRouter), penalties `0`, `max_tokens 1024`.
+Empty fields fall back to these, so a provider's own defaults apply only when
+you clear a value on purpose.
+
+#### Per-number configuration
+
+```http
+GET   /dashboard/api/sessions/:sessionId/ai-config
+PATCH /dashboard/api/sessions/:sessionId/ai-config
+```
+
+`PATCH` body (every field optional, merged):
+
+```jsonc
+{
+  "routing": { "aiWindowStart": "16:00", "aiWindowEnd": "08:00", "timezone": "Asia/Jakarta",
+               "humanIdleMs": 900000, "handoffPauseMs": 1800000 },
+  "ai": {
+    "enabled": true,
+    "driver": "openai",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "model": "openai/gpt-4o-mini",
+    "systemInstruction": "You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Never invent facts; use the available tools when data is required.",
+    "ragEndpoints": [],
+    "credentialsJson": "{\"apiKey\":\"sk-or-...\",\"endpoints\":{}}"
+  }
+}
+```
+
+Credentials are **encrypted before persisting** (AES-256-GCM) using
+`CONFIG_ENC_KEY` and are never returned by the API — reads only report
+`credentialsSet` / `credentialsEncrypted`. Logs redact them by key name.
+
+#### Knowledge endpoints (simple RAG, no vector DB)
+
+Each endpoint declares **its own parameters** — nothing is hardcoded. They are
+converted into tool schemas, so the model decides when to call them.
+
+```jsonc
+{
+  "name": "web_search",
+  "description": "Search the web for general information.",
+  "method": "GET",
+  "url": "https://api.duckduckgo.com/",
+  "params": [
+    { "name": "q", "type": "string", "description": "Search query", "required": true },
+    { "name": "format", "type": "string", "description": "Response format", "default": "json" }
+  ],
+  "timeoutMs": 6000,
+  "maxResponseChars": 1500
+}
+```
+
+```jsonc
+{
+  "name": "check_weather",
+  "description": "Get the current weather for a location (no API key required).",
+  "method": "GET",
+  "url": "https://api.open-meteo.com/v1/forecast",
+  "params": [
+    { "name": "latitude", "type": "number", "description": "Latitude", "required": true },
+    { "name": "longitude", "type": "number", "description": "Longitude", "required": true },
+    { "name": "current_weather", "type": "string", "description": "Return current weather", "default": "true" }
+  ]
+}
+```
+
+Parameter can target `query`, `body` or `path` (`in`). Path placeholders use
+`{name}`, e.g. `/api/members/{member_number}/detail`.
+
+Prefer the provider's own contract? Pass a raw JSON Schema instead of the
+`params` list — it is forwarded to the model untouched:
+
+```jsonc
+{
+  "name": "search_users",
+  "method": "GET",
+  "url": "https://api.example.com/v1/users/search",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "q": { "type": "string", "description": "Name, email or member id" }
+    },
+    "required": ["q"]
+  }
+}
+```
+
+With `parameters`, every argument the model produces is sent as a query string
+for GET and as the JSON body otherwise — no per-parameter metadata is needed.
+
+Credentials per endpoint live in the encrypted blob, never in the prompt:
+
+```jsonc
+{ "apiKey": "sk-or-...", "endpoints": { "web_search": { "headers": { "X-API-Key": "..." } } } }
+```
+
+Safety limits: URL always comes from configuration (never from the model),
+optional private-host block (`AI_TOOL_BLOCK_INTERNAL`), per-endpoint timeout,
+response truncation (`AI_TOOL_MAX_RESPONSE_CHARS`) and `AI_TOOL_MAX_ROUNDS` to
+stop tool loops.
+
+> **Status:** routing window, human-activity detection, idle **debounce**,
+> provider call, tool-calling and AI→human handoff are implemented.
+>
+> - Messages are collected until the chat is idle for `ROUTING_BATCH_IDLE_MS`
+>   (reset on every new message), capped by `ROUTING_BATCH_MAX_WAIT_MS` from the
+>   first message and by `ROUTING_MAX_BATCH_MESSAGES`. One idle window → one
+>   prompt → one reply.
+> - After human activity the conversation stays human-owned for
+>   `ROUTING_HUMAN_IDLE_MS`; the backlog that arrived meanwhile is answered in a
+>   single prompt when the pause expires.
+> - Exactly one timer is armed per conversation; a stale timer can never fire a
+>   reply (epoch guard), so there is no periodic polling.
+
+#### AI → human takeover
+
+The model (or your gateway) can stop the bot for one conversation:
+
+```http
+POST /chats/:sessionId/handoff
+{ "conversationId": "628xxx@s.whatsapp.net", "reason": "customer_minta_manusia", "pauseMinutes": 30 }
+```
+
+While paused, inbound messages accumulate but the AI stays silent; when the
+pause expires the backlog is answered once. A human reply in the meantime
+extends the pause automatically. `pauseMinutes` is clamped to 1..1440 (default
+30).
+
+#### Prompt-injection & abuse control
+
+Layers, weakest to strongest:
+
+1. **Tripwire (heuristics)** — obvious override / jailbreak / secret-probe
+   patterns are refused before any provider call (`AI_GUARD_BLOCK_SCORE`,
+   default 50). Heuristics are a signal, not a boundary.
+2. **Instruction hierarchy** — customer text is wrapped in
+   `<pesan_pengguna>…</pesan_pengguna>` and the system prompt states that this
+   is data, never instructions.
+3. **Least privilege** — tools only come from the configured allowlist, the URL
+   is never model-controlled, credentials never enter the prompt, and tool
+   rounds plus response size are bounded.
+4. **Output scrubbing** — credential-shaped strings (API keys, bearer tokens,
+   private keys) are redacted from the reply before it is sent.
+5. **Abuse control** — after `AI_GUARD_MAX_STRIKES` blocked messages the
+   conversation is muted for `AI_GUARD_MUTE_MS`. Messages received during a
+   mute are ignored and **not queued**, so nothing stale is answered when the
+   mute expires; the next genuine message resumes normal handling.
+
+Honest limit: heuristics can be rephrased, so layers 3–5 carry the real
+protection — the tripwire mainly stops scripted abuse and produces the signal
+used for muting.
+
+#### Dashboard page
+
+A dedicated **AI & Routing** page (`#ai`, requires `manageSessions`) configures
+everything per number — responder mode, window, model/credentials, system
+instruction and knowledge endpoints — and shows live routing metrics. It reuses
+the existing dashboard components (cards, form groups, badges, tables), so it
+looks and behaves like the rest of the dashboard.
+
+#### Routing metrics
+
+```http
+GET  /dashboard/api/ai/metrics?sessionId=<optional>
+POST /dashboard/api/ai/metrics/reset
+```
+
+Counters are kept **in memory** (no database): AI replies, human-handled,
+static replies, failures, tool calls, tokens and latency, plus 24 hourly
+buckets and the most recent decisions. They are visible while the app is
+running and reset on restart. Redis-backed persistence can be added later
+without changing the endpoints.
+
+### Brute force & rate limits
+
+| Layer | Default | Env |
+|---|---|---|
+| Dashboard login per IP | 5 requests/min | (built-in) |
+| Login lockout per account and per IP | 10 failures in 15 min → 15 min lock | `AUTH_MAX_FAILURES`, `AUTH_FAILURE_WINDOW_MS`, `AUTH_LOCK_MS` |
+| REST API per key | 60 requests/min | `RATE_LIMIT_API_KEY` |
+| Send per session+IP | 30 requests/min | (built-in) |
+| Concurrent sends per session | 5 | `MAX_CONCURRENT_SENDS` |
+| Send timeout | 30 s | `SEND_TIMEOUT_MS` |
+
+Lockout responses are generic (`ACCOUNT_LOCKED`) and unknown usernames are
+tracked too, so locking does not reveal whether an account exists. Rate-limited
+responses carry `Retry-After`, a stable `code` (`RATE_LIMITED`,
+`SESSION_BUSY`) and `retryable: true`.
+
+For a public deployment, also put a limiter in front: nginx
+`limit_req_zone`/`limit_conn_zone`, Cloudflare rate limiting or fail2ban for
+repeated 401/429s. In-process limits protect one instance; the proxy protects
+the whole fleet.
+
+### Clearing vs deleting a chat
+
+Both actions live in the **⋯ menu** attached to a chat — either in the chat header
+or on each row of the chat list — so they apply to that chat only. They stay in
+sync with WhatsApp and are never bulk operations, so they do not create a spam
+pattern. The same menu offers Reload and Mark Read.
+
+| Action | WhatsApp | Dashboard |
+|---|---|---|
+| **Clear Chat** | `chatModify({ clear: true })` — history removed, chat stays | messages removed, room stays open and empty |
+| **Delete Chat** | `chatModify({ delete: true })` — chat removed | room and messages removed from the list |
+
+One request per action. If the remote call fails the dashboard keeps its local
+copy and returns `502`, so the two sides never diverge silently. A disconnected
+session returns `409`. There is deliberately no "clear/delete every chat"
+button: doing that through the socket would mean hundreds of requests and a real
+ban risk. To clean another chat, open it and act on it individually.
+
+The **Groups** page offers the same pair per group: **Clear Chat** (clears the
+group chat on WhatsApp and locally) and **Exit & Delete** (`POST
+/groups/:sessionId/leave-and-delete/:jid`, which deletes the chat, leaves the
+group and removes it locally). Both use the dashboard confirmation modal — the
+same dialog as chat clear/delete — instead of a native browser prompt.
+
+Changes made on the phone are mirrored back automatically: `messages.delete`
+with `{ jid, all: true }` empties the cache for a cleared chat, and
+`chats.delete` removes the room locally.
+
+### Session config persistence & cleanup
+
+Per-number settings (webhook, AI/routing, autoReply, owner) are written to
+`sessions/md_<id>/metadata.json` (file backend) or the Redis auth hash, so a
+restart reconnects the session with the same configuration. Deleting a session
+removes its auth folder, metadata and store file, and revokes every API key
+scoped to that session so a recreated session with the same id cannot reuse an
+old key.
+
+):
+  routes, connection manager, auth-state files and Redis keys. A malformed id
+  cannot escape `sessions/`, so delete/metadata operations cannot touch other
+  files.
+- **Media URLs are checked before sending** (`MEDIA_BLOCK_INTERNAL`, default
+  true): a `/messages` request that points at localhost, a private range or a
+  link-local host returns `400 MEDIA_URL_BLOCKED` instead of making the server
+  fetch it.
+- **API keys are stored hashed** and resolved with a single Redis `HGET` (or the
+  cached file store) plus one legacy `GET`; the auth path no longer runs
+  `KEYS`/full scans, and `lastUsedAt` is written at most once per minute per key.
+- Media file downloads resolve inside `media/` with a separator-aware check.
+- Audit JSONL appends are asynchronous, so disk latency never delays a response.
+
 ## 🔐 Deployment security (TLS & reverse proxy)
 
 The API speaks plain HTTP; **terminate TLS in front of it** (Caddy, nginx,

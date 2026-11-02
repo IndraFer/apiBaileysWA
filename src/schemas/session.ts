@@ -40,7 +40,9 @@ export const createSessionSchema = z
   }));
 
 /** Session ID must be alphanumeric with hyphens/underscores, 1-64 chars */
-export const SESSION_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
+import { SESSION_ID_PATTERN } from "@/lib/sessionId";
+
+export const SESSION_ID_REGEX = SESSION_ID_PATTERN;
 
 /** HH:mm (00:00 - 23:59) */
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:mm)");

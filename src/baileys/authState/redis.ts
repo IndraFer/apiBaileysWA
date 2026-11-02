@@ -8,6 +8,7 @@ import {
 } from "@whiskeysockets/baileys";
 import logger from "@/lib/logger";
 import { getRedis } from "@/lib/redis";
+import { assertValidSessionId } from "@/lib/sessionId";
 
 const REDIS_KEY_PREFIX = "@baileys-wa-api:connections";
 
@@ -21,6 +22,7 @@ export async function useRedisAuthState(
   const redis = getRedis();
   if (!redis) throw new Error("Redis is not available for auth state");
 
+  assertValidSessionId(sessionId);
   const createKey = (key: string) => `${REDIS_KEY_PREFIX}:${sessionId}:${key}`;
 
   const writeData = (key: string, field: string, data: unknown) =>
@@ -44,24 +46,27 @@ export async function useRedisAuthState(
       keys: {
         get: async (type, ids) => {
           const data: { [_: string]: SignalDataTypeMap[typeof type] } = {};
-          await Promise.all(
+          const entries = await Promise.all(
             ids.map(async (id) => {
               const value = await readData("authState", `${type}-${id}`);
-              data[id] =
+              const normalized =
                 type === "app-state-sync-key" && value
                   ? proto.Message.AppStateSyncKeyData.fromObject(value)
                   : value;
+              return [id, normalized] as const;
             }),
           );
+          for (const [id, value] of entries) data[id] = value;
           return data;
         },
         set: async (data) => {
           type DataKey = keyof typeof data;
           const multi = redis.multi();
-          for (const category in data) {
-            for (const id in data[category as DataKey]) {
+          for (const [category, categoryData] of Object.entries(data) as Array<
+            [string, Partial<Record<string, unknown>>]
+          >) {
+            for (const [id, value] of Object.entries(categoryData ?? {})) {
               const field = `${category}-${id}`;
-              const value = data[category as DataKey]?.[id];
               if (value) {
                 multi.hSet(
                   createKey("authState"),
@@ -94,7 +99,13 @@ export async function getRedisSavedSessionIds<T>(): Promise<Array<{ id: string; 
   const redis = getRedis();
   if (!redis) return [];
 
-  const keys = await redis.keys(`${REDIS_KEY_PREFIX}:*:authState`);
+  const keys: string[] = [];
+  for await (const key of redis.scanIterator({
+    MATCH: `${REDIS_KEY_PREFIX}:*:authState`,
+    COUNT: 100,
+  })) {
+    keys.push(String(key));
+  }
   const ids = keys.map((key) => key.split(":").at(-2) ?? "").filter(Boolean);
 
   if (ids.length === 0) return [];
@@ -105,10 +116,16 @@ export async function getRedisSavedSessionIds<T>(): Promise<Array<{ id: string; 
   }
   const metadata = await multi.execAsPipeline();
 
-  return ids.map((id, i) => ({
-    id,
-    metadata: metadata[i] ? JSON.parse(metadata[i] as unknown as string) : null,
-  }));
+  return ids.map((id, index) => {
+    const raw = metadata[index];
+    if (typeof raw !== "string" || !raw) return { id, metadata: null as T };
+
+    try {
+      return { id, metadata: JSON.parse(raw) as T };
+    } catch {
+      return { id, metadata: null as T };
+    }
+  });
 }
 
 /**

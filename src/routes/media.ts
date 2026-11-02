@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { getMessageMedia } from "@/baileys/helpers/downloadMedia";
@@ -52,7 +52,8 @@ mediaRoutes.get("/file/:id", async (c) => {
   const filePath = resolve(join(MEDIA_DIR, id));
 
   // Prevent path traversal
-  if (!filePath.startsWith(resolve(MEDIA_DIR))) {
+  const mediaRoot = resolve(MEDIA_DIR);
+  if (filePath !== mediaRoot && !filePath.startsWith(mediaRoot + sep)) {
     return error(c, "Forbidden", 403);
   }
 

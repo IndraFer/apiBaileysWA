@@ -10,6 +10,7 @@
 import type { AnyMessageContent, WAMessage } from "@whiskeysockets/baileys";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
+import { validateOutboundUrl } from "@/lib/urlGuard";
 import type { UnifiedSendInput } from "@/schemas/message";
 import { extractPhone, formatGroup, formatPhone } from "@/utils/phone";
 
@@ -22,6 +23,7 @@ export type SendErrorCode =
   | "GROUP_DISABLED"
   | "GROUP_NOT_ALLOWED"
   | "RECEIVER_NOT_ON_WHATSAPP"
+  | "MEDIA_URL_BLOCKED"
   | "SESSION_BUSY"
   | "SEND_TIMEOUT";
 
@@ -147,11 +149,26 @@ function resolveTarget(input: UnifiedSendInput): { jid: string; isGroup: boolean
   return { jid, isGroup: true };
 }
 
+function assertMediaUrl(url: string): void {
+  const invalid = validateOutboundUrl(url, { blockInternal: config.media.blockInternal });
+  if (invalid) {
+    throw new MessageSendError(`Media URL rejected: ${invalid}`, {
+      status: 400,
+      code: "MEDIA_URL_BLOCKED",
+      field: "media.url",
+      hint: "Use a public http(s) URL. If the media host is intentionally internal, set MEDIA_BLOCK_INTERNAL=false.",
+      details: { url },
+    });
+  }
+}
+
 function contentFor(input: UnifiedSendInput): AnyMessageContent {
   switch (input.type) {
     case "image":
+      assertMediaUrl(input.media?.url ?? "");
       return { image: { url: input.media?.url ?? "" }, caption: input.messages };
     case "document":
+      assertMediaUrl(input.media?.url ?? "");
       return {
         document: { url: input.media?.url ?? "" },
         mimetype: input.media?.mimetype ?? "application/octet-stream",

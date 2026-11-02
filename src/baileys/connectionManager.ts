@@ -7,6 +7,7 @@ import { BaileysConnection, BaileysNotConnectedError } from "@/baileys/connectio
 import type { SessionMetadata, SessionOptions } from "@/baileys/types";
 import config from "@/config";
 import logger from "@/lib/logger";
+import { assertValidSessionId } from "@/lib/sessionId";
 import { revokeApiKeysForSession } from "@/services/apiKeys";
 import { errorToString } from "@/utils/validation";
 
@@ -71,6 +72,7 @@ class ConnectionManager {
     sessionId: string,
     options: SessionOptions,
   ): Promise<{ qrCode?: string; pairingCode?: string }> {
+    assertValidSessionId(sessionId);
     // If session exists and is connected, return existing state
     const existing = this.connections.get(sessionId);
     if (existing?.isConnected) {
@@ -169,6 +171,7 @@ class ConnectionManager {
    * Delete a session and its auth state.
    */
   async deleteSession(sessionId: string): Promise<void> {
+    assertValidSessionId(sessionId);
     const conn = this.connections.get(sessionId);
     if (conn) {
       // Tombstone first: close events can fire twice and would rewrite the file.

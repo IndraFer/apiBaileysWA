@@ -8,7 +8,8 @@
  * Entries live in a bounded in-memory ring for fast reads and are appended to a
  * daily JSONL file under logs/ for auditability across restarts.
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import config from "@/config";
 import logger from "@/lib/logger";
@@ -82,7 +83,10 @@ export function recordApiCall(entry: ApiAuditEntry): void {
 
   try {
     mkdirSync(LOG_DIR, { recursive: true });
-    appendFileSync(fileFor(new Date()), `${JSON.stringify(record)}\n`, "utf8");
+    // Fire-and-forget: a slow disk must not block an API response.
+    void appendFile(fileFor(new Date()), `${JSON.stringify(record)}\n`, "utf8").catch((error) => {
+      logger.warn("[Audit] Failed to persist API call: %s", (error as Error).message);
+    });
 
     const now = Date.now();
     if (now - lastPrune > 60 * 60 * 1000) {

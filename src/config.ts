@@ -28,6 +28,7 @@ const {
   CSP_EXTRA_FONT_SRC,
   CSP_EXTRA_IMG_SRC,
   CSP_EXTRA_CONNECT_SRC,
+  MEDIA_BLOCK_INTERNAL,
   RATE_LIMIT_API_KEY,
   AUTH_MAX_FAILURES,
   AUTH_FAILURE_WINDOW_MS,
@@ -401,6 +402,8 @@ const config = {
 
   media: {
     includeBase64: MEDIA_INCLUDE_BASE64 === "true",
+    /** Reject media URLs that resolve to private/internal hosts (SSRF guard). */
+    blockInternal: MEDIA_BLOCK_INTERNAL !== "false",
     cleanupEnabled: MEDIA_CLEANUP_ENABLED ? MEDIA_CLEANUP_ENABLED === "true" : true,
     cleanupIntervalMs: MEDIA_CLEANUP_INTERVAL_MS ? Number(MEDIA_CLEANUP_INTERVAL_MS) : 3600000,
     maxAgeHours: MEDIA_MAX_AGE_HOURS ? Number(MEDIA_MAX_AGE_HOURS) : 24,

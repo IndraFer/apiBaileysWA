@@ -27,6 +27,7 @@ import {
   maskSecret,
   redactCredentials,
 } from "@/lib/secretBox";
+import { isValidSessionId } from "@/lib/sessionId";
 import { aiConfigPatchSchema } from "@/schemas/session";
 import {
   parseEndpointCredentials,
@@ -127,6 +128,10 @@ function hasSessionAccess(c: Context, sessionId: string): boolean {
 }
 
 function requireSessionAccess(c: Context, sessionId: string) {
+  if (!isValidSessionId(sessionId)) {
+    return c.json({ success: false, message: "Invalid session id" }, 400);
+  }
+
   if (hasSessionAccess(c, sessionId)) return null;
   return c.json(
     { success: false, message: "Forbidden: session is not assigned to your account" },

@@ -13,7 +13,7 @@
  * Legacy plaintext keys are migrated on first lookup or listing.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import logger from "@/lib/logger";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
@@ -60,9 +60,14 @@ function emptyFileStore(): FileStore {
   return { version: 1, keys: {} };
 }
 
+let fileCache: { mtimeMs: number; store: FileStore } | null = null;
+
 function readFileStore(): FileStore {
   if (!existsSync(FILE_PATH)) return emptyFileStore();
   try {
+    const stats = statSync(FILE_PATH);
+    if (fileCache && fileCache.mtimeMs === stats.mtimeMs) return fileCache.store;
+
     const parsed = JSON.parse(readFileSync(FILE_PATH, "utf8")) as Partial<FileStore>;
     if (!parsed || typeof parsed !== "object" || !parsed.keys) return emptyFileStore();
     const keys: Record<string, ApiKeyRecord> = {};
@@ -70,7 +75,9 @@ function readFileStore(): FileStore {
       const record = parseRecord(hash, JSON.stringify(value));
       if (record) keys[hash] = record;
     }
-    return { version: 1, keys };
+    const store = { version: 1 as const, keys };
+    fileCache = { mtimeMs: stats.mtimeMs, store };
+    return store;
   } catch {
     return emptyFileStore();
   }
@@ -81,6 +88,7 @@ function writeFileStore(store: FileStore): void {
   const tmp = `${FILE_PATH}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(store, null, 2)}\n`, "utf8");
   renameSync(tmp, FILE_PATH);
+  fileCache = { mtimeMs: statSync(FILE_PATH).mtimeMs, store };
 }
 
 export function hashToken(token: string): string {
@@ -185,7 +193,11 @@ async function migrateLegacyKeys(): Promise<void> {
   if (!redis) return;
 
   try {
-    const legacy = await redis.keys(`${LEGACY_PREFIX}:*`);
+    const legacy: string[] = [];
+    for await (const key of redis.scanIterator({ MATCH: `${LEGACY_PREFIX}:*`, COUNT: 100 })) {
+      legacy.push(String(key));
+    }
+
     for (const key of legacy) {
       const token = key.slice(`${LEGACY_PREFIX}:`.length);
       if (!token) continue;
@@ -262,32 +274,72 @@ export async function revokeApiKeysForSession(sessionId: string): Promise<number
   return removed;
 }
 
-/** Resolve a presented token. Legacy plaintext keys are migrated on the way. */
+/**
+ * Resolve a presented token without scanning: one Redis hGet, then the cached
+ * file store, then a single legacy GET. The old version called KEYS and parsed
+ * every record on each authenticated request.
+ */
 export async function findApiKeyByToken(token: string): Promise<ApiKeyAuth | null> {
   const hash = hashToken(token);
-  const merged = await readAllRecords();
-  const record = merged.get(hash);
+  let record: ApiKeyRecord | null = null;
 
-  if (!record) {
-    // Legacy plaintext key: accept once, then migrate.
-    await migrateLegacyKeys();
-    const retried = (await readAllRecords()).get(hash);
-    if (!retried) return null;
-    return touch(retried);
+  if (isRedisAvailable()) {
+    const redis = getRedis();
+    if (redis) {
+      const raw = await redis.hGet(HASHED_STORE, hash).catch(() => null);
+      if (raw) record = parseRecord(hash, raw);
+    }
   }
 
+  if (!record) record = readFileStore().keys[hash] ?? null;
+
+  if (!record && isRedisAvailable()) {
+    const redis = getRedis();
+    if (redis) {
+      const legacy = await redis.get(`${LEGACY_PREFIX}:${token}`).catch(() => null);
+      if (legacy) {
+        try {
+          const parsed = JSON.parse(legacy) as { role?: string; createdAt?: string };
+          record = {
+            hash,
+            label: "legacy key",
+            role: parsed.role === "admin" ? "admin" : "user",
+            sessions: ["*"],
+            createdAt: parsed.createdAt ?? new Date().toISOString(),
+            lastUsedAt: null,
+          };
+          await persistRecord(record);
+          await redis.del(`${LEGACY_PREFIX}:${token}`).catch(() => undefined);
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+
+  if (!record) return null;
   return touch(record);
 }
 
+/** lastUsedAt is written at most once per minute per key, not per request. */
+const lastTouchedAt = new Map<string, number>();
+
 async function touch(record: ApiKeyRecord): Promise<ApiKeyAuth> {
-  const updated: ApiKeyRecord = { ...record, lastUsedAt: new Date().toISOString() };
-  // Best effort: a failed touch must never reject a valid request.
-  await persistRecord(updated).catch(() => undefined);
+  const now = Date.now();
+  const last = lastTouchedAt.get(record.hash) ?? 0;
+
+  if (now - last > 60_000) {
+    if (lastTouchedAt.size > 5000) lastTouchedAt.clear();
+    lastTouchedAt.set(record.hash, now);
+    const updated: ApiKeyRecord = { ...record, lastUsedAt: new Date(now).toISOString() };
+    await persistRecord(updated).catch(() => undefined);
+  }
+
   return {
-    id: shortId(updated.hash),
-    label: updated.label,
-    role: updated.role,
-    sessions: updated.sessions,
+    id: shortId(record.hash),
+    label: record.label,
+    role: record.role,
+    sessions: record.sessions,
   };
 }
 

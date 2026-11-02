@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { type AuthenticationState, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import logger from "@/lib/logger";
+import { assertValidSessionId } from "@/lib/sessionId";
 
 const SESSIONS_DIR = join(process.cwd(), "sessions");
 
@@ -12,6 +13,7 @@ function ensureSessionsDir() {
 }
 
 function getSessionDir(sessionId: string): string {
+  assertValidSessionId(sessionId);
   return join(SESSIONS_DIR, `md_${sessionId}`);
 }
 
@@ -86,6 +88,7 @@ export function deleteFileAuthState(sessionId: string): void {
   rmSync(sessionDir, { force: true, recursive: true });
 
   // Delete store JSON file
+  assertValidSessionId(sessionId);
   const storeFile = join(SESSIONS_DIR, `${sessionId}_store.json`);
   rmSync(storeFile, { force: true });
 
