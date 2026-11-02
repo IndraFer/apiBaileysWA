@@ -313,7 +313,7 @@
         <div class="card">
           <div class="card-header"><h3>System instruction</h3></div>
           <div class="form-group">
-            <textarea id="ai-instruction" class="input" rows="10"
+            <textarea id="ai-instruction" class="input" rows="18"
               placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
             <small class="text-muted">Persona, tone, language and escalation rules.</small>
           </div>

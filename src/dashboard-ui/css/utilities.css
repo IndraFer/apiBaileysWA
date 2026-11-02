@@ -538,3 +538,34 @@
   min-height: 8rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* Code/example blocks: wrap instead of horizontal scroll, thin consistent bars */
+.example-json {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.example-json::-webkit-scrollbar,
+.webhook-ref-code::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.example-json::-webkit-scrollbar-thumb,
+.webhook-ref-code::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+.example-json::-webkit-scrollbar-track,
+.webhook-ref-code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#ai-instruction {
+  min-height: 22rem;
+}
