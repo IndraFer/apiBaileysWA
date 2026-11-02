@@ -634,3 +634,17 @@ textarea.input::-webkit-scrollbar-track {
 .u-row-create .form-group {
   margin-bottom: 0 !important;
 }
+
+/* Grid wins over the earlier flex rule: fields on one line, action aligned */
+.u-row-create {
+  display: grid !important;
+  grid-template-columns: minmax(9rem, 1fr) minmax(9rem, 1fr) auto !important;
+  align-items: end !important;
+  gap: 0.5rem !important;
+}
+
+@media (max-width: 640px) {
+  .u-row-create {
+    grid-template-columns: 1fr !important;
+  }
+}

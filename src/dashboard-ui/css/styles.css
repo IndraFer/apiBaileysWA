@@ -2271,3 +2271,56 @@ details[open] > summary::before {
 .auth-logo .auth-tagline {
   text-align: center;
 }
+
+/* Webhook config: intro + meta on the left, session picker on the right */
+.webhook-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.webhook-config-intro {
+  min-width: 0;
+}
+
+.webhook-config-intro h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+}
+
+.webhook-config-intro p {
+  margin: 0;
+}
+
+.webhook-config-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.webhook-config-header .form-group {
+  margin-bottom: 0;
+}
+
+/* Create-key row as a grid: labels above, fields and action on one line */
+.u-row-create {
+  display: grid !important;
+  grid-template-columns: minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .u-row-create {
+    grid-template-columns: 1fr;
+  }
+
+  .u-row-create .btn {
+    width: 100%;
+  }
+}

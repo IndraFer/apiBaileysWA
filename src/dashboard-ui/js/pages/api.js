@@ -402,7 +402,7 @@
             </div>
             <div class="form-group u-mb-0">
               <label for="key-label">Label</label>
-              <input id="key-label" class="input" placeholder="chatbot-widget" autocomplete="off">
+              <input id="key-label" class="input" placeholder="app-title" autocomplete="off">
             </div>
             <button class="btn btn-primary btn-sm" id="btn-create-key">Create key</button>
           </div>

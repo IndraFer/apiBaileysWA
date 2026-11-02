@@ -132,17 +132,19 @@
         </div>
 
         <div class="card mb-2">
-          <div class="card-header"><h3>Webhook Configuration</h3></div>
-          <p class="text-sm text-muted mb-2">Configure webhook URL and event subscriptions per session.</p>
-			  <div class="mb-2 u-p-0-0-05">
-				<span class="badge ${meta?.signatureMode === "required" ? "badge-danger" : meta?.signatureMode === "optional" ? "badge-warning" : "badge-info"}">SIGNATURE: ${(meta?.signatureMode || "off").toUpperCase()}</span>
-				<span class="text-muted text-xs u-ml-05">Auth fallback: ${(meta?.authFallback || []).join(" -> ") || "session webhook secret -> AUTH_GLOBAL_TOKEN"}</span>
-			  </div>
-          ${
-            sessions.length === 0
-              ? '<div class="empty-state"><p class="text-muted">No sessions available</p></div>'
-              : `<div class="toolbar">
-                   <div class="form-group mb-0 u-minw-200">
+          <div class="webhook-config-header">
+            <div class="webhook-config-intro">
+              <h3>Webhook Configuration</h3>
+              <p class="text-sm text-muted">Configure webhook URL and event subscriptions per session.</p>
+              <div class="webhook-config-meta">
+                <span class="badge ${meta?.signatureMode === "required" ? "badge-danger" : meta?.signatureMode === "optional" ? "badge-warning" : "badge-info"}">SIGNATURE: ${(meta?.signatureMode || "off").toUpperCase()}</span>
+                <span class="text-muted text-xs">Auth fallback: ${(meta?.authFallback || []).join(" -> ") || "session webhook secret -> AUTH_GLOBAL_TOKEN"}</span>
+              </div>
+            </div>
+            ${
+              sessions.length === 0
+                ? ""
+                : `<div class="form-group u-mb-0 u-minw-200">
                      <label for="webhook-session-select">Session</label>
                      <select id="webhook-session-select" class="input">
                        ${sessions
@@ -154,13 +156,16 @@
                          })
                          .join("")}
                      </select>
-                   </div>
-                 </div>
-                 <div id="webhook-session-config"></div>`
+                   </div>`
+            }
+          </div>
+          ${
+            sessions.length === 0
+              ? '<div class="empty-state"><p class="text-muted">No sessions available</p></div>'
+              : '<div id="webhook-session-config"></div>'
           }
-        </div>
 
-					<div class="card mb-2 webhook-payload-reference">
+<div class="card mb-2 webhook-payload-reference">
 						<div class="card-header">
 							<h3>Payload Reference</h3>
 							<button type="button" class="btn btn-outline btn-sm" id="payload-ref-toggle">Show Details</button>
