@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-11-02
+
+### Fixed
+
+- orphan janitor, sanitized 5xx, security tests, lighter snapshots
+
 ## [1.20.0] - 2026-11-02
 
 ### Security
