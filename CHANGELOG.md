@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-11-02
+
+### Fixed
+
+- clear every chat in paced batches
+
 ## [1.16.0] - 2026-11-02
 
 ### Added
