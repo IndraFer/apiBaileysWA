@@ -12,6 +12,18 @@
       .replace(/'/g, "&#39;");
   }
 
+  function currentUser() {
+    try {
+      return JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function can(capability) {
+    return Boolean(window.App?.hasCapability?.(currentUser(), capability));
+  }
+
   window.SessionsPage = {
     async render() {
       const container = document.getElementById("page-content");
@@ -19,7 +31,7 @@
         container,
         `
         <div class="toolbar">
-          <button class="btn btn-primary" id="btn-new-session">+ New Session</button>
+          ${can("createSessions") ? '<button class="btn btn-primary" id="btn-new-session">+ New Session</button>' : ""}
           <div class="toolbar-spacer"></div>
           <button class="btn btn-outline btn-sm" id="btn-refresh-sessions">↻ Refresh</button>
         </div>
@@ -28,7 +40,7 @@
 
       document
         .getElementById("btn-new-session")
-        .addEventListener("click", () => this.showNewSessionModal());
+        ?.addEventListener("click", () => this.showNewSessionModal());
       document
         .getElementById("btn-refresh-sessions")
         .addEventListener("click", () => this.loadSessions());
@@ -40,7 +52,7 @@
         const sessionId = button.getAttribute("data-session-id");
         if (!sessionId) return;
         const action = button.getAttribute("data-action");
-        if (action === "qr") this.showQR(sessionId);
+        if (action === "reconnect") this.reconnectSession(sessionId);
         else if (action === "settings") this.showSettingsModal(sessionId);
         else if (action === "delete") this.deleteSession(sessionId);
       });
@@ -84,9 +96,9 @@
             }</td>
             <td class="text-muted">${escapeHtml(s.user?.id || s.phone || "—")}</td>
             <td class="flex gap-1">
-              ${!s.connected ? `<button class="btn btn-outline btn-sm" data-action="qr" data-session-id="${escapeHtml(s.sessionId || s.id)}">QR</button>` : ""}
+              ${!s.connected && can("reconnectSessions") ? `<button class="btn btn-outline btn-sm" data-action="reconnect" data-session-id="${escapeHtml(s.sessionId || s.id)}">Reconnect</button>` : ""}
 							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${escapeHtml(s.sessionId || s.id)}">Settings</button>
-              <button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>
+              ${can("deleteSessions") ? `<button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>` : ""}
             </td>
           </tr>`,
           )
@@ -227,6 +239,20 @@
           Toast.error(result.message || "Failed to create session");
         }
       });
+    },
+
+    async reconnectSession(sessionId) {
+      const result = await API.post(`/sessions/${sessionId}/reconnect`, {});
+      if (!result.success) {
+        Toast.error(result.message || "Failed to reconnect session");
+        return;
+      }
+      await window.App?.refreshAvailability?.();
+      if (result.data?.pairingCode) {
+        this.showPairingCode(result.data.pairingCode);
+        return;
+      }
+      this.showQR(sessionId);
     },
 
     async showQR(sessionId, options = {}) {
@@ -371,7 +397,10 @@
           </div>
 					<div class="form-group">
 						<label for="update-secret">Webhook Secret Header</label>
-						<input type="password" id="update-secret" placeholder="${escapeHtml(secretHint)}" value="" autocomplete="off" />
+						<div class="input-password-wrapper">
+							<input type="password" id="update-secret" placeholder="${escapeHtml(secretHint)}" value="" autocomplete="off" />
+							${window.passwordToggleHtml("update-secret")}
+						</div>
 					</div>
 
 					<div class="u-section-divider">
@@ -425,6 +454,7 @@
       `,
       );
 
+      window.initPasswordToggles?.(document.getElementById("modal-body"));
       const autoReplyToggle = document.getElementById("update-autoreply-enabled");
       const autoReplyType = document.getElementById("update-autoreply-type");
 

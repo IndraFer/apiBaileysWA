@@ -704,19 +704,21 @@ CSP_REPORT_ONLY=false
 
 ### Role & Access Model
 
-- `admin`: **all sessions** plus users/approval/roles, session lifecycle, webhooks
-  and every messaging capability.
-- `manager`: chats/outbound/groups and session lifecycle, capped by
-  `MAX_SESSIONS_PER_MANAGER`. Session access is either **All sessions** (a
-  checkbox in the user row) or only the assigned list; still no account
-  controls.
-- `assistant`: **only the sessions assigned to that account**. An empty
-  assignment grants no session at all, so unassigned numbers never appear in
-  their dashboard or API responses. Reply-focused: no session lifecycle and no
-  proactive outbound.
+- `admin`: **all sessions** plus users/approval/roles, create/delete, webhooks,
+  AI, REST API keys and every messaging capability.
+- `manager`: **assigned sessions** (or all sessions when the admin ticks
+  **All Sessions**). Can reconnect, edit session settings, manage webhooks, AI
+  routing and REST keys **for those sessions only**, plus chats/groups/outbound.
+  Cannot create or delete sessions and has no account/user controls.
+- `assistant`: **only assigned sessions**, chat/group support only. No Sessions
+  page, AI, webhooks, REST API, events or Settings page; an empty assignment
+  grants no session at all, so unassigned numbers never appear in dashboard or
+  API responses.
+- Session creation/deletion is admin-only. Managers receive a **Reconnect**
+  action for disconnected assigned sessions; reconnect preserves persisted
+  webhook/AI/routing settings and never deletes credentials.
 - Sessions record their creator (`ownerId`) for quotas and audit, but ownership
-  does not widen an assistant beyond its assignment. Admin and manager are the
-  all-session roles.
+  does not widen a manager or assistant beyond its assignment.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 

@@ -304,7 +304,10 @@
           </div>
           <div class="form-group">
             <label for="ai-api-key">API key (provider)</label>
-            <input id="ai-api-key" class="input" type="password" autocomplete="new-password" placeholder="sk-or-..." />
+            <div class="input-password-wrapper">
+              <input id="ai-api-key" class="input" type="password" autocomplete="new-password" placeholder="sk-or-..." />
+              ${window.passwordToggleHtml("ai-api-key")}
+            </div>
             <small class="text-muted" id="ai-api-key-hint"></small>
           </div>
 
@@ -429,6 +432,7 @@
         this.syncSendMessageUi();
       });
 
+      window.initPasswordToggles?.(container);
       await Promise.all([this.loadConfig(), this.loadMetrics()]);
     },
 

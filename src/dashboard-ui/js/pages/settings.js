@@ -48,9 +48,9 @@
           admin:
             "Full system control, user approval, session/webhook management, outbound messaging, and monitoring.",
           manager:
-            "Operational role for handling chats and outbound communication, without system-level control.",
+            "Handles assigned sessions: reconnect, session settings, webhooks, AI routing and REST API keys. Cannot create or delete sessions, or manage users.",
           assistant:
-            "Reply-only role for existing inbound 1-on-1 conversations. No proactive outbound, no session changes.",
+            "Chat and group support only: replies in assigned sessions. No session management, AI, webhooks, REST API or settings page.",
         }[role] || "Limited operational access.";
 
       UI.setHtml(
@@ -86,15 +86,20 @@
 				<div class="table-wrapper u-p-0-075-075">
 				  <table>
 					<tr><th>Capability</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr>
-					<tr><td>Assigned sessions ACL</td><td>✅ All sessions</td><td>⚠️ Optional dashboard-only filter</td><td>⚠️ Optional dashboard-only filter</td></tr>
-					<tr><td>View sessions</td><td>✅ Allowed</td><td>✅ Allowed</td><td>✅ Allowed</td></tr>
-					<tr><td>Create / delete sessions</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
-					<tr><td>Manage webhooks</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
-					<tr><td>View chats / events</td><td>✅ Allowed</td><td>✅ Allowed</td><td>✅ Allowed</td></tr>
-					<tr><td>Proactive outbound messaging</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
-					<tr><td>Reply to inbound chats</td><td>✅ Allowed</td><td>✅ Allowed</td><td>✅ Allowed</td></tr>
-					<tr><td>Assistant reply policy</td><td>✅ Not limited</td><td>✅ Not limited</td><td>⚠️ Limited: existing inbound 1-on-1 only</td></tr>
-					<tr><td>Groups management</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
+					<tr><td>Session scope</td><td>✅ All sessions</td><td>✅ Assigned (or all if granted)</td><td>✅ Assigned (chat only)</td></tr>
+					<tr><td>Session management page</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Hidden</td></tr>
+					<tr><td>Reconnect assigned sessions</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
+					<tr><td>Create sessions</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
+					<tr><td>Delete sessions</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
+					<tr><td>Session settings (webhook / AI)</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
+					<tr><td>Webhooks page</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
+					<tr><td>AI &amp; Routing page</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
+					<tr><td>REST API keys / audit log</td><td>✅ All sessions</td><td>✅ Assigned sessions only</td><td>❌ Restricted</td></tr>
+					<tr><td>Chats and inbound replies</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>✅ Assigned sessions</td></tr>
+					<tr><td>Proactive outbound messaging</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
+					<tr><td>Group conversations (Chat Rooms)</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>✅ Assigned sessions</td></tr>
+					<tr><td>Group management / Events</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
+					<tr><td>Settings page (account / matrix)</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Hidden</td></tr>
 					<tr><td>User approval / role changes</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
 				  </table>
 				</div>
@@ -133,8 +138,9 @@
         .getElementById("btn-show-password-modal")
         .addEventListener("click", () => this.showChangePasswordModal());
 
-      // Load simulation config & users (if admin)
-      this.loadSimulationConfig();
+      // Simulation is a global admin-only read; avoid an error card for managers.
+      if (user.role === "admin") this.loadSimulationConfig();
+      else document.getElementById("simulation-card")?.remove();
 
       if (user.role === "admin") {
         const btnUsers = document.getElementById("btn-show-users-modal");
@@ -476,7 +482,10 @@
                         </div>
                         <div class="form-group u-mb-0">
                             <label for="new-user-password">Password</label>
-                            <input id="new-user-password" type="password" class="input" autocomplete="new-password" placeholder="Temporary password">
+                            <div class="input-password-wrapper">
+                                <input id="new-user-password" type="password" class="input" autocomplete="new-password" placeholder="Temporary password">
+                                ${window.passwordToggleHtml("new-user-password")}
+                            </div>
                         </div>
                         <div class="form-group u-mb-0">
                             <label for="new-user-role">Role</label>
@@ -502,6 +511,7 @@
 
       // Allow wider modal for table
       document.getElementById("modal").style.maxWidth = "700px";
+      window.initPasswordToggles?.(document.getElementById("modal-body"));
 
       document.getElementById("btn-create-user").addEventListener("click", async () => {
         const username = document.getElementById("new-user-username").value.trim();

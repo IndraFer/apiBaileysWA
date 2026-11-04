@@ -8,14 +8,14 @@ import path from "node:path";
 import type { proto, WAPresence } from "@whiskeysockets/baileys";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { updateSessionMetadata } from "@/baileys/authState";
+import { getSavedSessionsWithMetadata, updateSessionMetadata } from "@/baileys/authState";
 import {
   buildWebhookHeaders,
   deliverWebhookOnce,
   resolveWebhookTarget,
 } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
-import type { AiAgentConfig, RoutingConfig } from "@/baileys/types";
+import type { AiAgentConfig, RoutingConfig, SessionMetadata } from "@/baileys/types";
 import config from "@/config";
 import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
@@ -31,7 +31,7 @@ import {
 } from "@/lib/secretBox";
 import { isValidSessionId } from "@/lib/sessionId";
 import { activeWebhookSecrets } from "@/lib/webhookSecrets";
-import { aiConfigPatchSchema } from "@/schemas/session";
+import { aiConfigPatchSchema, createSessionSchema } from "@/schemas/session";
 import {
   parseEndpointCredentials,
   readStoredCredentials,
@@ -44,7 +44,6 @@ import {
   clearDeadLetters,
   type DeadLetterEntry,
   getDeadLetters,
-  replayAllDeadLetters,
   replayDeadLetter,
 } from "@/services/webhookDeadLetter";
 import { addWebhookLog, clearWebhookLogs, getWebhookLogs } from "@/services/webhookLog";
@@ -61,7 +60,13 @@ type DashboardUserPayload = {
 };
 type DashboardCapability =
   | "manageSessions"
+  | "createSessions"
+  | "deleteSessions"
+  | "reconnectSessions"
   | "manageWebhooks"
+  | "manageApiKeys"
+  | "viewSettings"
+  | "viewEvents"
   | "viewSessions"
   | "viewChats"
   | "sendOutbound"
@@ -72,7 +77,13 @@ type DashboardCapability =
 const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
   admin: new Set([
     "manageSessions",
+    "createSessions",
+    "deleteSessions",
+    "reconnectSessions",
     "manageWebhooks",
+    "manageApiKeys",
+    "viewSettings",
+    "viewEvents",
     "viewSessions",
     "viewChats",
     "sendOutbound",
@@ -82,6 +93,11 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
   ]),
   manager: new Set([
     "manageSessions",
+    "reconnectSessions",
+    "manageWebhooks",
+    "manageApiKeys",
+    "viewSettings",
+    "viewEvents",
     "viewSessions",
     "viewChats",
     "sendOutbound",
@@ -205,7 +221,9 @@ dashboardApi.get("/about", (c) => {
 dashboardApi.get("/stats", (c) => {
   const isAdmin = isAdminUser(c);
   const pkg = cachedPkg;
-  const sessions = connectionManager.listSessions();
+  const sessions = connectionManager
+    .listSessions()
+    .filter((session) => hasSessionAccess(c, String(session.sessionId || "")));
   return c.json({
     success: true,
     data: {
@@ -245,7 +263,7 @@ dashboardApi.get("/sessions", (c) => {
  * Create a new session.
  */
 dashboardApi.post("/sessions/:sessionId", async (c) => {
-  const denied = requireCapability(c, "manageSessions");
+  const denied = requireCapability(c, "createSessions");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
@@ -317,11 +335,37 @@ dashboardApi.get("/sessions/:sessionId", (c) => {
 });
 
 /**
+ * POST /dashboard/api/sessions/:sessionId/reconnect
+ * Reconnect an assigned session using its saved auth state. Never deletes or
+ * recreates credentials; managers use this instead of the create endpoint.
+ */
+dashboardApi.post("/sessions/:sessionId/reconnect", async (c) => {
+  const denied = requireCapability(c, "reconnectSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  try {
+    const result = await connectionManager.reconnectSession(sessionId);
+    return c.json({
+      success: true,
+      message: result.pairingCode
+        ? "Pairing code generated"
+        : "Session reconnecting — scan the QR code if requested",
+      data: result,
+    });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
  * DELETE /dashboard/api/sessions/:sessionId
  * Delete a session.
  */
 dashboardApi.delete("/sessions/:sessionId", async (c) => {
-  const denied = requireCapability(c, "manageSessions");
+  const denied = requireCapability(c, "deleteSessions");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
@@ -329,6 +373,53 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
   try {
     await connectionManager.deleteSession(sessionId);
     return c.json({ success: true, message: "Session deleted" });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * PATCH /dashboard/api/sessions/:sessionId/settings
+ * Session settings modal (client name, webhook URL, auto-reply). Managers may
+ * change assigned sessions; blank secret keeps the stored one. Works for
+ * disconnected sessions too by updating persisted metadata.
+ */
+dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const body = parsed.data ?? {};
+
+  try {
+    const live = connectionManager.hasSession(sessionId)
+      ? connectionManager.getSession(sessionId)
+      : null;
+    const saved = live
+      ? null
+      : (await getSavedSessionsWithMetadata<SessionMetadata>()).find(
+          (entry) => entry.id === sessionId,
+        )?.metadata;
+    const current: SessionMetadata | null = live?.getOptions() ?? saved ?? null;
+    if (!current) return error(c, "Session not found", 404);
+
+    const next: SessionMetadata = {
+      ...current,
+      clientName: body.clientName ?? current.clientName,
+      webhookUrl: body.webhookUrl === undefined ? current.webhookUrl : body.webhookUrl || undefined,
+      webhookSecret: body.webhookSecret?.trim() || current.webhookSecret,
+      includeMedia: body.includeMedia ?? current.includeMedia,
+      syncFullHistory: body.syncFullHistory ?? current.syncFullHistory,
+      autoReply: body.autoReply ?? current.autoReply,
+    };
+
+    if (live) await connectionManager.updateSessionSettings(sessionId, next);
+    else await updateSessionMetadata(sessionId, next);
+    return c.json({ success: true, message: "Session settings updated" });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
@@ -436,7 +527,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/rotate", async (c) => {
  * tells whether they are stored and whether they are encrypted.
  */
 dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
-  const denied = requireCapability(c, "viewSessions");
+  const denied = requireCapability(c, "manageSessions");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
@@ -613,7 +704,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
  * this process and reset on restart.
  */
 dashboardApi.get("/ai/metrics", (c) => {
-  const denied = requireCapability(c, "viewSessions");
+  const denied = requireCapability(c, "manageSessions");
   if (denied) return denied;
   const sessionId = c.req.query("sessionId") || undefined;
   if (sessionId) {
@@ -823,7 +914,18 @@ dashboardApi.get("/webhooks/logs", (c) => {
   if (denied) return denied;
   const limit = Number(c.req.query("limit") || "100");
   const sessionId = c.req.query("sessionId") || undefined;
-  return c.json({ success: true, data: getWebhookLogs(limit, sessionId) });
+  if (sessionId && !hasSessionAccess(c, sessionId)) {
+    return c.json(
+      { success: false, message: "Forbidden: session is not assigned to your account" },
+      403,
+    );
+  }
+  const logs = getWebhookLogs(limit, sessionId);
+  if (getDashboardRole(c) === "admin") return c.json({ success: true, data: logs });
+  return c.json({
+    success: true,
+    data: logs.filter((entry) => hasSessionAccess(c, entry.sessionId)),
+  });
 });
 
 /**
@@ -876,11 +978,22 @@ dashboardApi.get("/webhooks/dead-letter", (c) => {
   if (denied) return denied;
   const limit = Number(c.req.query("limit") || "50");
   const sessionId = c.req.query("sessionId") || undefined;
+  if (sessionId && !hasSessionAccess(c, sessionId)) {
+    return c.json(
+      { success: false, message: "Forbidden: session is not assigned to your account" },
+      403,
+    );
+  }
   // Replay reads the secret internally; never expose it through the API.
-  const entries = getDeadLetters(limit, sessionId).map(({ webhookSecret, ...entry }) => ({
-    ...entry,
-    hasWebhookSecret: Boolean(webhookSecret),
-  }));
+  const entries = getDeadLetters(limit, sessionId)
+    .filter(
+      (entry) =>
+        getDashboardRole(c) === "admin" || hasSessionAccess(c, String(entry.sessionId || "")),
+    )
+    .map(({ webhookSecret, ...entry }) => ({
+      ...entry,
+      hasWebhookSecret: Boolean(webhookSecret),
+    }));
   return c.json({ success: true, data: entries });
 });
 
@@ -892,6 +1005,14 @@ dashboardApi.post("/webhooks/dead-letter/:id/retry", async (c) => {
   const denied = requireCapability(c, "manageWebhooks");
   if (denied) return denied;
   const id = c.req.param("id");
+  const entry = getDeadLetters(500).find((item) => item.id === id);
+  if (!entry) return c.json({ success: false, message: "Dead-letter entry not found" }, 404);
+  if (getDashboardRole(c) !== "admin" && !hasSessionAccess(c, entry.sessionId)) {
+    return c.json(
+      { success: false, message: "Forbidden: session is not assigned to your account" },
+      403,
+    );
+  }
   const deliver = async (entry: DeadLetterEntry) => {
     const secrets = deadLetterSecrets(entry);
     const res = await deliverWebhookOnce(
@@ -920,7 +1041,12 @@ dashboardApi.post("/webhooks/dead-letter/:id/retry", async (c) => {
 dashboardApi.post("/webhooks/dead-letter/retry-all", async (c) => {
   const denied = requireCapability(c, "manageWebhooks");
   if (denied) return denied;
-  const { replayed, succeeded } = await replayAllDeadLetters(async (entry: DeadLetterEntry) => {
+  const entries = getDeadLetters(500).filter(
+    (entry) => getDashboardRole(c) === "admin" || hasSessionAccess(c, entry.sessionId),
+  );
+  let replayed = 0;
+  let succeeded = 0;
+  for (const entry of entries) {
     const secrets = deadLetterSecrets(entry);
     const res = await deliverWebhookOnce(
       entry.webhookUrl,
@@ -929,8 +1055,9 @@ dashboardApi.post("/webhooks/dead-letter/retry-all", async (c) => {
       15000,
       secrets.secondary,
     );
-    return res.ok ? "success" : "failed";
-  });
+    replayed += 1;
+    if (res.ok) succeeded += 1;
+  }
   return c.json({
     success: true,
     data: { replayed, succeeded },
@@ -1431,12 +1558,20 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
 dashboardApi.get("/events/stream", (c) => {
   const denied = requireCapability(c, "viewChats");
   if (denied) return denied;
+  const requestedSession = c.req.query("session") || "";
+  if (requestedSession && !hasSessionAccess(c, requestedSession)) {
+    return c.json(
+      { success: false, message: "Forbidden: session is not assigned to your account" },
+      403,
+    );
+  }
   return streamSSE(c, async (stream) => {
-    const sessionFilter = c.req.query("session");
+    const sessionFilter = requestedSession;
     const eventFilter = c.req.query("event");
 
     const handler = (ev: DashboardEvent) => {
       if (sessionFilter && ev.sessionId !== sessionFilter) return;
+      if (getDashboardRole(c) !== "admin" && !hasSessionAccess(c, ev.sessionId)) return;
       if (eventFilter && !ev.event.includes(eventFilter)) return;
 
       stream.writeSSE({
@@ -1513,9 +1648,19 @@ dashboardApi.get("/config/simulation", (c) => {
  * List managed API keys. Only the short id and label are returned, never tokens.
  */
 dashboardApi.get("/api-keys", async (c) => {
-  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  const denied = requireCapability(c, "manageApiKeys");
+  if (denied) return denied;
   try {
-    return c.json({ success: true, data: await listApiKeys() });
+    const keys = await listApiKeys();
+    if (getDashboardRole(c) === "admin") return c.json({ success: true, data: keys });
+    // Managers only see keys fully scoped to sessions they can access; an
+    // all-session key must never be visible outside admin.
+    const visible = keys.filter(
+      (key) =>
+        key.sessions.length > 0 &&
+        key.sessions.every((session) => session !== "*" && hasSessionAccess(c, session)),
+    );
+    return c.json({ success: true, data: visible });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
@@ -1526,7 +1671,8 @@ dashboardApi.get("/api-keys", async (c) => {
  * Create a key. The token is returned once and never stored in plaintext.
  */
 dashboardApi.post("/api-keys", async (c) => {
-  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  const denied = requireCapability(c, "manageApiKeys");
+  if (denied) return denied;
 
   const body = await c.req.json().catch(() => ({}));
   const label = String(body.label ?? "").trim();
@@ -1544,6 +1690,12 @@ dashboardApi.post("/api-keys", async (c) => {
         hint: "Pick the connected session this key may send from.",
       },
       400,
+    );
+  }
+  if (!hasSessionAccess(c, session)) {
+    return c.json(
+      { success: false, message: "Forbidden: session is not assigned to your account" },
+      403,
     );
   }
   if (!connectionManager.listSessions().some((entry) => entry.sessionId === session)) {
@@ -1578,9 +1730,23 @@ dashboardApi.post("/api-keys", async (c) => {
  * Revoke a key by its short id.
  */
 dashboardApi.delete("/api-keys/:id", async (c) => {
-  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  const denied = requireCapability(c, "manageApiKeys");
+  if (denied) return denied;
+  const id = c.req.param("id");
   try {
-    const revoked = await revokeApiKey(c.req.param("id"));
+    const keys = await listApiKeys();
+    const key = keys.find((entry) => entry.id === id);
+    if (!key) return c.json({ success: false, message: "API key not found" }, 404);
+    if (
+      getDashboardRole(c) !== "admin" &&
+      (key.sessions.includes("*") || !key.sessions.every((session) => hasSessionAccess(c, session)))
+    ) {
+      return c.json(
+        { success: false, message: "Forbidden: key is not scoped to your sessions" },
+        403,
+      );
+    }
+    const revoked = await revokeApiKey(id);
     if (!revoked) return c.json({ success: false, message: "API key not found" }, 404);
     return c.json({ success: true, message: "API key revoked" });
   } catch (err) {
@@ -1593,21 +1759,21 @@ dashboardApi.delete("/api-keys/:id", async (c) => {
  * Recent inbound API calls (audit). Supports limit/session/status/keyId filters.
  */
 dashboardApi.get("/api-logs", (c) => {
-  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
+  const denied = requireCapability(c, "manageApiKeys");
+  if (denied) return denied;
 
   const limit = Number(c.req.query("limit") ?? 100);
   const statusRaw = c.req.query("status");
   const status = statusRaw ? Number(statusRaw) : undefined;
-
-  return c.json({
-    success: true,
-    data: listApiCalls({
-      limit: Number.isFinite(limit) ? limit : 100,
-      session: c.req.query("session") || undefined,
-      keyId: c.req.query("keyId") || undefined,
-      status: Number.isFinite(status) ? status : undefined,
-    }),
+  const calls = listApiCalls({
+    limit: Number.isFinite(limit) ? limit : 100,
+    session: c.req.query("session") || undefined,
+    keyId: c.req.query("keyId") || undefined,
+    status: Number.isFinite(status) ? status : undefined,
   });
+  if (getDashboardRole(c) === "admin") return c.json({ success: true, data: calls });
+  const visible = calls.filter((entry) => hasSessionAccess(c, String(entry.session || "")));
+  return c.json({ success: true, data: visible });
 });
 
 export default dashboardApi;

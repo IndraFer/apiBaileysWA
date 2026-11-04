@@ -111,6 +111,71 @@ class ConnectionManager {
   }
 
   /**
+   * Reconnect one saved session without creating or deleting credentials.
+   *
+   * Managers may reconnect assigned sessions, but must not go through the
+   * create endpoint (which can opt into freshAuth/delete). Metadata is restored
+   * so webhook/AI/routing settings survive the reconnect.
+   */
+  async reconnectSession(sessionId: string): Promise<{ qrCode?: string; pairingCode?: string }> {
+    assertValidSessionId(sessionId);
+    const existing = this.connections.get(sessionId);
+    if (existing?.isConnected) {
+      return { qrCode: existing.qrCode ?? undefined };
+    }
+
+    const saved = await getSavedSessionsWithMetadata<SessionMetadata>();
+    const metadata =
+      saved.find((entry) => entry.id === sessionId)?.metadata ??
+      existing?.getSessionMetadata() ??
+      null;
+    if (!metadata) {
+      throw new Error(`Session "${sessionId}" has no saved auth state`);
+    }
+
+    if (existing) {
+      await existing.destroy();
+      this.connections.delete(sessionId);
+    }
+
+    if (this.connections.size >= config.maxSessions) {
+      throw new Error(
+        `Maximum session limit (${config.maxSessions}) reached. Delete unused sessions first.`,
+      );
+    }
+
+    const connection = new BaileysConnection(sessionId, {
+      ownerId: metadata.ownerId,
+      clientName: metadata.clientName,
+      webhookUrl: metadata.webhookUrl,
+      webhookSecret: metadata.webhookSecret,
+      webhookSecretPrevious: metadata.webhookSecretPrevious,
+      webhookSecretPreviousExpiresAt: metadata.webhookSecretPreviousExpiresAt,
+      webhookEvents: metadata.webhookEvents,
+      includeMedia: metadata.includeMedia,
+      syncFullHistory: metadata.syncFullHistory,
+      autoReply: metadata.autoReply,
+      routing: metadata.routing,
+      ai: metadata.ai,
+      isReconnect: true,
+      onConnectionClose: () => {
+        this.connections.delete(sessionId);
+        logger.debug("Session closed: %s (active: %d)", sessionId, this.connections.size);
+      },
+    });
+
+    this.connections.set(sessionId, connection);
+    try {
+      const result = await connection.connect();
+      logger.info("Session reconnected: %s (active: %d)", sessionId, this.connections.size);
+      return result;
+    } catch (error) {
+      this.connections.delete(sessionId);
+      throw error;
+    }
+  }
+
+  /**
    * Get an active connection by session ID.
    */
   getSession(sessionId: string): BaileysConnection {

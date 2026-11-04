@@ -4,19 +4,31 @@
     admin: new Set([
       "viewSessions",
       "manageSessions",
+      "createSessions",
+      "deleteSessions",
+      "reconnectSessions",
       "viewChats",
       "sendOutbound",
       "replyIncoming",
       "manageGroups",
       "manageWebhooks",
+      "manageApiKeys",
+      "viewSettings",
+      "viewEvents",
       "manageEvents",
     ]),
     manager: new Set([
       "viewSessions",
+      "manageSessions",
+      "reconnectSessions",
       "viewChats",
       "sendOutbound",
       "replyIncoming",
       "manageGroups",
+      "manageWebhooks",
+      "manageApiKeys",
+      "viewSettings",
+      "viewEvents",
     ]),
     assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
   };
@@ -26,6 +38,7 @@
     sessions: {
       title: "Sessions",
       requires: "viewSessions",
+      roles: ["admin", "manager"],
       render: () => SessionsPage.render(),
       destroy: () => SessionsPage.destroy?.(),
     },
@@ -57,7 +70,7 @@
     },
     events: {
       title: "Event Monitor",
-      requires: "viewChats",
+      requires: "viewEvents",
       needsWebhook: true,
       render: () => EventsPage.render(),
       destroy: () => EventsPage.destroy?.(),
@@ -70,14 +83,14 @@
     },
     api: {
       title: "REST API",
-      requiresRole: "admin",
+      requires: "manageApiKeys",
       needsSession: true,
       render: () => ApiPage.render(),
       destroy: () => ApiPage.destroy?.(),
     },
     settings: {
       title: "Settings",
-      requiresRole: "admin",
+      requires: "viewSettings",
       render: () => SettingsPage.render(),
     },
   };
@@ -220,7 +233,8 @@
         const page = pages[pageName];
         const roleOk =
           this.hasCapability(user, page?.requires) &&
-          (!page?.requiresRole || role === page.requiresRole);
+          (!page?.requiresRole || role === page.requiresRole) &&
+          (!page?.roles || page.roles.includes(role));
         // Session-dependent menus stay hidden until they can actually be used.
         const allowed = roleOk && isPageAvailable(page);
         item.style.display = allowed ? "" : "none";
@@ -296,7 +310,8 @@
       const role = user?.role || "assistant";
       const roleOk =
         this.hasCapability(user, page.requires) &&
-        (!page.requiresRole || role === page.requiresRole);
+        (!page.requiresRole || role === page.requiresRole) &&
+        (!page.roles || page.roles.includes(role));
       if (!roleOk) {
         Toast.warning("Your role does not have access to this page");
         pageName = "overview";

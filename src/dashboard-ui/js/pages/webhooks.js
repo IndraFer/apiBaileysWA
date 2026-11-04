@@ -288,18 +288,6 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
       pageContent.addEventListener(
         "click",
         (event) => {
-          const toggle = event.target.closest("button[data-action='toggle-webhook-secret']");
-          if (toggle) {
-            const sessionId = toggle.getAttribute("data-session-id");
-            const input = document.getElementById(`wh-secret-${sessionId}`);
-            if (input) {
-              const shouldShow = input.type === "password";
-              input.type = shouldShow ? "text" : "password";
-              toggle.textContent = shouldShow ? "Hide" : "Show";
-            }
-            return;
-          }
-
           const rotate = event.target.closest("button[data-action='rotate-webhook-secret']");
           if (rotate) {
             this.rotateWebhookSecret(rotate.getAttribute("data-session-id"));
@@ -331,6 +319,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
       }
 
       UI.setHtml(container, this.renderSessionWebhook(session));
+      window.initPasswordToggles?.(container);
     },
 
     renderSessionWebhook(session) {
@@ -358,9 +347,9 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
             </div>
 						<div class="form-group">
 							<label>Webhook Secret</label>
-							<div class="webhook-secret-input-wrap">
+							<div class="input-password-wrapper">
 								<input type="password" id="wh-secret-${sid}" placeholder="${session.hasWebhookSecret ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep` : "Optional x-webhook-secret value"}" value="" autocomplete="off" />
-								<button type="button" class="btn btn-outline btn-sm webhook-secret-toggle" data-action="toggle-webhook-secret" data-session-id="${sid}">Show</button>
+								${window.passwordToggleHtml("wh-secret-" + sid)}
 							</div>
 						</div>
             <div class="form-group">
