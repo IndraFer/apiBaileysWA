@@ -2,7 +2,6 @@ import { createHash, createHmac } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { gzipSync } from "node:zlib";
-import type { Boom } from "@hapi/boom";
 import makeWASocket, {
   type AnyMessageContent,
   type BaileysEventMap,
@@ -16,6 +15,7 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   type ParticipantAction,
   type proto,
+  toNumber,
   type WAMessage,
   WAMessageStatus,
   type WAPresence,
@@ -574,7 +574,7 @@ export class BaileysConnection {
 
     if (connection === "close") {
       this._isConnected = false;
-      const error = lastDisconnect?.error as Boom;
+      const error = lastDisconnect?.error as { output?: { statusCode?: number } } | undefined;
       const statusCode = error?.output?.statusCode;
       const shouldReconnect =
         statusCode !== DisconnectReason.loggedOut &&
@@ -603,7 +603,7 @@ export class BaileysConnection {
       logger.info(
         "[%s] Connection closed permanently (statusCode: %d)",
         this.sessionId,
-        statusCode,
+        statusCode ?? 0,
       );
       await this.close();
       return;
@@ -1072,7 +1072,7 @@ export class BaileysConnection {
       .map((m) => ({
         text: extractMessageText(m) ?? "",
         fromMe: Boolean(m.key.fromMe),
-        timestamp: Number(m.messageTimestamp || 0) * 1000,
+        timestamp: toNumber(m.messageTimestamp || 0) * 1000,
       }))
       .filter((entry) => entry.text.length > 0);
 
@@ -1092,10 +1092,11 @@ export class BaileysConnection {
   private lastHumanActivityAt(conversationId: string, humanIdleMs: number): number | null {
     const cutoff = Date.now() - humanIdleMs;
     const history = this.store.loadMessages(conversationId, 20);
-    for (let index = history.length - 1; index >= 0; index -= 1) {
-      const msg = history[index];
+    // loadMessages returns newest-first; start at the newest human message so
+    // the pause window is based on the latest takeover, not the oldest.
+    for (const msg of history) {
       if (!msg?.key?.fromMe) continue;
-      const timestamp = Number(msg.messageTimestamp ?? 0) * 1000;
+      const timestamp = toNumber(msg.messageTimestamp ?? 0) * 1000;
       if (timestamp < cutoff) continue;
       const id = msg.key.id ? String(msg.key.id) : "";
       if (id && this.apiSentIds.has(id)) continue;

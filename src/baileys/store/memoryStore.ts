@@ -196,7 +196,7 @@ export class MemoryStore extends EventEmitter {
     // Evict oldest if over limit
     if (chatMessages.size > this.maxMessagesPerChat) {
       const sorted = Array.from(chatMessages.entries()).sort(
-        ([, a], [, b]) => Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0),
+        ([, a], [, b]) => toNumber(a.messageTimestamp || 0) - toNumber(b.messageTimestamp || 0),
       );
       const toDelete = sorted.slice(0, chatMessages.size - this.maxMessagesPerChat);
       for (const [id] of toDelete) {
@@ -215,7 +215,7 @@ export class MemoryStore extends EventEmitter {
     const chatMessages = this.messages.get(jid);
     if (!chatMessages) return [];
     return Array.from(chatMessages.values())
-      .sort((a, b) => Number(b.messageTimestamp || 0) - Number(a.messageTimestamp || 0))
+      .sort((a, b) => toNumber(b.messageTimestamp || 0) - toNumber(a.messageTimestamp || 0))
       .slice(0, count);
   }
 

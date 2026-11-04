@@ -1333,7 +1333,15 @@
     renderConversationMessages(jid, rawMessages) {
       const messages = (rawMessages || [])
         .slice()
-        .sort((a, b) => Number(a.messageTimestamp || 0) - Number(b.messageTimestamp || 0));
+        // Timestamps arrive as JSON-serialized Baileys Long objects
+        // ({ low, high }), so Number(obj) is NaN. Normalize before sorting,
+        // otherwise the API's newest-first order is preserved and the oldest
+        // message appears at the bottom of the conversation.
+        .sort(
+          (a, b) =>
+            (normalizeTimestampSeconds(a.messageTimestamp) ?? 0) -
+            (normalizeTimestampSeconds(b.messageTimestamp) ?? 0),
+        );
 
       const visibleMessages = messages.filter((msg) => {
         const payload = extractMessagePayload(msg);
