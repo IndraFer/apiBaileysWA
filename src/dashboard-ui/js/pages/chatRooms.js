@@ -122,17 +122,24 @@
   }
 
   function normalizeContactName(chat) {
-    return (
-      chat.name ||
-      chat.subject ||
-      chat.notify ||
-      chat.pushName ||
-      (chat.id || "")
-        .replace(/@s\.whatsapp\.net$/, "")
-        .replace(/@lid$/, "")
-        .replace(/@g\.us$/, "") ||
-      "Unknown"
-    );
+    const savedName = chat.name || chat.subject || chat.contactName;
+    if (savedName) return String(savedName);
+    const pushName = chat.notify || chat.pushName;
+    if (pushName) return String(pushName);
+
+    const id = String(chat.id || "");
+    if (id.endsWith("@s.whatsapp.net")) return id.slice(0, -"@s.whatsapp.net".length);
+    if (id.endsWith("@lid")) return id;
+    if (id.endsWith("@g.us")) return id.slice(0, -"@g.us".length);
+    return id || "Unknown";
+  }
+
+  function displayNameForJid(jid) {
+    const target = normalizeJid(jid);
+    const chat = chatCache.find((entry) => normalizeJid(entry.id) === target);
+    if (chat) return normalizeContactName(chat);
+    if (String(jid).endsWith("@lid")) return String(jid);
+    return jidPhoneOnly(jid) || String(jid);
   }
 
   function renderTextWithMarkdown(raw) {
@@ -1432,7 +1439,7 @@
       const main = document.getElementById("chatrooms-main");
       if (!main) return;
 
-      const jidLabel = jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "");
+      const jidLabel = displayNameForJid(jid);
       const isGroupMode = selectedMode === "groups";
       UI.setHtml(
         main,

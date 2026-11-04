@@ -315,19 +315,35 @@ export class MemoryStore extends EventEmitter {
   }
 
   getChatList(isGroup = false): Record<string, unknown>[] {
+    const enrich = (chat: Record<string, unknown>): Record<string, unknown> => {
+      const id = jidNormalizedUser(String(chat.id ?? ""));
+      const alternate = this.pnToLid.get(id);
+      const contact =
+        this.contacts.get(id) || (alternate ? this.contacts.get(alternate) : undefined);
+      const contactName =
+        contact && typeof contact === "object"
+          ? String(contact.name || contact.notify || contact.verifiedName || "").trim()
+          : "";
+      return contactName ? { ...chat, contactName } : chat;
+    };
+
     if (isGroup) {
-      return [...this.chats.values()].filter((chat) => String(chat.id ?? "").endsWith("@g.us"));
+      return [...this.chats.values()]
+        .filter((chat) => String(chat.id ?? "").endsWith("@g.us"))
+        .map(enrich);
     }
     // Individual chats use either the classic JID (@s.whatsapp.net) or the
     // newer LID addressing (@lid). Both are 1:1 conversations; groups,
     // broadcasts, status and newsletters are excluded.
-    return [...this.chats.values()].filter((chat) => {
-      const id = String(chat.id ?? "");
-      if (id.endsWith("@g.us") || id.endsWith("@broadcast") || id.endsWith("@newsletter")) {
-        return false;
-      }
-      return id.endsWith("@s.whatsapp.net") || id.endsWith("@lid");
-    });
+    return [...this.chats.values()]
+      .filter((chat) => {
+        const id = String(chat.id ?? "");
+        if (id.endsWith("@g.us") || id.endsWith("@broadcast") || id.endsWith("@newsletter")) {
+          return false;
+        }
+        return id.endsWith("@s.whatsapp.net") || id.endsWith("@lid");
+      })
+      .map(enrich);
   }
 
   /** Clear the unread badge for a chat (also used when the UI opens it). */
