@@ -116,7 +116,7 @@ export const ragEndpointSchema = z
 export const aiSendMessageSchema = z
   .object({
     enabled: z.boolean().optional(),
-    scope: z.enum(["current_chat", "allowlist", "any"]).optional(),
+    scope: z.enum(["allowlist", "any"]).optional(),
     allowlist: z.array(z.string().trim().min(3).max(64)).max(100).optional(),
     maxPerHour: z.number().int().min(1).max(200).optional(),
   })

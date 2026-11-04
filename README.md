@@ -99,23 +99,23 @@ its own window, model, instruction and knowledge endpoints.
 **AI & Routing → Send message tool** adds `send_whatsapp_message` to the tool
 list on every request when enabled. It is off by default and text-only.
 
-- **Scope** — `current_chat` (no `receiver` field at all), `allowlist` (current
-  chat plus listed numbers/JIDs), or `any`.
+- **Scope** — `allowlist` (default: the current chat plus listed
+  numbers/JIDs) or `any`. The originating chat is always allowed; `receiver`
+  is optional and defaults to it.
 - **Rate limit** — `maxPerHour` sliding window per session, enforced before the
   send; the model cannot bypass it.
 - **Groups** — still governed by `ALLOW_GROUP_SEND` / `ALLOWED_GROUP_JIDS`.
 - **Execution** — the tool calls the same service as `POST /api/v1/messages`;
   it does not make an internal HTTP request or carry an API key.
 
-#### Authoritative date/time context
+#### Runtime date/time context
 
 Every OpenAI-compatible request carries a server-generated `<get_info>` block
 with the full weekday/date, local time, timezone and UTC offset, ISO timestamp
-and Unix milliseconds. It is rebuilt for each request and placed **after** the
-operator system instruction, together with an instruction to ignore conflicting
-dates in instructions, history, user text or tool output. No tool call is
-needed. This is prompt-level authority, not a security boundary: it ensures the
-model has a clock, not that a model can never disobey.
+and Unix milliseconds. It is rebuilt for each request and placed after the
+operator system instruction. The block contains facts only: no priority
+attribute, no override demand, and no claim over operator instructions. No tool
+call is needed; it simply keeps the model aware of the current clock.
 
 **Routing rule** — the AI only replies when all are true:
 

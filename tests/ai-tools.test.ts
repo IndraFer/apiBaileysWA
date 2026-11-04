@@ -25,7 +25,7 @@ describe("runtime date/time context", () => {
     expect(block).toContain("Asia/Jakarta");
     expect(block).toContain("UTC+07:00");
     expect(block).toContain("2026-11-04T02:02:25.356Z");
-    expect(block).toContain("only authoritative source");
+    expect(block).not.toContain("priority=");
   });
 
   test("invalid timezone degrades to UTC instead of throwing", () => {
@@ -35,13 +35,6 @@ describe("runtime date/time context", () => {
 });
 
 describe("built-in send tool schema", () => {
-  test("current_chat omits the receiver field entirely", () => {
-    const tool = buildSendMessageToolSchema("current_chat");
-    const properties = tool.function.parameters.properties as Record<string, unknown>;
-    expect(properties.receiver).toBeUndefined();
-    expect(properties.text).toBeDefined();
-  });
-
   test("allowlist/any expose receiver and guidance", () => {
     const tool = buildSendMessageToolSchema("allowlist");
     const properties = tool.function.parameters.properties as Record<string, unknown>;
@@ -136,7 +129,7 @@ describe("generateAgentReply runtime integration", () => {
       credentials: {},
       sendMessage: {
         enabled: true,
-        scope: "current_chat",
+        scope: "allowlist",
         allowlist: [],
         maxPerHour: 5,
       },
@@ -165,7 +158,7 @@ describe("generateAgentReply runtime integration", () => {
     expect(system.role).toBe("system");
     expect(system.content).toContain("<get_info");
     expect(system.content).toContain("Wednesday, 4 November 2026");
-    // The authoritative block is appended after the operator instruction.
+    // The runtime fact block is appended after the operator instruction.
     expect(system.content.indexOf("<get_info")).toBeGreaterThan(
       system.content.indexOf("You are a helpful assistant."),
     );

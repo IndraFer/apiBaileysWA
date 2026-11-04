@@ -903,8 +903,8 @@ export class BaileysConnection {
 
   /**
    * Execute the built-in AI send tool. Scope, allowlist and the hourly bucket
-   * are enforced here, not by the model. Text only; the current chat is always
-   * allowed in current_chat/allowlist mode.
+   * are enforced here, not by the model. Text only; the originating chat is
+   * always allowed and can be used as the default target.
    */
   private async runAiSendTool(
     input: { receiver?: string; text: string },
@@ -919,10 +919,7 @@ export class BaileysConnection {
     }
 
     const currentChat = conversationId.trim();
-    let target = currentChat;
-    if (config.scope !== "current_chat") {
-      target = input.receiver?.trim() || currentChat;
-    }
+    const target = input.receiver?.trim() || currentChat;
     if (!target) {
       return { ok: false, content: "Tool error: receiver is required" };
     }

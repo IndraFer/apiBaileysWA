@@ -84,8 +84,8 @@ export interface RagEndpointConfig {
 export interface AiSendMessageConfig {
   /** Default false: the tool is not sent to the model unless enabled. */
   enabled?: boolean;
-  /** current_chat = only the conversation that triggered the turn. */
-  scope?: "current_chat" | "allowlist" | "any";
+  /** allowlist = current chat plus listed recipients; any = any number/JID. */
+  scope?: "allowlist" | "any";
   /** Phone numbers or JIDs allowed when scope is "allowlist". */
   allowlist?: string[];
   /** Hard cap per session, sliding one-hour window. */

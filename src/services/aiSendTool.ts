@@ -10,7 +10,7 @@ import type { OpenAiToolSchema } from "@/services/ragTools";
 
 export const SEND_MESSAGE_TOOL_NAME = "send_whatsapp_message";
 
-export type AiSendScope = "current_chat" | "allowlist" | "any";
+export type AiSendScope = "allowlist" | "any";
 
 export interface ResolvedSendMessageConfig {
   enabled: boolean;
@@ -27,26 +27,20 @@ export function buildSendMessageToolSchema(scope: AiSendScope): OpenAiToolSchema
       description: "Message body. Plain text only.",
     },
   };
-  // Current-chat mode intentionally has no receiver field: the model cannot
-  // choose a target when the operator restricted it.
-  if (scope !== "current_chat") {
-    properties.receiver = {
-      type: "string",
-      description:
-        scope === "allowlist"
-          ? "Phone number or JID from the allowed list; omit to use the current chat."
-          : "Phone number or JID; omit to use the current chat.",
-    };
-  }
+  properties.receiver = {
+    type: "string",
+    description:
+      scope === "allowlist"
+        ? "Phone number or JID from the allowed list; omit to use the current chat."
+        : "Phone number or JID; omit to use the current chat.",
+  };
 
   return {
     type: "function",
     function: {
       name: SEND_MESSAGE_TOOL_NAME,
       description:
-        scope === "current_chat"
-          ? "Send a WhatsApp text message to the current conversation. Use only when the customer explicitly asks you to send something."
-          : "Send a WhatsApp text message from this connected session. Use only when the customer explicitly asks you to send something.",
+        "Send a WhatsApp text message from this connected session. Use only when the customer explicitly asks you to send something.",
       parameters: {
         type: "object",
         required: ["text"],
@@ -59,11 +53,9 @@ export function buildSendMessageToolSchema(scope: AiSendScope): OpenAiToolSchema
 
 export function buildSendMessageGuidance(config: ResolvedSendMessageConfig): string {
   const scope =
-    config.scope === "current_chat"
-      ? "You may only send to the current conversation."
-      : config.scope === "allowlist"
-        ? "You may send to the current conversation or an allowlisted recipient."
-        : "You may send to any recipient the customer names.";
+    config.scope === "allowlist"
+      ? "You may send to the current conversation or an allowlisted recipient."
+      : "You may send to any recipient the customer names.";
   return [
     `Tool ${SEND_MESSAGE_TOOL_NAME} sends a WhatsApp text message from this session.`,
     "Call it only when the customer explicitly asks you to send a message; never invent a recipient.",

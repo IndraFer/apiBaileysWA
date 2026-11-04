@@ -78,7 +78,7 @@ export interface AgentReplyRequest {
   texts: string[];
   history: AgentHistoryMessage[];
   ai: ResolvedAiConfig;
-  /** Session timezone for the authoritative date/time block. */
+  /** Session timezone for the runtime date/time block. */
   timezone?: string;
   /** Injectable clock for tests. */
   now?: Date;
@@ -160,10 +160,7 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
     credentials: credentials.endpoints ?? {},
     sendMessage: {
       enabled: stored.sendMessage?.enabled ?? false,
-      scope:
-        stored.sendMessage?.scope === "allowlist" || stored.sendMessage?.scope === "any"
-          ? stored.sendMessage.scope
-          : "current_chat",
+      scope: stored.sendMessage?.scope === "any" ? "any" : "allowlist",
       allowlist: Array.isArray(stored.sendMessage?.allowlist)
         ? stored.sendMessage.allowlist
             .filter((entry): entry is string => typeof entry === "string")

@@ -336,7 +336,6 @@
               <div class="form-group">
                 <label for="ai-send-scope">Recipient scope</label>
                 <select id="ai-send-scope" class="input">
-                  <option value="current_chat">Current chat only</option>
                   <option value="allowlist">Allowlist (plus current chat)</option>
                   <option value="any">Any recipient</option>
                 </select>
@@ -353,7 +352,8 @@
               <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
             </div>
             <small class="text-muted">
-              The current conversation is always allowed. Group sends still obey
+              The current conversation is always allowed. Add recipients above to
+              let the model contact other chats. Group sends still obey
               <code>ALLOW_GROUP_SEND</code>. Rate limit is enforced server-side.
             </small>
           </div>
@@ -474,7 +474,7 @@
       const sendMessage = ai.sendMessage || {};
       const sendEnabled = document.getElementById("ai-send-enabled");
       if (sendEnabled) sendEnabled.checked = Boolean(sendMessage.enabled);
-      set("ai-send-scope", sendMessage.scope || "current_chat");
+      set("ai-send-scope", sendMessage.scope || "allowlist");
       set("ai-send-allowlist", (sendMessage.allowlist || []).join("\n"));
       set("ai-send-max", sendMessage.maxPerHour ?? 10);
       this.syncSendMessageUi();
@@ -506,7 +506,7 @@
     /** Keep the send-tool fields consistent with the toggle/scope. */
     syncSendMessageUi() {
       const enabled = Boolean(document.getElementById("ai-send-enabled")?.checked);
-      const scope = document.getElementById("ai-send-scope")?.value || "current_chat";
+      const scope = document.getElementById("ai-send-scope")?.value || "allowlist";
       document.getElementById("ai-send-settings")?.classList.toggle("hidden", !enabled);
       document
         .getElementById("ai-send-allowlist-wrap")
@@ -635,7 +635,7 @@
           ragEndpoints: endpoints,
           sendMessage: {
             enabled: Boolean(document.getElementById("ai-send-enabled")?.checked),
-            scope: value("ai-send-scope") || "current_chat",
+            scope: value("ai-send-scope") || "allowlist",
             allowlist: value("ai-send-allowlist")
               .split(/[\n,]+/)
               .map((entry) => entry.trim())

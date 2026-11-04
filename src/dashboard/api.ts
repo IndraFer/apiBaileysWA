@@ -471,7 +471,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           credentialsEncrypted: isEncrypted(ai.credentials),
           sendMessage: {
             enabled: ai.sendMessage?.enabled ?? false,
-            scope: ai.sendMessage?.scope ?? "current_chat",
+            scope: ai.sendMessage?.scope === "any" ? "any" : "allowlist",
             allowlist: ai.sendMessage?.allowlist ?? [],
             maxPerHour: ai.sendMessage?.maxPerHour ?? 10,
           },
