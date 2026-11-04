@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-04
+
+### Added
+
+- merge group inventory into Chat Rooms and streamline actions
+
 ## [1.29.0] - 2026-11-04
 
 ### Added
