@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { error } from "@/lib/response";
+import { authAllowsSession } from "@/middleware/auth";
 import { SESSION_ID_REGEX } from "@/schemas/session";
 
 /**
@@ -21,6 +22,13 @@ export async function sessionValidator(c: Context, next: Next) {
       "Invalid session ID format (alphanumeric, hyphens, underscores, max 64 chars)",
       400,
     );
+  }
+
+  if (!authAllowsSession(c, sessionId)) {
+    return error(c, `API key is not scoped to session "${sessionId}"`, 403, undefined, {
+      hint: "Use a key scoped to this session, or ask an administrator for access.",
+      retryable: false,
+    });
   }
 
   if (!connectionManager.hasSession(sessionId)) {

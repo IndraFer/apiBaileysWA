@@ -710,14 +710,15 @@ dashboardApi.get("/ai/metrics", (c) => {
   if (sessionId) {
     const sessionDenied = requireSessionAccess(c, sessionId);
     if (sessionDenied) return sessionDenied;
+  } else if (getDashboardRole(c) !== "admin") {
+    return c.json({ success: false, message: "sessionId is required for non-admin users" }, 403);
   }
   return c.json({ success: true, data: getAiMetrics(sessionId) });
 });
 
 /** POST /dashboard/api/ai/metrics/reset — clear all AI routing counters. */
 dashboardApi.post("/ai/metrics/reset", (c) => {
-  const denied = requireCapability(c, "manageSessions");
-  if (denied) return denied;
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: admin only" }, 403);
   resetAiMetrics();
   return c.json({ success: true, message: "AI metrics reset" });
 });
@@ -950,8 +951,7 @@ dashboardApi.get("/webhooks/meta", (c) => {
  * Clear webhook delivery logs.
  */
 dashboardApi.post("/webhooks/logs/clear", (c) => {
-  const denied = requireCapability(c, "manageWebhooks");
-  if (denied) return denied;
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: admin only" }, 403);
   clearWebhookLogs();
   return c.json({ success: true, message: "Webhook logs cleared" });
 });
@@ -1070,8 +1070,7 @@ dashboardApi.post("/webhooks/dead-letter/retry-all", async (c) => {
  * Clear the dead-letter buffer.
  */
 dashboardApi.post("/webhooks/dead-letter/clear", (c) => {
-  const denied = requireCapability(c, "manageWebhooks");
-  if (denied) return denied;
+  if (!isAdminUser(c)) return c.json({ success: false, message: "Forbidden: admin only" }, 403);
   clearDeadLetters();
   return c.json({ success: true, message: "Dead-letter buffer cleared" });
 });

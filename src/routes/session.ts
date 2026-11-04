@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import connectionManager from "@/baileys/connectionManager";
 import { error, success } from "@/lib/response";
-import { authMiddleware } from "@/middleware/auth";
+import { authAllowsSession, authMiddleware, isAdminApiAuth } from "@/middleware/auth";
 import { sessionRateLimit } from "@/middleware/rateLimit";
 import { createSessionSchema, SESSION_ID_REGEX } from "@/schemas/session";
 
@@ -14,6 +14,9 @@ sessionRoutes.use("*", authMiddleware);
  * Create a new session (QR code or pairing code).
  */
 sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
+  if (!isAdminApiAuth(c)) {
+    return error(c, "Forbidden: only an admin key may create sessions", 403);
+  }
   const sessionId = c.req.param("sessionId") ?? "";
 
   // Validate session ID format
@@ -64,7 +67,9 @@ sessionRoutes.post("/:sessionId", sessionRateLimit, async (c) => {
  * List all active sessions.
  */
 sessionRoutes.get("/", (c) => {
-  const sessions = connectionManager.listSessions();
+  const sessions = connectionManager
+    .listSessions()
+    .filter((session) => authAllowsSession(c, String(session.sessionId || "")));
   return success(c, sessions);
 });
 
@@ -74,6 +79,9 @@ sessionRoutes.get("/", (c) => {
  */
 sessionRoutes.get("/:sessionId", (c) => {
   const sessionId = c.req.param("sessionId") ?? "";
+  if (!authAllowsSession(c, sessionId)) {
+    return error(c, `API key is not scoped to session "${sessionId}"`, 403);
+  }
   const status = connectionManager.getSessionStatus(sessionId);
   return success(c, status);
 });
@@ -84,6 +92,9 @@ sessionRoutes.get("/:sessionId", (c) => {
  */
 sessionRoutes.get("/:sessionId/qr", (c) => {
   const sessionId = c.req.param("sessionId") ?? "";
+  if (!authAllowsSession(c, sessionId)) {
+    return error(c, `API key is not scoped to session "${sessionId}"`, 403);
+  }
   const status = connectionManager.getSessionStatus(sessionId);
 
   if (!status.exists) {
@@ -107,6 +118,9 @@ sessionRoutes.get("/:sessionId/qr", (c) => {
  */
 sessionRoutes.patch("/:sessionId/settings", async (c) => {
   const sessionId = c.req.param("sessionId") ?? "";
+  if (!authAllowsSession(c, sessionId)) {
+    return error(c, `API key is not scoped to session "${sessionId}"`, 403);
+  }
   const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const body = parsed.data;
@@ -133,6 +147,9 @@ sessionRoutes.patch("/:sessionId/settings", async (c) => {
  * Logout and delete a session.
  */
 sessionRoutes.delete("/:sessionId", async (c) => {
+  if (!isAdminApiAuth(c)) {
+    return error(c, "Forbidden: only an admin key may delete sessions", 403);
+  }
   const sessionId = c.req.param("sessionId") ?? "";
 
   try {

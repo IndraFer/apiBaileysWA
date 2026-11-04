@@ -26,8 +26,17 @@ export interface AiDecision {
 interface SessionCounters {
   ai: number;
   human: number;
+  paused: number;
   static: number;
   failures: number;
+  blocked: number;
+  muted: number;
+  toolCalls: number;
+  tokensIn: number;
+  tokensOut: number;
+  latencySamples: number;
+  latencyTotalMs: number;
+  latencyMaxMs: number;
 }
 
 export interface AiMetricsSnapshot {
@@ -56,6 +65,7 @@ let startedAt = Date.now();
 let dayKey = "";
 let hourly = createHourlyBuckets();
 const bySession: Record<string, SessionCounters> = {};
+const hourlyBySession: Record<string, Array<{ hour: number; ai: number; human: number }>> = {};
 const recent: AiDecision[] = [];
 
 const counters = {
@@ -93,8 +103,30 @@ function currentHour(): number {
 function sessionCounters(sessionId: string): SessionCounters {
   const existing = bySession[sessionId];
   if (existing) return existing;
-  const created: SessionCounters = { ai: 0, human: 0, static: 0, failures: 0 };
+  const created: SessionCounters = {
+    ai: 0,
+    human: 0,
+    paused: 0,
+    static: 0,
+    failures: 0,
+    blocked: 0,
+    muted: 0,
+    toolCalls: 0,
+    tokensIn: 0,
+    tokensOut: 0,
+    latencySamples: 0,
+    latencyTotalMs: 0,
+    latencyMaxMs: 0,
+  };
   bySession[sessionId] = created;
+  return created;
+}
+
+function sessionHourly(sessionId: string): Array<{ hour: number; ai: number; human: number }> {
+  const existing = hourlyBySession[sessionId];
+  if (existing) return existing;
+  const created = createHourlyBuckets();
+  hourlyBySession[sessionId] = created;
   return created;
 }
 
@@ -106,6 +138,7 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
   if (recent.length > MAX_RECENT) recent.splice(0, recent.length - MAX_RECENT);
 
   const perSession = sessionCounters(decision.sessionId);
+  const perHourly = sessionHourly(decision.sessionId);
   const hour = currentHour();
 
   switch (decision.route) {
@@ -113,7 +146,11 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
       counters.aiReplies += 1;
       perSession.ai += 1;
       hourly[hour]!.ai += 1;
-      if (decision.tools && decision.tools.length > 0) counters.toolCalls += decision.tools.length;
+      perHourly[hour]!.ai += 1;
+      if (decision.tools && decision.tools.length > 0) {
+        counters.toolCalls += decision.tools.length;
+        perSession.toolCalls += decision.tools.length;
+      }
       break;
     case "static":
       counters.staticReplies += 1;
@@ -123,11 +160,14 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
       counters.humanSkips += 1;
       perSession.human += 1;
       hourly[hour]!.human += 1;
+      perHourly[hour]!.human += 1;
       break;
     case "paused":
       counters.pausedSkips += 1;
       perSession.human += 1;
+      perSession.paused += 1;
       hourly[hour]!.human += 1;
+      perHourly[hour]!.human += 1;
       break;
     case "failed":
       counters.failures += 1;
@@ -135,9 +175,11 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
       break;
     case "blocked":
       counters.blocked += 1;
+      perSession.blocked += 1;
       break;
     case "muted":
       counters.muted += 1;
+      perSession.muted += 1;
       break;
   }
 }
@@ -146,31 +188,62 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
 export function recordUsage(
   usage: { promptTokens?: number; completionTokens?: number } | undefined,
   latencyMs: number,
+  sessionId?: string,
 ): void {
-  counters.tokensIn += usage?.promptTokens ?? 0;
-  counters.tokensOut += usage?.completionTokens ?? 0;
+  const prompt = usage?.promptTokens ?? 0;
+  const completion = usage?.completionTokens ?? 0;
+  const elapsed = Math.max(0, latencyMs);
+  counters.tokensIn += prompt;
+  counters.tokensOut += completion;
   latency.samples += 1;
-  latency.totalMs += Math.max(0, latencyMs);
-  latency.maxMs = Math.max(latency.maxMs, Math.max(0, latencyMs));
+  latency.totalMs += elapsed;
+  latency.maxMs = Math.max(latency.maxMs, elapsed);
+
+  if (sessionId) {
+    const perSession = sessionCounters(sessionId);
+    perSession.tokensIn += prompt;
+    perSession.tokensOut += completion;
+    perSession.latencySamples += 1;
+    perSession.latencyTotalMs += elapsed;
+    perSession.latencyMaxMs = Math.max(perSession.latencyMaxMs, elapsed);
+  }
 }
 
 /** Snapshot for the dashboard; optionally filtered to one session. */
 export function getAiMetrics(sessionId?: string): AiMetricsSnapshot {
   ensureDay();
   const scoped = sessionId ? recent.filter((entry) => entry.sessionId === sessionId) : recent;
+  const per = sessionId ? sessionCounters(sessionId) : null;
   return {
     since: startedAt,
-    counters: { ...counters },
-    latency: {
-      samples: latency.samples,
-      avgMs: latency.samples > 0 ? Math.round(latency.totalMs / latency.samples) : 0,
-      maxMs: Math.round(latency.maxMs),
-    },
-    hourly: hourly.map((bucket) => ({ ...bucket })),
-    bySession: sessionId
+    counters: per
       ? {
-          [sessionId]: { ...(bySession[sessionId] ?? { ai: 0, human: 0, static: 0, failures: 0 }) },
+          aiReplies: per.ai,
+          staticReplies: per.static,
+          humanSkips: per.human,
+          pausedSkips: per.paused,
+          failures: per.failures,
+          blocked: per.blocked,
+          muted: per.muted,
+          toolCalls: per.toolCalls,
+          tokensIn: per.tokensIn,
+          tokensOut: per.tokensOut,
         }
+      : { ...counters },
+    latency: per
+      ? {
+          samples: per.latencySamples,
+          avgMs: per.latencySamples > 0 ? Math.round(per.latencyTotalMs / per.latencySamples) : 0,
+          maxMs: Math.round(per.latencyMaxMs),
+        }
+      : {
+          samples: latency.samples,
+          avgMs: latency.samples > 0 ? Math.round(latency.totalMs / latency.samples) : 0,
+          maxMs: Math.round(latency.maxMs),
+        },
+    hourly: (sessionId ? sessionHourly(sessionId) : hourly).map((bucket) => ({ ...bucket })),
+    bySession: sessionId
+      ? { [sessionId]: { ...(per ?? sessionCounters(sessionId)) } }
       : Object.fromEntries(Object.entries(bySession).map(([key, value]) => [key, { ...value }])),
     recent: scoped.slice(-50).reverse(),
   };
@@ -182,6 +255,7 @@ export function resetAiMetrics(): void {
   hourly = createHourlyBuckets();
   recent.length = 0;
   for (const key of Object.keys(bySession)) delete bySession[key];
+  for (const key of Object.keys(hourlyBySession)) delete hourlyBySession[key];
   counters.aiReplies = 0;
   counters.staticReplies = 0;
   counters.humanSkips = 0;

@@ -1044,7 +1044,7 @@ export class BaileysConnection {
       });
       return { ok: false, error: result.error };
     }
-    recordUsage(result.usage, latencyMs);
+    recordUsage(result.usage, latencyMs, this.sessionId);
     recordDecision({
       sessionId: this.sessionId,
       conversationId: input.conversationId,

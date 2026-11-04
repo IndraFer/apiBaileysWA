@@ -4,7 +4,7 @@ import config from "@/config";
 import logger from "@/lib/logger";
 import { getRedis, isRedisAvailable } from "@/lib/redis";
 import { error } from "@/lib/response";
-import { findApiKeyByToken } from "@/services/apiKeys";
+import { findApiKeyByToken, keyAllowsSession } from "@/services/apiKeys";
 
 const REDIS_API_KEY_PREFIX = "@baileys-wa-api:api-keys";
 
@@ -124,4 +124,25 @@ export async function adminGuard(c: Context, next: Next) {
   }
 
   return next();
+}
+
+/** True when the request is authenticated as an admin key or the legacy global token. */
+export function isAdminApiAuth(c: Context): boolean {
+  if (config.env === "development") return true;
+  const auth = c.get("auth") as AuthData | undefined;
+  if (!auth) return Boolean(config.auth.globalToken);
+  return auth.role === "admin";
+}
+
+/**
+ * Enforce API-key session scope. Admin keys and the legacy global token may
+ * access every session; user keys only their scoped list. Development bypasses
+ * auth entirely, matching authMiddleware.
+ */
+export function authAllowsSession(c: Context, sessionId: string): boolean {
+  if (config.env === "development") return true;
+  const auth = c.get("auth") as AuthData | undefined;
+  if (!auth) return Boolean(config.auth.globalToken);
+  if (auth.role === "admin") return true;
+  return keyAllowsSession(auth.sessions, sessionId);
 }
