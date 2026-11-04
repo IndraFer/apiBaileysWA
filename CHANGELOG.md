@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-11-04
+
+### Fixed
+
+- enforce API-key session scope and admin-only global actions
+
 ## [1.25.0] - 2026-11-04
 
 ### Added
