@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-11-04
+
+### Fixed
+
+- persist vision config and polish AI card labels/order
+
 ## [1.27.1] - 2026-11-04
 
 ### Changed
