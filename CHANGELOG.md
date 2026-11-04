@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.4] - 2026-11-04
+
+### Fixed
+
+- retry unresolved LID reconciliation and dedupe runs
+
 ## [1.31.3] - 2026-11-04
 
 ### Fixed
