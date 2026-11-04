@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.3] - 2026-11-04
+
+### Fixed
+
+- reconcile legacy LID rooms with Baileys mapping
+
 ## [1.31.2] - 2026-11-04
 
 ### Fixed
