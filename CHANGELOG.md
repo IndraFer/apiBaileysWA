@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-11-04
+
+### Fixed
+
+- make uptime available to every dashboard role
+
 ## [1.26.0] - 2026-11-04
 
 ### Added
