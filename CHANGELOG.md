@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-11-04
+
+### Added
+
+- optional OTP/verification auto-reply filter
+
 ## [1.27.4] - 2026-11-04
 
 ### Added
