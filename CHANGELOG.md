@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.24.2] - 2026-11-04
+
+### Changed
+
+- describe subpath as an example, not a fixed mount
+- document subpath hosting limitation
+- Revert "docs(deploy): document that subpath hosting is unsupported"
+- Revert "docs(deploy): make bare-IP TLS options explicit"
+- make bare-IP TLS options explicit
+- document that subpath hosting is unsupported
+
+### Fixed
+
+- sort messages by normalized Baileys timestamps
+
 ## [1.24.1] - 2026-11-04
 
 ### Fixed
