@@ -488,43 +488,6 @@ Cloudflare, an ALB). Never publish port 3000 to the internet.
 Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose network only)
 ```
 
-**Bare-IP TLS is not automatic.** Caddy's public automatic HTTPS applies to
-hostnames; a bare IP gets no publicly trusted certificate. Choose one:
-
-```caddy
-# A) HTTPS with Caddy's local CA. Every browser must trust root.crt first.
-https://203.0.113.10 {
-    tls internal
-    reverse_proxy 127.0.0.1:3000
-}
-
-https://203.0.113.10:8443 {
-    tls internal
-    reverse_proxy 127.0.0.1:3001
-}
-```
-
-Run `caddy trust` on the server (or import
-`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt` on each
-client). Browsers show a warning until that CA is trusted; this is a local CA,
-not a public certificate.
-
-```caddy
-# B) Plain HTTP on a trusted network/VPN only. No TLS confidentiality.
-http://203.0.113.10 {
-    reverse_proxy 127.0.0.1:3000
-}
-
-http://203.0.113.10:8081 {
-    reverse_proxy 127.0.0.1:3001
-}
-```
-
-Option B exposes dashboard sessions, API keys and Uptime Kuma credentials in
-clear text. Do not use it on the public internet. A real hostname (or a
-`sslip.io`/`nip.io` name that can obtain a certificate) avoids both the CA
-import and the plaintext tradeoff.
-
 **Required settings behind a proxy**
 
 | Variable | Value | Why |
