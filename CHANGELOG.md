@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-04
+
+### Added
+
+- scope manager access and add password visibility toggles
+
 ## [1.24.3] - 2026-11-04
 
 ### Fixed
