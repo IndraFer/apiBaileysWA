@@ -61,7 +61,7 @@
         return `<span class="${className}" tabindex="0" data-tip="${safeTip}" title="${safeTip}">${label}</span>`;
       };
 
-      const moduleRows = [
+      const capabilityRows = [
         [
           "Sessions",
           perm("allow"),
@@ -135,9 +135,9 @@
 				</summary>
 				<div class="table-wrapper permission-matrix u-p-0-075-075">
 				  <table>
-					<thead><tr><th>Module</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr></thead>
+					<thead><tr><th>Capability</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr></thead>
 					<tbody>
-					${moduleRows
+					${capabilityRows
             .map(
               ([module, admin, manager, assistant]) =>
                 `<tr><td>${module}</td><td>${admin}</td><td>${manager}</td><td>${assistant}</td></tr>`,
