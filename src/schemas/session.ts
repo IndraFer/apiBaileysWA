@@ -134,6 +134,8 @@ export const otpFilterSchema = z
     enabled: z.boolean().optional(),
     ignoredSenders: z.array(z.string().trim().min(3).max(64)).max(200).optional(),
     keywordFilter: z.boolean().optional(),
+    smart: z.boolean().optional(),
+    sensitivity: z.enum(["conservative", "balanced", "aggressive"]).optional(),
     keywords: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
     excludeKeywords: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
   })

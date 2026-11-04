@@ -66,3 +66,94 @@ test("master switch and empty operator lists do not filter anything", () => {
   ).toBe(false);
   expect(resolveOtpFilter({ enabled: true }).keywords).toEqual([]);
 });
+
+function smartFilter(sensitivity: "conservative" | "balanced" | "aggressive" = "balanced") {
+  return resolveOtpFilter({
+    enabled: true,
+    smart: true,
+    sensitivity,
+    keywords: ["verification code", "kode otp", "code"],
+    excludeKeywords: ["promo", "not received", "order"],
+  });
+}
+
+test("smart OTP requires an operator phrase and a nearby code", () => {
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "Your verification code is 123456" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(true);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "Kode OTP 482913" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(true);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "Your verification code is ready" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(false);
+  expect(
+    matchOtpFilter({ remoteJid: "628987654321@s.whatsapp.net", text: "123456" }, smartFilter())
+      .ignored,
+  ).toBe(false);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "Order 12345678 shipped" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(false);
+});
+
+test("smart OTP sensitivity controls proximity evidence and exclude keywords subtract", () => {
+  const farCode = `verification code ${"x".repeat(50)} 1234`;
+  const proximityFilter = (sensitivity: "conservative" | "balanced" | "aggressive") =>
+    resolveOtpFilter({
+      enabled: true,
+      smart: true,
+      sensitivity,
+      keywords: ["verification code"],
+    });
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: farCode },
+      proximityFilter("conservative"),
+    ).ignored,
+  ).toBe(false);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: farCode },
+      proximityFilter("balanced"),
+    ).ignored,
+  ).toBe(true);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "verification code 123456 promo" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(false);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "verification code not received" },
+      smartFilter(),
+    ).ignored,
+  ).toBe(false);
+});
+
+test("smart OTP does not require the legacy keyword toggle and defaults safely", () => {
+  expect(resolveOtpFilter({ enabled: true }).smart).toBe(false);
+  expect(resolveOtpFilter({ enabled: true }).sensitivity).toBe("balanced");
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "Verification code A1B2C3" },
+      resolveOtpFilter({
+        enabled: true,
+        smart: true,
+        keywords: ["verification code"],
+      }),
+    ).ignored,
+  ).toBe(true);
+});

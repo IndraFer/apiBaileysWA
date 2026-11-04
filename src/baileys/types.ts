@@ -92,13 +92,19 @@ export interface AiSendMessageConfig {
   maxPerHour?: number;
 }
 
+export type OtpFilterSensitivity = "conservative" | "balanced" | "aggressive";
+
 /** Optional deny-list/keyword filter for OTP and verification messages. */
 export interface OtpFilterConfig {
   enabled?: boolean;
   /** Senders whose auto-replies are skipped. One number/JID per entry. */
   ignoredSenders?: string[];
-  /** Enable the configurable keyword layer. */
+  /** Enable the configurable keyword layer. Ignored in smart mode. */
   keywordFilter?: boolean;
+  /** Use operator phrases as scoring signals plus built-in code structure. */
+  smart?: boolean;
+  /** Smart-mode threshold; defaults to balanced. */
+  sensitivity?: OtpFilterSensitivity;
   /** Operator-maintained keywords; no built-in values. */
   keywords?: string[];
   /** If a keyword matches, do not treat the message as OTP. */

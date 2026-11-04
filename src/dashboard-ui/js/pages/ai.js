@@ -386,9 +386,28 @@
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               <span class="toggle-copy">
                 <strong>Filter by Keywords</strong>
-                <small>Case-insensitive matching. No keyword is built in; maintain the list below.</small>
+                <small>Direct case-insensitive matching. No keyword is built in; maintain the list below. Disabled when Smart OTP Detection is on.</small>
               </span>
             </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="otp-smart-enabled" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Smart OTP Detection</strong>
+                <small>Uses the phrases below as positive signals, then scores nearby built-in code shapes. Exclude phrases subtract from the score.</small>
+              </span>
+            </label>
+            <div id="otp-smart-settings" class="hidden">
+              <div class="form-group">
+                <label for="otp-smart-sensitivity">Sensitivity</label>
+                <select id="otp-smart-sensitivity" class="input">
+                  <option value="conservative">Conservative</option>
+                  <option value="balanced" selected>Balanced</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+                <small class="text-muted">Conservative needs stronger evidence. Aggressive catches more messages with a higher false-positive risk.</small>
+              </div>
+            </div>
             <div id="otp-keyword-settings" class="hidden">
               <div class="form-group">
                 <label for="otp-keywords">Keywords</label>
@@ -495,6 +514,9 @@
       document.getElementById("otp-keyword-filter")?.addEventListener("change", () => {
         this.syncOtpFilterUi();
       });
+      document.getElementById("otp-smart-enabled")?.addEventListener("change", () => {
+        this.syncOtpFilterUi();
+      });
       document.getElementById("ai-send-scope")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
@@ -553,6 +575,9 @@
       if (otpEnabled) otpEnabled.checked = Boolean(otpFilter.enabled);
       const otpKeywordEnabled = document.getElementById("otp-keyword-filter");
       if (otpKeywordEnabled) otpKeywordEnabled.checked = Boolean(otpFilter.keywordFilter);
+      const otpSmartEnabled = document.getElementById("otp-smart-enabled");
+      if (otpSmartEnabled) otpSmartEnabled.checked = Boolean(otpFilter.smart);
+      set("otp-smart-sensitivity", otpFilter.sensitivity || "balanced");
       set("otp-ignored-senders", (otpFilter.ignoredSenders || []).join("\n"));
       set("otp-keywords", (otpFilter.keywords || []).join("\n"));
       set("otp-exclude-keywords", (otpFilter.excludeKeywords || []).join("\n"));
@@ -605,11 +630,17 @@
     /** Keep the OTP/filter fields consistent with their toggles. */
     syncOtpFilterUi() {
       const enabled = Boolean(document.getElementById("otp-filter-enabled")?.checked);
+      const smartEnabled = Boolean(document.getElementById("otp-smart-enabled")?.checked);
       const keywordEnabled = Boolean(document.getElementById("otp-keyword-filter")?.checked);
+      const keywordToggle = document.getElementById("otp-keyword-filter");
+      if (keywordToggle) keywordToggle.disabled = smartEnabled;
       document.getElementById("otp-filter-settings")?.classList.toggle("hidden", !enabled);
       document
+        .getElementById("otp-smart-settings")
+        ?.classList.toggle("hidden", !enabled || !smartEnabled);
+      document
         .getElementById("otp-keyword-settings")
-        ?.classList.toggle("hidden", !enabled || !keywordEnabled);
+        ?.classList.toggle("hidden", !enabled || (!keywordEnabled && !smartEnabled));
     },
 
     /** Show the responder chain that will actually run for this number. */
@@ -752,6 +783,8 @@
               .map((entry) => entry.trim())
               .filter(Boolean),
             keywordFilter: Boolean(document.getElementById("otp-keyword-filter")?.checked),
+            smart: Boolean(document.getElementById("otp-smart-enabled")?.checked),
+            sensitivity: value("otp-smart-sensitivity") || "balanced",
             keywords: value("otp-keywords")
               .split(/\r?\n/)
               .map((entry) => entry.trim())

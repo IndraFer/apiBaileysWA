@@ -746,11 +746,15 @@ export class BaileysConnection {
         if (match.ignored) {
           // Webhook delivery and local storage already happened before this
           // handler; only automatic responses are suppressed.
+          const filterDetail =
+            match.reason === "smart"
+              ? `smart score=${match.score ?? 0}`
+              : (match.reason ?? "matched");
           logger.debug(
             "[%s] Auto-reply skipped for %s (otp_filter:%s)",
             this.sessionId,
             m.key.remoteJid,
-            match.reason ?? "matched",
+            filterDetail,
           );
         }
         return !match.ignored;
