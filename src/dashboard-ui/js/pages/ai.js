@@ -182,7 +182,8 @@
         return;
       }
 
-      state.sessionId = state.sessionId || sessions[0].sessionId;
+      state.sessionId =
+        window.App?.resolveSelectedSession?.(sessions) || state.sessionId || sessions[0].sessionId;
       UI.setHtml(
         container,
         `
@@ -462,6 +463,7 @@
 
       document.getElementById("ai-session-select").addEventListener("change", (event) => {
         state.sessionId = event.target.value;
+        window.App?.setSelectedSessionId?.(state.sessionId);
         this.loadConfig();
         this.loadMetrics();
       });

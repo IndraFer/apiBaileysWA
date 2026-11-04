@@ -597,12 +597,19 @@
       const pollCfg = loadPollingConfig();
       const sessions = await this.getSessions();
       latestSessions = sessions;
-      selectedSessionId = sessions[0]?.sessionId || sessions[0]?.id || "";
+      selectedSessionId =
+        window.App?.resolveSelectedSession?.(sessions) ||
+        sessions[0]?.sessionId ||
+        sessions[0]?.id ||
+        "";
       selectedJid = "";
       selectedMode = "personal";
       chatCache = [];
-      activeSelfJid = normalizeJid(sessions[0]?.user?.id || "");
-      activeSelfLid = normalizeJid(sessions[0]?.user?.lid || "");
+      const activeSession =
+        sessions.find((session) => (session.sessionId || session.id) === selectedSessionId) ||
+        sessions[0];
+      activeSelfJid = normalizeJid(activeSession?.user?.id || "");
+      activeSelfLid = normalizeJid(activeSession?.user?.lid || "");
 
       UI.setHtml(
         document.getElementById("page-content"),
@@ -717,6 +724,7 @@
       sessionSelect.value = selectedSessionId;
       sessionSelect.addEventListener("change", async (e) => {
         selectedSessionId = e.target.value;
+        window.App?.setSelectedSessionId?.(selectedSessionId);
         selectedJid = "";
         const currentSession = latestSessions.find(
           (s) => (s.sessionId || s.id) === selectedSessionId,

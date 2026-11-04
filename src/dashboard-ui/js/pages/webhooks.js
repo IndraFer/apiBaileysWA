@@ -89,12 +89,12 @@
       const sessions = await this.getSessions();
       webhookSessions = sessions;
 
-      if (
-        !selectedWebhookSessionId ||
-        !sessions.some((entry) => (entry.sessionId || entry.id) === selectedWebhookSessionId)
-      ) {
-        selectedWebhookSessionId = sessions[0]?.sessionId || sessions[0]?.id || "";
-      }
+      selectedWebhookSessionId =
+        window.App?.resolveSelectedSession?.(sessions) ||
+        selectedWebhookSessionId ||
+        sessions[0]?.sessionId ||
+        sessions[0]?.id ||
+        "";
 
       const logs = await this.getWebhookLogs();
       const meta = await this.getWebhookMeta();
@@ -227,6 +227,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
 
       document.getElementById("webhook-log-session")?.addEventListener("change", (event) => {
         selectedLogSessionId = event.target.value;
+        if (selectedLogSessionId) window.App?.setSelectedSessionId?.(selectedLogSessionId);
         this.refreshLogs();
       });
       document
@@ -280,6 +281,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
       if (sessionSelect) {
         sessionSelect.addEventListener("change", (event) => {
           selectedWebhookSessionId = event.target.value;
+          window.App?.setSelectedSessionId?.(selectedWebhookSessionId);
           this.renderWebhookConfig();
         });
         this.renderWebhookConfig();

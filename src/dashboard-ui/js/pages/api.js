@@ -67,6 +67,13 @@
         .concat(available.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`))
         .join(""),
     );
+    const preferred = window.App?.getSelectedSessionId?.();
+    if (preferred && available.includes(preferred)) select.value = preferred;
+    else if (available.length > 0) {
+      select.value = available[0];
+      window.App?.setSelectedSessionId?.(available[0]);
+    }
+    select.onchange = () => window.App?.setSelectedSessionId?.(select.value);
     if (button) button.disabled = false;
   }
 

@@ -133,6 +133,30 @@
   }
 
   /** Pages that need infrastructure hide themselves until it exists. */
+  const SELECTED_SESSION_PREFIX = "wa-dashboard-selected-session";
+
+  function selectedSessionKey() {
+    const user = readStoredUser();
+    return `${SELECTED_SESSION_PREFIX}:${user.id || user.username || "anonymous"}`;
+  }
+
+  function readSelectedSessionId() {
+    try {
+      return localStorage.getItem(selectedSessionKey()) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function rememberSelectedSessionId(sessionId) {
+    try {
+      if (sessionId) localStorage.setItem(selectedSessionKey(), sessionId);
+      else localStorage.removeItem(selectedSessionKey());
+    } catch {
+      // Storage unavailable; selection still works for this page render.
+    }
+  }
+
   function isPageAvailable(page) {
     if (!page) return false;
     if (page.needsSession && !hasSession()) return false;
@@ -229,6 +253,25 @@
     hasCapability(user, capability) {
       if (!capability) return true;
       return this.getUserCapabilities(user).has(capability);
+    },
+
+    /** Persisted active session shared by Chat Rooms, AI, Webhooks, etc. */
+    getSelectedSessionId() {
+      return readSelectedSessionId();
+    },
+
+    setSelectedSessionId(sessionId) {
+      rememberSelectedSessionId(String(sessionId || ""));
+    },
+
+    resolveSelectedSession(sessions) {
+      const ids = (sessions || [])
+        .map((session) => String(session?.sessionId || session?.id || ""))
+        .filter(Boolean);
+      const stored = this.getSelectedSessionId();
+      const chosen = stored && ids.includes(stored) ? stored : ids[0] || "";
+      if (chosen) this.setSelectedSessionId(chosen);
+      return chosen;
     },
 
     applyRoleAccess(user) {

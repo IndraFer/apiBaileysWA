@@ -84,6 +84,20 @@
         </div>`,
       );
 
+      const preferredSession =
+        window.App?.resolveSelectedSession?.(sessions) || sessions[0]?.sessionId || "";
+      const msgSession = document.getElementById("msg-session");
+      const bulkSession = document.getElementById("bulk-session");
+      if (msgSession && preferredSession) msgSession.value = preferredSession;
+      if (bulkSession && preferredSession) bulkSession.value = preferredSession;
+      const remember = (value) => {
+        window.App?.setSelectedSessionId?.(value);
+        if (msgSession) msgSession.value = value;
+        if (bulkSession) bulkSession.value = value;
+      };
+      msgSession?.addEventListener("change", (e) => remember(e.target.value));
+      bulkSession?.addEventListener("change", (e) => remember(e.target.value));
+
       // Type switching
       document.getElementById("msg-type").addEventListener("change", (e) => {
         const v = e.target.value;

@@ -29,6 +29,9 @@ export class MemoryStore extends EventEmitter {
   public messages = new Map<string, Map<string, WAMessage>>();
   public contacts = new Map<string, Record<string, unknown>>();
   public groupMetadata = new Map<string, Record<string, unknown>>();
+  /** Canonical mapping used to merge alternate LID/PN rooms. */
+  public lidToPn = new Map<string, string>();
+  public pnToLid = new Map<string, string>();
 
   constructor(config: StoreConfig) {
     super();
@@ -57,7 +60,7 @@ export class MemoryStore extends EventEmitter {
       const keys = "keys" in item ? item.keys : [];
 
       if (keys.length === 0 && "all" in item && item.all === true && item.jid) {
-        const jid = jidNormalizedUser(item.jid);
+        const jid = this.canonicalRoomJid(item.jid);
         this.messages.delete(jid);
         const chat = this.chats.get(jid);
         if (chat) chat.unreadCount = 0;
@@ -66,7 +69,7 @@ export class MemoryStore extends EventEmitter {
 
       for (const key of keys) {
         if (!key?.remoteJid || !key.id) continue;
-        const jid = jidNormalizedUser(key.remoteJid);
+        const jid = this.canonicalRoomJid(key.remoteJid);
         this.messages.get(jid)?.delete(key.id);
       }
     });
@@ -76,7 +79,7 @@ export class MemoryStore extends EventEmitter {
       for (const msg of newMessages) {
         try {
           if (!msg.key.remoteJid) continue;
-          const jid = jidNormalizedUser(msg.key.remoteJid);
+          const jid = this.canonicalRoomJid(msg.key.remoteJid, msg.key.remoteJidAlt);
           // Create the room for every upsert type. Some Baileys versions deliver
           // live messages without type "notify"; gating on it left the chat list
           // empty even though messages were stored.
@@ -103,18 +106,25 @@ export class MemoryStore extends EventEmitter {
       }
     });
 
-    ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+    ev.on("messaging-history.set", ({ chats, contacts, messages, lidPnMappings }) => {
       this.dirty = true;
+      for (const mapping of lidPnMappings || []) {
+        this.registerLidMapping(mapping.lid, mapping.pn);
+      }
       for (const chat of chats || []) {
         if (!chat.id) continue;
-        if (!this.chats.has(chat.id)) {
-          this.chats.set(chat.id, { ...chat });
+        const jid = this.canonicalRoomJid(chat.id);
+        if (!this.chats.has(jid)) {
+          this.chats.set(jid, { ...chat, id: jid });
         }
       }
       for (const contact of contacts || []) {
         try {
           if (!contact.id) continue;
-          const jid = jidNormalizedUser(contact.id);
+          if (contact.lid && (contact.phoneNumber || contact.id)) {
+            this.registerLidMapping(contact.lid, contact.phoneNumber || contact.id);
+          }
+          const jid = this.canonicalRoomJid(contact.id, contact.lid);
           this.contacts.set(jid, { ...contact });
         } catch {
           // Skip invalid contacts
@@ -123,7 +133,7 @@ export class MemoryStore extends EventEmitter {
       for (const msg of messages || []) {
         try {
           if (!msg.key.remoteJid) continue;
-          const jid = jidNormalizedUser(msg.key.remoteJid);
+          const jid = this.canonicalRoomJid(msg.key.remoteJid, msg.key.remoteJidAlt);
           this.addMessage(jid, msg);
         } catch {
           // Skip invalid messages
@@ -135,8 +145,9 @@ export class MemoryStore extends EventEmitter {
       this.dirty = true;
       for (const chat of newChats) {
         if (!chat.id) continue;
-        const existing = this.chats.get(chat.id);
-        this.chats.set(chat.id, { ...(existing || {}), ...chat });
+        const jid = this.canonicalRoomJid(chat.id);
+        const existing = this.chats.get(jid);
+        this.chats.set(jid, { ...(existing || {}), ...chat, id: jid });
       }
     });
 
@@ -144,9 +155,10 @@ export class MemoryStore extends EventEmitter {
       this.dirty = true;
       for (const update of updates) {
         if (!update.id) continue;
-        const existing = this.chats.get(update.id);
+        const jid = this.canonicalRoomJid(update.id);
+        const existing = this.chats.get(jid);
         if (existing) {
-          Object.assign(existing, update);
+          Object.assign(existing, update, { id: jid });
         }
       }
     });
@@ -154,6 +166,10 @@ export class MemoryStore extends EventEmitter {
     ev.on("chats.delete", (deletions) => {
       this.dirty = true;
       for (const chatId of deletions) {
+        const jid = this.canonicalRoomJid(chatId);
+        this.chats.delete(jid);
+        this.messages.delete(jid);
+        // Clean up a legacy alternate room as well.
         this.chats.delete(chatId);
         this.messages.delete(chatId);
       }
@@ -163,13 +179,22 @@ export class MemoryStore extends EventEmitter {
       this.dirty = true;
       for (const contact of newContacts) {
         try {
-          const jid = jidNormalizedUser(contact.id);
+          if (contact.lid && contact.phoneNumber) {
+            this.registerLidMapping(contact.lid, contact.phoneNumber);
+          } else if (contact.lid && contact.id) {
+            this.registerLidMapping(contact.lid, contact.id);
+          }
+          const jid = this.canonicalRoomJid(contact.id, contact.lid);
           const existing = this.contacts.get(jid);
           this.contacts.set(jid, { ...(existing || {}), ...contact });
         } catch {
           // Skip invalid contacts
         }
       }
+    });
+
+    ev.on("lid-mapping.update", (mapping) => {
+      this.registerLidMapping(mapping.lid, mapping.pn);
     });
 
     ev.on("groups.update", (updates) => {
@@ -181,6 +206,76 @@ export class MemoryStore extends EventEmitter {
         }
       }
     });
+  }
+
+  /** Register a LID <-> phone-number mapping and merge any duplicate rooms. */
+  private registerLidMapping(lidRaw: string, pnRaw: string): void {
+    try {
+      const lid = jidNormalizedUser(lidRaw);
+      const pn = jidNormalizedUser(pnRaw);
+      if (!lid.endsWith("@lid") || !pn.endsWith("@s.whatsapp.net")) return;
+      const previousPn = this.lidToPn.get(lid);
+      this.lidToPn.set(lid, pn);
+      this.pnToLid.set(pn, lid);
+      this.dirty = true;
+      this.mergeRoom(lid, pn);
+      if (previousPn && previousPn !== pn) this.mergeRoom(previousPn, pn);
+    } catch {
+      // Ignore malformed addresses from history sync.
+    }
+  }
+
+  private mergeRoom(from: string, to: string): void {
+    if (!from || !to || from === to) return;
+    const sourceMessages = this.messages.get(from);
+    if (sourceMessages) {
+      const targetMessages = this.messages.get(to) ?? new Map<string, WAMessage>();
+      for (const [id, message] of sourceMessages) {
+        if (!targetMessages.has(id)) targetMessages.set(id, message);
+      }
+      this.messages.set(to, targetMessages);
+      this.messages.delete(from);
+    }
+
+    const sourceChat = this.chats.get(from);
+    if (sourceChat) {
+      const targetChat = this.chats.get(to);
+      const sourceTime = Number(sourceChat.conversationTimestamp || 0);
+      const targetTime = Number(targetChat?.conversationTimestamp || 0);
+      this.chats.set(to, {
+        ...sourceChat,
+        ...(targetChat || {}),
+        id: to,
+        conversationTimestamp: Math.max(sourceTime, targetTime),
+        unreadCount: Math.max(
+          Number(sourceChat.unreadCount || 0),
+          Number(targetChat?.unreadCount || 0),
+        ),
+      });
+      this.chats.delete(from);
+      this.dirty = true;
+    }
+  }
+
+  /** Prefer the PN form for a direct room; groups keep their own JID. */
+  private canonicalRoomJid(rawJid: string, altJid?: string | null): string {
+    try {
+      const jid = jidNormalizedUser(rawJid);
+      if (jid.endsWith("@g.us")) return jid;
+      const alt = altJid ? jidNormalizedUser(altJid) : "";
+      if (jid.endsWith("@lid") && alt.endsWith("@s.whatsapp.net")) {
+        this.registerLidMapping(jid, alt);
+        return alt;
+      }
+      if (jid.endsWith("@s.whatsapp.net") && alt.endsWith("@lid")) {
+        this.registerLidMapping(alt, jid);
+        return jid;
+      }
+      if (jid.endsWith("@lid")) return this.lidToPn.get(jid) ?? jid;
+      return jid;
+    } catch {
+      return rawJid;
+    }
   }
 
   private addMessage(jid: string, msg: WAMessage): boolean {
@@ -320,6 +415,7 @@ export class MemoryStore extends EventEmitter {
         ),
         contacts: [...this.contacts.entries()],
         groupMetadata: [...this.groupMetadata.entries()],
+        lidMappings: [...this.lidToPn.entries()],
       };
 
       const tempFile = `${this.storeFile}.tmp.${Date.now()}`;
@@ -349,6 +445,16 @@ export class MemoryStore extends EventEmitter {
 
       const data = JSON.parse(raw);
 
+      // Load LID/PN mappings before rooms so legacy duplicate rooms can merge.
+      if (Array.isArray(data.lidMappings)) {
+        for (const [lid, pn] of data.lidMappings) {
+          if (typeof lid === "string" && typeof pn === "string") {
+            this.lidToPn.set(lid, pn);
+            this.pnToLid.set(pn, lid);
+          }
+        }
+      }
+
       // Load chats
       if (Array.isArray(data.chats)) {
         for (const [jid, chat] of data.chats) {
@@ -376,6 +482,8 @@ export class MemoryStore extends EventEmitter {
           this.groupMetadata.set(jid, meta);
         }
       }
+
+      for (const [lid, pn] of this.lidToPn) this.mergeRoom(lid, pn);
 
       logger.info(
         "[Store:%s] Loaded %d chats, %d contacts",
