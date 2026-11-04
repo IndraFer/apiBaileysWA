@@ -231,9 +231,11 @@ dashboardApi.get("/stats", (c) => {
       connectedSessions: sessions.filter((s) => s.connected).length,
       disconnectedSessions: sessions.filter((s) => !s.connected).length,
       version: `v${pkg.version || "1.0.0"}`,
+      // Operational uptime is safe for every dashboard role; memory/env/Redis
+      // details below remain admin-only.
+      uptime: process.uptime(),
       ...(isAdmin
         ? {
-            uptime: process.uptime(),
             memoryUsage: process.memoryUsage(),
             environment: config.env,
             redisEnabled: config.redis.enabled,

@@ -59,8 +59,10 @@
     },
 
     formatUptime(seconds) {
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
+      const numeric = Number(seconds);
+      if (!Number.isFinite(numeric) || numeric < 0) return "—";
+      const h = Math.floor(numeric / 3600);
+      const m = Math.floor((numeric % 3600) / 60);
       if (h > 0) return `${h}h ${m}m`;
       return `${m}m`;
     },
