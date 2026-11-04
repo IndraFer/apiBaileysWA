@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-11-04
+
+### Added
+
+- media descriptors, safe link previews and opt-in image vision
+
 ## [1.25.3] - 2026-11-04
 
 ### Changed
