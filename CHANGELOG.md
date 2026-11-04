@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-11-04
+
+### Fixed
+
+- make the send-tool hint follow the selected scope
+
 ## [1.24.0] - 2026-11-04
 
 ### Fixed
