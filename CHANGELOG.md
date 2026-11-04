@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.24.3] - 2026-11-04
+
+### Fixed
+
+- keep the dashboard session across page refreshes
+
 ## [1.24.2] - 2026-11-04
 
 ### Changed
