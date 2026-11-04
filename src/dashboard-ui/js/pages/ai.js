@@ -381,22 +381,14 @@
                 placeholder="628123456789&#10;120363000000000000@g.us"></textarea>
               <small class="text-muted">One phone number or JID per line. No sender is ignored by default.</small>
             </div>
-            <label class="toggle-row">
-              <input type="checkbox" id="otp-keyword-filter" class="toggle-input" />
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span class="toggle-copy">
-                <strong>Filter by Keywords</strong>
-                <small>Direct case-insensitive matching. No keyword is built in; maintain the list below. Disabled when Smart OTP Detection is on.</small>
-              </span>
-            </label>
-            <label class="toggle-row">
-              <input type="checkbox" id="otp-smart-enabled" class="toggle-input" />
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span class="toggle-copy">
-                <strong>Smart OTP Detection</strong>
-                <small>Uses the phrases below as positive signals, then scores nearby built-in code shapes. Exclude phrases subtract from the score.</small>
-              </span>
-            </label>
+            <div class="form-group">
+              <label for="otp-detection-mode">Detection Mode</label>
+              <select id="otp-detection-mode" class="input">
+                <option value="keywords">Keywords Only</option>
+                <option value="smart" selected>Smart OTP / Verification</option>
+              </select>
+              <small class="text-muted">Keywords Only applies the phrase list directly. Smart OTP / Verification also scores nearby built-in code shapes.</small>
+            </div>
             <div id="otp-smart-settings" class="hidden">
               <div class="form-group">
                 <label for="otp-smart-sensitivity">Sensitivity</label>
@@ -408,19 +400,17 @@
                 <small class="text-muted">Conservative needs stronger evidence. Aggressive catches more messages with a higher false-positive risk.</small>
               </div>
             </div>
-            <div id="otp-keyword-settings" class="hidden">
-              <div class="form-group">
-                <label for="otp-keywords">Keywords</label>
-                <textarea id="otp-keywords" class="input" rows="4"
-                  placeholder="verification code&#10;one-time password&#10;your login code&#10;do not share this code"></textarea>
-                <small class="text-muted">One keyword or phrase per line.</small>
-              </div>
-              <div class="form-group">
-                <label for="otp-exclude-keywords">Exclude Keywords</label>
-                <textarea id="otp-exclude-keywords" class="input" rows="3"
-                  placeholder="not received&#10;didn't receive&#10;resend"></textarea>
-                <small class="text-muted">If a message contains one of these, the keyword filter will not ignore it. One phrase per line.</small>
-              </div>
+            <div class="form-group">
+              <label for="otp-keywords">Keywords</label>
+              <textarea id="otp-keywords" class="input" rows="4"
+                placeholder="verification code&#10;one-time password&#10;your login code&#10;do not share this code"></textarea>
+              <small class="text-muted">Positive phrases for either mode. No phrase is built in; one phrase per line.</small>
+            </div>
+            <div class="form-group">
+              <label for="otp-exclude-keywords">Exclude Keywords</label>
+              <textarea id="otp-exclude-keywords" class="input" rows="3"
+                placeholder="not received&#10;didn't receive&#10;resend"></textarea>
+              <small class="text-muted">A match subtracts from Smart scoring and prevents a direct match in Keywords Only mode. One phrase per line.</small>
             </div>
           </div>
         </div>
@@ -511,10 +501,7 @@
       document.getElementById("otp-filter-enabled")?.addEventListener("change", () => {
         this.syncOtpFilterUi();
       });
-      document.getElementById("otp-keyword-filter")?.addEventListener("change", () => {
-        this.syncOtpFilterUi();
-      });
-      document.getElementById("otp-smart-enabled")?.addEventListener("change", () => {
+      document.getElementById("otp-detection-mode")?.addEventListener("change", () => {
         this.syncOtpFilterUi();
       });
       document.getElementById("ai-send-scope")?.addEventListener("change", () => {
@@ -573,10 +560,10 @@
       const otpFilter = ai.otpFilter || {};
       const otpEnabled = document.getElementById("otp-filter-enabled");
       if (otpEnabled) otpEnabled.checked = Boolean(otpFilter.enabled);
-      const otpKeywordEnabled = document.getElementById("otp-keyword-filter");
-      if (otpKeywordEnabled) otpKeywordEnabled.checked = Boolean(otpFilter.keywordFilter);
-      const otpSmartEnabled = document.getElementById("otp-smart-enabled");
-      if (otpSmartEnabled) otpSmartEnabled.checked = Boolean(otpFilter.smart);
+      const detectionMode =
+        otpFilter.detectionMode ||
+        (otpFilter.smart ? "smart" : otpFilter.keywordFilter ? "keywords" : "smart");
+      set("otp-detection-mode", detectionMode);
       set("otp-smart-sensitivity", otpFilter.sensitivity || "balanced");
       set("otp-ignored-senders", (otpFilter.ignoredSenders || []).join("\n"));
       set("otp-keywords", (otpFilter.keywords || []).join("\n"));
@@ -630,17 +617,11 @@
     /** Keep the OTP/filter fields consistent with their toggles. */
     syncOtpFilterUi() {
       const enabled = Boolean(document.getElementById("otp-filter-enabled")?.checked);
-      const smartEnabled = Boolean(document.getElementById("otp-smart-enabled")?.checked);
-      const keywordEnabled = Boolean(document.getElementById("otp-keyword-filter")?.checked);
-      const keywordToggle = document.getElementById("otp-keyword-filter");
-      if (keywordToggle) keywordToggle.disabled = smartEnabled;
+      const mode = document.getElementById("otp-detection-mode")?.value || "smart";
       document.getElementById("otp-filter-settings")?.classList.toggle("hidden", !enabled);
       document
         .getElementById("otp-smart-settings")
-        ?.classList.toggle("hidden", !enabled || !smartEnabled);
-      document
-        .getElementById("otp-keyword-settings")
-        ?.classList.toggle("hidden", !enabled || (!keywordEnabled && !smartEnabled));
+        ?.classList.toggle("hidden", !enabled || mode !== "smart");
     },
 
     /** Show the responder chain that will actually run for this number. */
@@ -782,8 +763,7 @@
               .split(/\r?\n/)
               .map((entry) => entry.trim())
               .filter(Boolean),
-            keywordFilter: Boolean(document.getElementById("otp-keyword-filter")?.checked),
-            smart: Boolean(document.getElementById("otp-smart-enabled")?.checked),
+            detectionMode: value("otp-detection-mode") || "smart",
             sensitivity: value("otp-smart-sensitivity") || "balanced",
             keywords: value("otp-keywords")
               .split(/\r?\n/)

@@ -10,17 +10,28 @@
  * near them. Exclude phrases are negative signals, so a promo/order message
  * does not get suppressed just because it contains a number.
  */
-import type { OtpFilterConfig, OtpFilterSensitivity } from "@/baileys/types";
+import type {
+  OtpFilterConfig,
+  OtpFilterDetectionMode,
+  OtpFilterSensitivity,
+} from "@/baileys/types";
 
 export interface ResolvedOtpFilter {
   enabled: boolean;
   ignoredSenders: string[];
-  /** Legacy direct-match layer. Ignored when smart mode is enabled. */
-  keywordFilter: boolean;
-  smart: boolean;
+  detectionMode: OtpFilterDetectionMode;
   sensitivity: OtpFilterSensitivity;
   keywords: string[];
   excludeKeywords: string[];
+}
+
+function resolveDetectionMode(input?: OtpFilterConfig): OtpFilterDetectionMode {
+  const explicit = input?.detectionMode;
+  if (explicit === "keywords" || explicit === "smart") return explicit;
+  // Backward-compatible migration for configs saved before Detection Mode.
+  if (input?.smart === true) return "smart";
+  if (input?.keywordFilter === true) return "keywords";
+  return "smart";
 }
 
 const DEFAULT_SENSITIVITY: OtpFilterSensitivity = "balanced";
@@ -53,8 +64,7 @@ export function resolveOtpFilter(input?: OtpFilterConfig): ResolvedOtpFilter {
   return {
     enabled: input?.enabled ?? false,
     ignoredSenders: uniqueLines(input?.ignoredSenders),
-    keywordFilter: input?.keywordFilter ?? false,
-    smart: input?.smart ?? false,
+    detectionMode: resolveDetectionMode(input),
     sensitivity: resolveSensitivity(input?.sensitivity),
     keywords: uniqueLines(input?.keywords, true),
     excludeKeywords: uniqueLines(input?.excludeKeywords, true),
@@ -189,7 +199,7 @@ export function matchOtpFilter(input: OtpMatchInput, filter: ResolvedOtpFilter):
     }
   }
 
-  if (filter.smart) {
+  if (filter.detectionMode === "smart") {
     const text = String(input.text ?? "").toLowerCase();
     if (!text || filter.keywords.length === 0) return { ignored: false, score: 0 };
     const score = smartScore(text, filter);
@@ -199,7 +209,7 @@ export function matchOtpFilter(input: OtpMatchInput, filter: ResolvedOtpFilter):
     return { ignored: false, score };
   }
 
-  if (filter.keywordFilter && filter.keywords.length > 0) {
+  if (filter.detectionMode === "keywords" && filter.keywords.length > 0) {
     const text = String(input.text ?? "").toLowerCase();
     if (!text) return { ignored: false };
     const excluded = filter.excludeKeywords.some((keyword) => text.includes(keyword));

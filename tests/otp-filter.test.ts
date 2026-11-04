@@ -70,7 +70,7 @@ test("master switch and empty operator lists do not filter anything", () => {
 function smartFilter(sensitivity: "conservative" | "balanced" | "aggressive" = "balanced") {
   return resolveOtpFilter({
     enabled: true,
-    smart: true,
+    detectionMode: "smart",
     sensitivity,
     keywords: ["verification code", "kode otp", "code"],
     excludeKeywords: ["promo", "not received", "order"],
@@ -113,7 +113,7 @@ test("smart OTP sensitivity controls proximity evidence and exclude keywords sub
   const proximityFilter = (sensitivity: "conservative" | "balanced" | "aggressive") =>
     resolveOtpFilter({
       enabled: true,
-      smart: true,
+      detectionMode: "smart",
       sensitivity,
       keywords: ["verification code"],
     });
@@ -143,15 +143,26 @@ test("smart OTP sensitivity controls proximity evidence and exclude keywords sub
   ).toBe(false);
 });
 
-test("smart OTP does not require the legacy keyword toggle and defaults safely", () => {
-  expect(resolveOtpFilter({ enabled: true }).smart).toBe(false);
+test("smart OTP is the default mode and migrates legacy keyword configs", () => {
+  expect(resolveOtpFilter({ enabled: true }).detectionMode).toBe("smart");
   expect(resolveOtpFilter({ enabled: true }).sensitivity).toBe("balanced");
+  expect(resolveOtpFilter({ enabled: true, keywordFilter: true }).detectionMode).toBe("keywords");
   expect(
     matchOtpFilter(
       { remoteJid: "628987654321@s.whatsapp.net", text: "Verification code A1B2C3" },
       resolveOtpFilter({
         enabled: true,
-        smart: true,
+        detectionMode: "smart",
+        keywords: ["verification code"],
+      }),
+    ).ignored,
+  ).toBe(true);
+  expect(
+    matchOtpFilter(
+      { remoteJid: "628987654321@s.whatsapp.net", text: "verification code" },
+      resolveOtpFilter({
+        enabled: true,
+        detectionMode: "keywords",
         keywords: ["verification code"],
       }),
     ).ignored,

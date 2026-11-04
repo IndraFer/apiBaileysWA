@@ -586,6 +586,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           otpFilter: {
             enabled: ai.otpFilter?.enabled ?? false,
             ignoredSenders: ai.otpFilter?.ignoredSenders ?? [],
+            detectionMode:
+              ai.otpFilter?.detectionMode ??
+              (ai.otpFilter?.smart ? "smart" : ai.otpFilter?.keywordFilter ? "keywords" : "smart"),
             keywordFilter: ai.otpFilter?.keywordFilter ?? false,
             smart: ai.otpFilter?.smart ?? false,
             sensitivity: ai.otpFilter?.sensitivity ?? "balanced",

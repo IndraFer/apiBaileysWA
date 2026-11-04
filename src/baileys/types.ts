@@ -93,15 +93,18 @@ export interface AiSendMessageConfig {
 }
 
 export type OtpFilterSensitivity = "conservative" | "balanced" | "aggressive";
+export type OtpFilterDetectionMode = "keywords" | "smart";
 
 /** Optional deny-list/keyword filter for OTP and verification messages. */
 export interface OtpFilterConfig {
   enabled?: boolean;
   /** Senders whose auto-replies are skipped. One number/JID per entry. */
   ignoredSenders?: string[];
-  /** Enable the configurable keyword layer. Ignored in smart mode. */
+  /** Detection mode; defaults to smart for new configurations. */
+  detectionMode?: OtpFilterDetectionMode;
+  /** @deprecated Use detectionMode. Retained for old stored configs. */
   keywordFilter?: boolean;
-  /** Use operator phrases as scoring signals plus built-in code structure. */
+  /** @deprecated Use detectionMode. Retained for old stored configs. */
   smart?: boolean;
   /** Smart-mode threshold; defaults to balanced. */
   sensitivity?: OtpFilterSensitivity;
