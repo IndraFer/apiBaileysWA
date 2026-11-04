@@ -122,19 +122,8 @@
   }
 
   function renderTextWithMarkdown(raw) {
-    const escaped = escapeHtml(raw);
-    const withLinks = escaped.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
-    );
-    const withBold = withLinks.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    const withItalic = withBold.replace(/_(.+?)_/g, "<em>$1</em>");
-    const withCode = withItalic.replace(/`([^`]+)`/g, "<code>$1</code>");
-    const withMention = withCode.replace(
-      /(^|\s)(@[0-9]{5,16})/g,
-      '$1<span class="msg-mention">$2</span>',
-    );
-    return withMention.replace(/\n/g, "<br />");
+    // WhatsApp-first parser with safe Markdown enrichment; see lib/messageFormat.js.
+    return window.MessageFormat?.render(raw) ?? escapeHtml(raw);
   }
 
   function extractMessagePayload(msg) {
