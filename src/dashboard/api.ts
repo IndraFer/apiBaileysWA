@@ -40,6 +40,7 @@ import {
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
+import { normalizeAutoReplyConfig } from "@/services/autoReply";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -319,7 +320,7 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       phoneNumber: body.phoneNumber,
       includeMedia: body.includeMedia,
       syncFullHistory: body.syncFullHistory ?? false,
-      autoReply: body.autoReply,
+      autoReply: normalizeAutoReplyConfig(body.autoReply),
     });
 
     return c.json({
@@ -426,7 +427,7 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
       webhookSecret: body.webhookSecret?.trim() || current.webhookSecret,
       includeMedia: body.includeMedia ?? current.includeMedia,
       syncFullHistory: body.syncFullHistory ?? current.syncFullHistory,
-      autoReply: body.autoReply ?? current.autoReply,
+      autoReply: body.autoReply ? normalizeAutoReplyConfig(body.autoReply) : current.autoReply,
     };
 
     if (live) await connectionManager.updateSessionSettings(sessionId, next);

@@ -172,7 +172,7 @@
 							</div>
 							<div class="form-group">
 								<label for="session-autoreply-msg">Auto Reply Message</label>
-								<textarea id="session-autoreply-msg" rows="3" placeholder="Hello, we're currently away..."></textarea>
+								<textarea id="session-autoreply-msg" rows="3" placeholder="Hello, we&#39;re currently away.&#10;We&#39;ll reply to your message soon."></textarea>
 							</div>
 						</div>
 					</div>
@@ -219,7 +219,7 @@
             enabled: true,
             type: autoReplyType.value,
             role: document.getElementById("session-autoreply-role").value,
-            message: document.getElementById("session-autoreply-msg").value.trim() || "Halo!",
+            message: document.getElementById("session-autoreply-msg").value.trim(),
             timeStart: document.getElementById("session-autoreply-start").value,
             timeEnd: document.getElementById("session-autoreply-end").value,
           };
@@ -444,7 +444,7 @@
 							</div>
 							<div class="form-group">
 								<label for="update-autoreply-msg">Auto Reply Message</label>
-								<textarea id="update-autoreply-msg" rows="3" placeholder="Hello, we're currently away...">${ar.message || ""}</textarea>
+								<textarea id="update-autoreply-msg" rows="3" placeholder="Hello, we&#39;re currently away.&#10;We&#39;ll reply to your message soon.">${ar.message || ""}</textarea>
 							</div>
 						</div>
 					</div>
@@ -482,9 +482,7 @@
             enabled: true,
             type: autoReplyType.value,
             role: document.getElementById("update-autoreply-role").value,
-            message:
-              document.getElementById("update-autoreply-msg").value.trim() ||
-              "Hello, we're currently away...",
+            message: document.getElementById("update-autoreply-msg").value.trim(),
             timeStart: document.getElementById("update-autoreply-start").value,
             timeEnd: document.getElementById("update-autoreply-end").value,
           };

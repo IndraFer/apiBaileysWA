@@ -6,7 +6,7 @@ import { z } from "zod";
 export const autoReplySchema = z
   .object({
     enabled: z.boolean(),
-    message: z.string().min(1, "Auto reply message cannot be empty"),
+    message: z.string().max(4000).optional(),
     type: z.enum(["always", "time_range", "on_webhook_fail"]),
     role: z.enum(["primary", "fallback", "both"]).optional(),
     timeStart: z

@@ -4,6 +4,7 @@ import { error, success } from "@/lib/response";
 import { authAllowsSession, authMiddleware, isAdminApiAuth } from "@/middleware/auth";
 import { sessionRateLimit } from "@/middleware/rateLimit";
 import { createSessionSchema, SESSION_ID_REGEX } from "@/schemas/session";
+import { normalizeAutoReplyConfig } from "@/services/autoReply";
 
 const sessionRoutes = new Hono();
 
@@ -134,7 +135,7 @@ sessionRoutes.patch("/:sessionId/settings", async (c) => {
       webhookSecret: body.webhookSecret?.trim() || currentSecret,
       includeMedia: body.includeMedia,
       syncFullHistory: body.syncFullHistory,
-      autoReply: body.autoReply,
+      autoReply: normalizeAutoReplyConfig(body.autoReply),
     });
     return success(c, null, "Session settings updated successfully");
   } catch (err) {

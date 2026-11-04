@@ -43,6 +43,7 @@ import {
   isReceiverAllowed,
   type ResolvedSendMessageConfig,
 } from "@/services/aiSendTool";
+import { resolveAutoReplyConfig } from "@/services/autoReply";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
@@ -275,7 +276,7 @@ export class BaileysConnection {
         await this.sendMessage(conversationId, { text }, { quoted: lastMessage });
       },
       onFailure: async (conversationId, lastMessage) => {
-        const autoReply = this.options.autoReply ?? config.autoReply;
+        const autoReply = resolveAutoReplyConfig(this.options.autoReply);
         const role = autoReply.role ?? "both";
         // Static answers a failed AI call only when it plays the fallback role.
         if (!autoReply.enabled || (role !== "fallback" && role !== "both")) return;
@@ -676,7 +677,7 @@ export class BaileysConnection {
       routing: (() => {
         const aiCfg = resolveAiConfig(this.options.ai);
         const routingCfg = resolveRoutingConfig(this.options.routing);
-        const staticCfg = this.options.autoReply ?? config.autoReply;
+        const staticCfg = resolveAutoReplyConfig(this.options.autoReply);
         return {
           aiEnabled: aiCfg.enabled,
           aiMode: aiCfg.mode,
@@ -716,7 +717,7 @@ export class BaileysConnection {
    *   2. Otherwise the legacy static auto-reply rules (unchanged).
    */
   private async handleAutoReply(data: BaileysEventMap["messages.upsert"], webhookFailed: boolean) {
-    const autoReply = this.options.autoReply ?? config.autoReply;
+    const autoReply = resolveAutoReplyConfig(this.options.autoReply);
     const ai = resolveAiConfig(this.options.ai);
     const routing = resolveRoutingConfig(this.options.routing);
 
