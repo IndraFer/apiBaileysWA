@@ -476,6 +476,14 @@ old key.
 The API speaks plain HTTP; **terminate TLS in front of it** (Caddy, nginx,
 Cloudflare, an ALB). Never publish port 3000 to the internet.
 
+> **Subpath hosting is not supported.** The dashboard, REST API, docs, SSE and
+> cookie (`Path=/dashboard`) use absolute root paths. `handle_path /gateway/*`
+> in Caddy would strip the prefix while the browser still requests
+> `/dashboard/...`; without stripping, Hono sees `/gateway/...` and returns 404.
+> Use a dedicated hostname (a subdomain, including `sslip.io`/`nip.io` for an
+> IP-only VPS) or a dedicated port. Supporting `/gateway` would require a real
+> `BASE_PATH` implementation across routes, assets, cookies, CSP and clients.
+
 ```
 Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose network only)
 ```
