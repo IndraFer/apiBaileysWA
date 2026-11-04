@@ -37,8 +37,15 @@ import { activeWebhookSecrets } from "@/lib/webhookSecrets";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
 import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
+import {
+  consumeSendQuota,
+  isReceiverAllowed,
+  type ResolvedSendMessageConfig,
+} from "@/services/aiSendTool";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import { sendUnifiedMessage } from "@/services/messageSender";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
+import type { ToolExecution } from "@/services/ragTools";
 import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
@@ -222,6 +229,9 @@ export async function resolveWebhookTarget(webhookUrl: string): Promise<string |
 
   return null;
 }
+
+/** Per-session sliding window for the built-in AI send tool. */
+const aiSendWindows = new Map<string, number[]>();
 
 export class BaileysConnection {
   public sessionId: string;
@@ -891,6 +901,92 @@ export class BaileysConnection {
     return "outside_window";
   }
 
+  /**
+   * Execute the built-in AI send tool. Scope, allowlist and the hourly bucket
+   * are enforced here, not by the model. Text only; the current chat is always
+   * allowed in current_chat/allowlist mode.
+   */
+  private async runAiSendTool(
+    input: { receiver?: string; text: string },
+    conversationId: string,
+    config: ResolvedSendMessageConfig,
+  ): Promise<ToolExecution> {
+    if (!config.enabled) {
+      return { ok: false, content: "Tool error: send_whatsapp_message is disabled" };
+    }
+    if (input.text.length > 4000) {
+      return { ok: false, content: "Tool error: text exceeds 4000 characters" };
+    }
+
+    const currentChat = conversationId.trim();
+    let target = currentChat;
+    if (config.scope !== "current_chat") {
+      target = input.receiver?.trim() || currentChat;
+    }
+    if (!target) {
+      return { ok: false, content: "Tool error: receiver is required" };
+    }
+    if (
+      config.scope === "allowlist" &&
+      target !== currentChat &&
+      !isReceiverAllowed(target, config.allowlist)
+    ) {
+      return {
+        ok: false,
+        content: "Tool error: receiver is not in the allowed list",
+      };
+    }
+
+    // Only a request that passed scope validation consumes the hourly budget.
+    let bucket = aiSendWindows.get(this.sessionId);
+    if (!bucket) {
+      bucket = [];
+      aiSendWindows.set(this.sessionId, bucket);
+    }
+    if (!consumeSendQuota(bucket, config.maxPerHour)) {
+      return {
+        ok: false,
+        content: "Tool error: hourly send limit reached; tell the customer to try again later",
+      };
+    }
+
+    try {
+      if (target.endsWith("@lid")) {
+        // sendUnifiedMessage formats non-group JIDs as phone numbers, which
+        // would corrupt a @lid conversation. Send to the exact JID instead.
+        const sent = await this.sendMessage(target, { text: input.text });
+        return {
+          ok: true,
+          content: JSON.stringify({
+            ok: true,
+            to: target,
+            messageId: sent?.key?.id ?? null,
+          }),
+        };
+      }
+
+      const sent = await sendUnifiedMessage({
+        from: this.sessionId,
+        receiver: target,
+        type: "text",
+        messages: input.text,
+        isGroup: target.endsWith("@g.us"),
+      });
+      return {
+        ok: true,
+        content: JSON.stringify({
+          ok: true,
+          to: sent.to,
+          messageId: sent.messageId,
+        }),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "send failed";
+      logger.warn("[%s] AI send tool failed: %s", this.sessionId, message);
+      return { ok: false, content: `Tool error: ${message}` };
+    }
+  }
+
   /** Generate a reply, or dispatch the event when the webhook driver is used. */
   private async generateAiReply(input: {
     conversationId: string;
@@ -931,12 +1027,15 @@ export class BaileysConnection {
       return { ok: true, text: null };
     }
 
+    const routingCfg = resolveRoutingConfig(this.options.routing);
     const result = await generateAgentReply({
       sessionId: this.sessionId,
       conversationId: input.conversationId,
       texts: input.texts,
       history: this.buildHistory(input.conversationId, input.texts),
       ai,
+      timezone: routingCfg.timezone,
+      sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
     });
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {

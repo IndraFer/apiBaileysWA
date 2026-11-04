@@ -469,6 +469,12 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           apiKeyHint: stored.apiKey ? maskSecret(stored.apiKey) : "",
           credentialsSet: Object.keys(endpointCredentials).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
+          sendMessage: {
+            enabled: ai.sendMessage?.enabled ?? false,
+            scope: ai.sendMessage?.scope ?? "current_chat",
+            allowlist: ai.sendMessage?.allowlist ?? [],
+            maxPerHour: ai.sendMessage?.maxPerHour ?? 10,
+          },
         },
         defaults: {
           routing: config.routing,
@@ -518,8 +524,17 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     const current = session.getOptions();
 
     const routing: RoutingConfig = { ...(current.routing ?? {}), ...(parsed.data.routing ?? {}) };
-    const { credentialsJson, apiKey, ...aiFields } = parsed.data.ai ?? {};
+    const {
+      credentialsJson,
+      apiKey,
+      sendMessage: sendMessagePatch,
+      ...aiFields
+    } = parsed.data.ai ?? {};
     const ai: AiAgentConfig = { ...(current.ai ?? {}), ...aiFields };
+    if (sendMessagePatch) {
+      // Nested merge: a partial patch must not drop scope/allowlist/maxPerHour.
+      ai.sendMessage = { ...(current.ai?.sendMessage ?? {}), ...sendMessagePatch };
+    }
 
     if (credentialsJson !== undefined || apiKey !== undefined) {
       const stored = readStoredCredentials(current.ai?.credentials);

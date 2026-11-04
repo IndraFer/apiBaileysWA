@@ -80,6 +80,18 @@ export interface RagEndpointConfig {
  * Per-number AI agent configuration.
  * Credentials stay encrypted (see lib/secretBox) and are never returned raw.
  */
+/** Built-in "send a WhatsApp message" tool for the OpenAI-compatible driver. */
+export interface AiSendMessageConfig {
+  /** Default false: the tool is not sent to the model unless enabled. */
+  enabled?: boolean;
+  /** current_chat = only the conversation that triggered the turn. */
+  scope?: "current_chat" | "allowlist" | "any";
+  /** Phone numbers or JIDs allowed when scope is "allowlist". */
+  allowlist?: string[];
+  /** Hard cap per session, sliding one-hour window. */
+  maxPerHour?: number;
+}
+
 export interface AiAgentConfig {
   enabled?: boolean;
   /**
@@ -113,6 +125,8 @@ export interface AiAgentConfig {
   ragEndpoints?: RagEndpointConfig[];
   /** Encrypted JSON blob with per-endpoint credentials and the provider key. */
   credentials?: string;
+  /** Optional built-in send-message tool (default off). */
+  sendMessage?: AiSendMessageConfig;
 }
 
 export interface SessionOptions {

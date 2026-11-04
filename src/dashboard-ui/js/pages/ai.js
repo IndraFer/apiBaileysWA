@@ -320,6 +320,46 @@
         </div>
 
         <div class="card">
+          <div class="card-header"><h3>Send message tool</h3></div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="ai-send-enabled" />
+              Allow AI to send WhatsApp messages
+            </label>
+            <small class="text-muted u-block-mt-035">
+              Adds <code>send_whatsapp_message</code> to the tools on every request.
+              Off by default; the AI can only send plain text.
+            </small>
+          </div>
+          <div id="ai-send-settings" class="hidden">
+            <div class="form-row cols-2">
+              <div class="form-group">
+                <label for="ai-send-scope">Recipient scope</label>
+                <select id="ai-send-scope" class="input">
+                  <option value="current_chat">Current chat only</option>
+                  <option value="allowlist">Allowlist (plus current chat)</option>
+                  <option value="any">Any recipient</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ai-send-max">Max sends per hour</label>
+                <input id="ai-send-max" class="input" type="number" min="1" max="200" step="1" value="10" />
+              </div>
+            </div>
+            <div class="form-group" id="ai-send-allowlist-wrap">
+              <label for="ai-send-allowlist">Allowed recipients</label>
+              <textarea id="ai-send-allowlist" class="input" rows="4"
+                placeholder="628123456789&#10;628987654321"></textarea>
+              <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
+            </div>
+            <small class="text-muted">
+              The current conversation is always allowed. Group sends still obey
+              <code>ALLOW_GROUP_SEND</code>. Rate limit is enforced server-side.
+            </small>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-header"><h3>Knowledge endpoints</h3></div>
           <div class="form-group">
             <div class="flex gap-1 u-between-center u-mb-05">
@@ -386,6 +426,12 @@
         const hint = document.getElementById("ai-mode-hint");
         if (hint) hint.textContent = MODE_HINTS[event.target.value] || "";
       });
+      document.getElementById("ai-send-enabled")?.addEventListener("change", () => {
+        this.syncSendMessageUi();
+      });
+      document.getElementById("ai-send-scope")?.addEventListener("change", () => {
+        this.syncSendMessageUi();
+      });
 
       await Promise.all([this.loadConfig(), this.loadMetrics()]);
     },
@@ -425,6 +471,14 @@
       set("ai-instruction", ai.systemInstruction || "");
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
+      const sendMessage = ai.sendMessage || {};
+      const sendEnabled = document.getElementById("ai-send-enabled");
+      if (sendEnabled) sendEnabled.checked = Boolean(sendMessage.enabled);
+      set("ai-send-scope", sendMessage.scope || "current_chat");
+      set("ai-send-allowlist", (sendMessage.allowlist || []).join("\n"));
+      set("ai-send-max", sendMessage.maxPerHour ?? 10);
+      this.syncSendMessageUi();
+
       const credentials = document.getElementById("ai-credentials");
       if (credentials) credentials.value = "";
       const apiKeyField = document.getElementById("ai-api-key");
@@ -447,6 +501,16 @@
       const modeHint = document.getElementById("ai-mode-hint");
       if (modeHint) modeHint.textContent = MODE_HINTS[ai.mode || "window"] || "";
       this.renderChain();
+    },
+
+    /** Keep the send-tool fields consistent with the toggle/scope. */
+    syncSendMessageUi() {
+      const enabled = Boolean(document.getElementById("ai-send-enabled")?.checked);
+      const scope = document.getElementById("ai-send-scope")?.value || "current_chat";
+      document.getElementById("ai-send-settings")?.classList.toggle("hidden", !enabled);
+      document
+        .getElementById("ai-send-allowlist-wrap")
+        ?.classList.toggle("hidden", scope !== "allowlist");
     },
 
     /** Show the responder chain that will actually run for this number. */
@@ -569,6 +633,15 @@
           maxTokens: num("ai-max-tokens", 1024),
           systemInstruction: value("ai-instruction"),
           ragEndpoints: endpoints,
+          sendMessage: {
+            enabled: Boolean(document.getElementById("ai-send-enabled")?.checked),
+            scope: value("ai-send-scope") || "current_chat",
+            allowlist: value("ai-send-allowlist")
+              .split(/[\n,]+/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
+            maxPerHour: Math.min(Math.max(Number(value("ai-send-max")) || 10, 1), 200),
+          },
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),
         },

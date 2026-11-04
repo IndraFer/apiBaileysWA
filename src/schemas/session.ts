@@ -113,6 +113,15 @@ export const ragEndpointSchema = z
  * `credentialsJson` is plaintext on the wire only; it is encrypted before it
  * is written to session metadata and is never returned by the API.
  */
+export const aiSendMessageSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    scope: z.enum(["current_chat", "allowlist", "any"]).optional(),
+    allowlist: z.array(z.string().trim().min(3).max(64)).max(100).optional(),
+    maxPerHour: z.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
 export const aiConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -133,6 +142,7 @@ export const aiConfigSchema = z
     systemInstruction: z.string().max(8000).optional(),
     ragEndpoints: z.array(ragEndpointSchema).max(20).optional(),
     credentialsJson: z.string().max(8000).optional(),
+    sendMessage: aiSendMessageSchema.optional(),
   })
   .strict();
 
