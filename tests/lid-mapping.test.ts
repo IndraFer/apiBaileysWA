@@ -84,6 +84,8 @@ test("saved contact name wins from either PN or LID record", async () => {
 
   const chat = store.getChatList(false)[0];
   expect(chat?.contactName).toBe("Saved Contact Name");
+  expect(chat?.phoneNumber).toBe("628123456789");
+  expect(chat?.lid).toBe(lid);
   await store.destroy();
   rmSync("sessions/lid-contact-name_store.json", { force: true });
 });

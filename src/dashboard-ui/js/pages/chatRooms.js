@@ -144,6 +144,33 @@
     return jidPhoneOnly(jid) || String(jid);
   }
 
+  function chatIdentity(jid) {
+    const target = normalizeJid(jid);
+    const chat = chatCache.find((entry) => normalizeJid(entry.id) === target);
+    const foundName = String(
+      chat?.contactName || chat?.name || chat?.notify || chat?.pushName || "",
+    ).trim();
+    const phone = String(
+      chat?.phoneNumber ||
+        (String(jid).endsWith("@s.whatsapp.net")
+          ? String(jid).slice(0, -"@s.whatsapp.net".length)
+          : ""),
+    ).trim();
+    const lid = String(chat?.lid || (String(jid).endsWith("@lid") ? jid : "")).trim();
+
+    let title;
+    if (foundName && phone) title = `${foundName} (${phone})`;
+    else if (foundName && foundName !== lid) title = foundName;
+    else if (phone) title = phone;
+    else if (lid) title = lid;
+    else title = displayNameForJid(jid);
+
+    // Only show the LID label when a real contact name is the title and the
+    // title itself is not already the LID.
+    const showLid = Boolean(lid) && Boolean(foundName) && title !== lid;
+    return { title, lid: showLid ? lid : "" };
+  }
+
   function renderTextWithMarkdown(raw) {
     // WhatsApp-first parser with safe Markdown enrichment; see lib/messageFormat.js.
     return window.MessageFormat?.render(raw) ?? escapeHtml(raw);
@@ -1441,7 +1468,8 @@
       const main = document.getElementById("chatrooms-main");
       if (!main) return;
 
-      const jidLabel = displayNameForJid(jid);
+      const identity = chatIdentity(jid);
+      const jidLabel = identity.title;
       const isGroupMode = selectedMode === "groups";
       UI.setHtml(
         main,
@@ -1449,7 +1477,7 @@
         <div class="chatroom-header">
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
-            <p class="text-sm text-muted">Session: ${selectedSessionId}</p>
+            <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(selectedSessionId)}</p>
 						<span class="chatroom-read-status is-hidden" id="chatroom-read-status"></span>
 						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
           </div>

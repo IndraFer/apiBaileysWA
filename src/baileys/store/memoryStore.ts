@@ -330,7 +330,19 @@ export class MemoryStore extends EventEmitter {
         .map((contact) => String(contact.verifiedName || "").trim())
         .find(Boolean);
       const contactName = savedName || pushName || verifiedName || "";
-      return contactName ? { ...chat, contactName } : chat;
+      const pn = id.endsWith("@s.whatsapp.net")
+        ? id
+        : id.endsWith("@lid")
+          ? this.lidToPn.get(id) || ""
+          : "";
+      const lid = id.endsWith("@lid") ? id : this.pnToLid.get(id) || "";
+      const phoneNumber = pn ? pn.slice(0, -"@s.whatsapp.net".length) : "";
+      return {
+        ...chat,
+        ...(contactName ? { contactName } : {}),
+        ...(lid ? { lid } : {}),
+        ...(phoneNumber ? { phoneNumber } : {}),
+      };
     };
 
     if (isGroup) {
