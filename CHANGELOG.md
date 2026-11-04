@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.1] - 2026-11-04
+
+### Added
+
+- prefer contact name, then phone, then LID for rooms
+
 ## [1.31.0] - 2026-11-04
 
 ### Added
