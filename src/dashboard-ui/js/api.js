@@ -42,7 +42,8 @@
         res.status === 401 &&
         path !== "/auth/login" &&
         path !== "/auth/register" &&
-        path !== "/auth/status"
+        path !== "/auth/status" &&
+        path !== "/auth/me"
       ) {
         this.clearToken();
         window.App?.showAuth();

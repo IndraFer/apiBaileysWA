@@ -160,14 +160,13 @@
         Toast.info("Logged out");
       });
 
-      // Check auth
-      const token = API.getToken();
-      if (token) {
-        const result = await API.get("/auth/me");
-        if (result.success) {
-          await this.showDashboard(result.data);
-          return;
-        }
+      // Check auth. The HttpOnly cookie is the source of truth; memoryToken is
+      // empty after a refresh, so gating this on API.getToken() forced a
+      // spurious re-login on every reload.
+      const result = await API.get("/auth/me");
+      if (result.success) {
+        await this.showDashboard(result.data);
+        return;
       }
       this.showAuth();
     },
