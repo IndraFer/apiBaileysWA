@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-11-04
+
+### Added
+
+- assistant settings, limited group/messaging access and matrix polish
+
 ## [1.26.1] - 2026-11-04
 
 ### Fixed
