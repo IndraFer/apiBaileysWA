@@ -365,15 +365,11 @@
               </small>
             </div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header"><h3>Message Filters</h3></div>
           <label class="toggle-row">
             <input type="checkbox" id="otp-filter-enabled" class="toggle-input" />
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-copy">
-              <strong>Ignore OTP / Verification Messages</strong>
+              <strong>Message Filter / Ignore OTP / Verification Messages</strong>
               <small>Skips AI and static auto-replies for matching messages. Messages are still stored, and webhooks still fire.</small>
             </span>
           </label>

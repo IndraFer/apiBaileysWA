@@ -1583,6 +1583,43 @@ dashboardApi.post("/groups/:sessionId/create", async (c) => {
 });
 
 /**
+ * POST /dashboard/api/groups/:sessionId/leave-and-delete/:jid
+ * Leave a group and remove its chat locally and on WhatsApp.
+ */
+dashboardApi.post("/groups/:sessionId/leave-and-delete/:jid", async (c) => {
+  const denied = requireCapability(c, "manageGroups");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const rawJid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const { formatGroup } = await import("@/utils/phone");
+    const jid = formatGroup(rawJid);
+    const session = connectionManager.getSession(sessionId);
+    const store = session.getStore();
+    const lastMessages = store
+      .loadMessages(jid, 5)
+      .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
+
+    if (lastMessages.length > 0) {
+      try {
+        await session.chatModify({ delete: true, lastMessages }, jid);
+      } catch {
+        // Leaving still proceeds; local cleanup is below.
+      }
+    }
+
+    await session.groupLeave(jid);
+    store.deleteChat(jid);
+    return c.json({ success: true, message: "Left and deleted the group", data: { jid } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
  * GET /dashboard/api/events/stream
  * SSE endpoint for real-time event monitoring.
  */

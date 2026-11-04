@@ -4,6 +4,8 @@
   let selectedJid = "";
   let selectedMode = "personal";
   let chatCache = [];
+  let groupInventoryCache = { sessionId: "", at: 0, groups: [] };
+  const GROUP_INVENTORY_TTL_MS = 5 * 60 * 1000;
   let refreshTimer = null;
   let eventSource = null;
   let activeSelfJid = "";
@@ -96,6 +98,18 @@
     return normalizeJid(jid)
       .replace(/@s\.whatsapp\.net$/, "")
       .replace(/@g\.us$/, "");
+  }
+
+  function currentDashboardUser() {
+    try {
+      return JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function can(capability) {
+    return Boolean(window.App?.hasCapability?.(currentDashboardUser(), capability));
   }
 
   function escapeHtml(value) {
@@ -234,19 +248,73 @@
   function openChatMenu(anchor, jid) {
     closeChatMenu();
 
+    const isGroup = isGroupJid(jid) || selectedMode === "groups";
+    const canClear = can("manageSessions");
+    const canManageGroup = can("manageGroups");
+    const items = [
+      {
+        action: "reload",
+        label: "Reload",
+        icon: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
+      },
+      ...(isGroup
+        ? [
+            {
+              action: "members",
+              label: "Members",
+              icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+            },
+          ]
+        : []),
+      {
+        action: "read",
+        label: "Mark Read",
+        icon: '<polyline points="20 6 9 17 4 12"/>',
+      },
+      ...(canClear
+        ? [
+            {
+              action: "clear",
+              label: "Clear Chat",
+              icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>',
+            },
+          ]
+        : []),
+      ...(isGroup && canManageGroup
+        ? [
+            {
+              action: "exit",
+              label: "Exit & Delete",
+              danger: true,
+              icon: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+            },
+          ]
+        : []),
+      ...(!isGroup && canClear
+        ? [
+            {
+              action: "delete",
+              label: "Delete Chat",
+              danger: true,
+              icon: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+            },
+          ]
+        : []),
+    ];
+
     const rect = anchor.getBoundingClientRect();
     const menu = document.createElement("div");
     menu.className = "chat-action-menu";
     UI.setHtml(
       menu,
-      `
-      <button type="button" class="chat-action-item" data-action="reload"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg><span>Reload</span></button>
-      <button type="button" class="chat-action-item" data-action="read"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Mark Read</span></button>
-      <button type="button" class="chat-action-item" data-action="clear"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg><span>Clear Chat</span></button>
-      <button type="button" class="chat-action-item chat-action-danger" data-action="delete"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span>Delete Chat</span></button>
-    `,
+      items
+        .map(
+          (item) =>
+            `<button type="button" class="chat-action-item ${item.danger ? "chat-action-danger" : ""}" data-action="${item.action}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${item.icon}</svg><span>${item.label}</span></button>`,
+        )
+        .join(""),
     );
-    menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 200)}px`;
+    menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - (items.length * 42 + 20))}px`;
     menu.style.left = `${Math.min(rect.left, window.innerWidth - 190)}px`;
     document.body.appendChild(menu);
     chatMenuElement = menu;
@@ -285,8 +353,43 @@
       return;
     }
 
+    if (action === "members") {
+      await page.showGroupMembers(jid);
+      return;
+    }
+
     if (action === "read") {
       await page.markRoomAsRead(jid, true, true);
+      return;
+    }
+
+    if (action === "exit") {
+      const confirmed = await window.Modal.confirm(
+        "Exit & Delete Group",
+        `Leave this group and delete its chat on WhatsApp and in the dashboard?<br><br><strong>${escapeHtml(jidPhoneOnly(jid))}</strong><br><br>You will stop receiving messages from this group. This cannot be undone.`,
+        { confirmText: "Exit & delete", variant: "danger" },
+      );
+      if (!confirmed) return;
+
+      const result = await API.post(
+        `/groups/${encodeURIComponent(selectedSessionId)}/leave-and-delete/${encodeURIComponent(jid)}`,
+        {},
+      );
+      if (!result.success) {
+        Toast.error(result.message || "Failed to exit the group");
+        return;
+      }
+
+      groupInventoryCache.at = 0;
+      Toast.success("Left and deleted the group");
+      if (jid === selectedJid) {
+        selectedJid = "";
+        UI.setHtml(
+          document.getElementById("chatroom-messages"),
+          '<div class="chatrooms-empty">Group left and deleted.</div>',
+        );
+      }
+      await page.loadChatList(true, true);
       return;
     }
 
@@ -297,7 +400,7 @@
         isClear
           ? "Clear this chat's history on WhatsApp and in the dashboard?"
           : "Delete this chat on WhatsApp and in the dashboard?"
-      }<br><br><strong>${escapeHtml(jid)}</strong><br><br>${
+      }<br><br><strong>${escapeHtml(jidPhoneOnly(jid))}</strong><br><br>${
         isClear
           ? "This cannot be undone."
           : "The chat and its history will be removed. This cannot be undone."
@@ -534,6 +637,7 @@
 							<div class="chatrooms-action-buttons">
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
+							${can("manageGroups") ? '<button class="btn btn-outline btn-sm hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
 							</div>
 							
 							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
@@ -603,7 +707,10 @@
             b.classList.remove("active");
           });
           btn.classList.add("active");
-          await this.loadChatList();
+          document
+            .getElementById("chatrooms-create-group")
+            ?.classList.toggle("hidden", selectedMode !== "groups");
+          await this.loadChatList(true, true);
         });
       });
 
@@ -616,7 +723,7 @@
         );
         activeSelfJid = normalizeJid(currentSession?.user?.id || "");
         activeSelfLid = normalizeJid(currentSession?.user?.lid || "");
-        await this.loadChatList();
+        await this.loadChatList(true, true);
       });
 
       searchInput.addEventListener("input", async () => {
@@ -624,7 +731,7 @@
       });
 
       refreshBtn.addEventListener("click", async () => {
-        await this.loadChatList();
+        await this.loadChatList(true, selectedMode === "groups");
         if (selectedJid) {
           await this.loadConversation(selectedJid);
         }
@@ -681,7 +788,14 @@
         await this.loadChatList(false);
       });
 
-      await this.loadChatList();
+      document.getElementById("chatrooms-create-group")?.addEventListener("click", () => {
+        this.showCreateGroupModal();
+      });
+      document
+        .getElementById("chatrooms-create-group")
+        ?.classList.toggle("hidden", selectedMode !== "groups");
+
+      await this.loadChatList(true, selectedMode === "groups");
       this.bindPollingLifecycle();
       this.startPolling();
       this.startPresenceStream();
@@ -904,7 +1018,23 @@
       return (result.data || []).filter((s) => s.connected);
     },
 
-    async loadChatList(showToastOnError = true) {
+    async loadGroupInventory(force = false) {
+      const now = Date.now();
+      if (
+        !force &&
+        groupInventoryCache.sessionId === selectedSessionId &&
+        now - groupInventoryCache.at < GROUP_INVENTORY_TTL_MS
+      ) {
+        return groupInventoryCache.groups;
+      }
+
+      const result = await API.get(`/groups/${encodeURIComponent(selectedSessionId)}/list`);
+      const groups = result.success ? result.data || [] : [];
+      groupInventoryCache = { sessionId: selectedSessionId, at: now, groups };
+      return groups;
+    },
+
+    async loadChatList(showToastOnError = true, forceGroupInventory = false) {
       if (!selectedSessionId) return;
       const searchInput = document.getElementById("chatrooms-search");
       const query = (searchInput?.value || "").trim().toLowerCase();
@@ -918,14 +1048,48 @@
         return;
       }
 
-      chatCache = (result.data || [])
+      const localChats = (result.data || [])
         .filter((chat) => (isGroupMode ? isGroupJid(chat.id) : isOneToOneJid(chat.id)))
         .filter((chat) => normalizeJid(chat.id) !== normalizeJid(activeSelfJid))
         .filter((chat) => !activeSelfLid || normalizeJid(chat.id) !== normalizeJid(activeSelfLid))
-        .filter((chat) => normalizeJid(chat.id) !== "status@broadcast")
-        .sort(
-          (a, b) => Number(b.conversationTimestamp || 0) - Number(a.conversationTimestamp || 0),
-        );
+        .filter((chat) => normalizeJid(chat.id) !== "status@broadcast");
+
+      let chats = localChats;
+      if (isGroupMode) {
+        // Local chats are shown first; the WhatsApp inventory adds groups that
+        // have no message history/room yet. Fetched once per session/tab, not
+        // on every poll.
+        const inventory = await this.loadGroupInventory(forceGroupInventory);
+        const merged = new Map(localChats.map((chat) => [normalizeJid(chat.id), chat]));
+        for (const group of inventory) {
+          const id = String(group.id || group.jid || "");
+          if (!isGroupJid(id)) continue;
+          const key = normalizeJid(id);
+          if (merged.has(key)) continue;
+          merged.set(key, {
+            id,
+            subject: group.subject || group.name || "",
+            name: group.subject || group.name || "",
+            participants: group.participants || [],
+            size: group.size,
+            conversationTimestamp: 0,
+            inventoryOnly: true,
+          });
+        }
+        chats = [...merged.values()];
+      }
+
+      const timestamp = (chat) => Number(chat.conversationTimestamp || 0);
+      chatCache = chats.sort((a, b) => {
+        const at = timestamp(a);
+        const bt = timestamp(b);
+        if (at === 0 && bt === 0) {
+          return normalizeContactName(a).localeCompare(normalizeContactName(b));
+        }
+        if (at === 0) return 1;
+        if (bt === 0) return -1;
+        return bt - at;
+      });
 
       if (selectedJid) {
         chatCache = chatCache.map((chat) =>
@@ -952,7 +1116,7 @@
           query
             ? '<div class="chatrooms-empty">No chat matched your search.</div>'
             : selectedMode === "groups"
-              ? '<div class="chatrooms-empty">No group chat found in store yet.</div>'
+              ? '<div class="chatrooms-empty">No groups found for this session.</div>'
               : '<div class="chatrooms-empty">No 1-on-1 chat found in store yet.</div>',
         );
         UI.setHtml(
@@ -971,9 +1135,11 @@
             const unread = Number(chat.unreadCount || 0);
             const time = formatMessageTime(chat.conversationTimestamp);
             const active = jid === selectedJid ? "active" : "";
-            const subtitle = chat.lastMessageRecvTimestamp
-              ? `Last activity: ${formatMessageTime(chat.lastMessageRecvTimestamp)}`
-              : "Open room to load messages";
+            const subtitle = chat.inventoryOnly
+              ? "Group · No local messages yet"
+              : chat.lastMessageRecvTimestamp
+                ? `Last activity: ${formatMessageTime(chat.lastMessageRecvTimestamp)}`
+                : "Open room to load messages";
             return `
             <div class="chatroom-row">
               <button class="chatroom-item ${active}" data-jid="${jid}">
@@ -1153,16 +1319,78 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     },
 
-    async loadGroupMembers(jid) {
-      const panel = document.getElementById("group-members-panel");
-      if (!panel) return;
-      UI.setHtml(panel, '<div class="text-sm text-muted">Loading members...</div>');
+    showCreateGroupModal() {
+      if (!can("manageGroups")) {
+        Toast.warning("Your role cannot create groups");
+        return;
+      }
+      if (!selectedSessionId) {
+        Toast.warning("Select a session first");
+        return;
+      }
+
+      Modal.show(
+        "Create Group",
+        `
+        <form id="chatrooms-create-group-form">
+          <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="chatrooms-group-name" required autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Participants (Comma-Separated Phones)</label>
+            <input type="text" id="chatrooms-group-participants" placeholder="6281234567890,6281234567891" required autocomplete="off" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Create</button>
+        </form>`,
+      );
+
+      document
+        .getElementById("chatrooms-create-group-form")
+        .addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const groupName = document.getElementById("chatrooms-group-name").value.trim();
+          const participants = document
+            .getElementById("chatrooms-group-participants")
+            .value.split(",")
+            .map((participant) => participant.trim())
+            .filter(Boolean);
+          if (!groupName || participants.length === 0) {
+            Toast.warning("Group name and at least one participant are required");
+            return;
+          }
+
+          const result = await API.post(`/groups/${encodeURIComponent(selectedSessionId)}/create`, {
+            groupName,
+            participants,
+          });
+          if (!result.success) {
+            Toast.error(result.message || "Failed to create group");
+            return;
+          }
+
+          groupInventoryCache.at = 0;
+          Modal.hide();
+          Toast.success("Group created");
+          await this.loadChatList(true, true);
+        });
+    },
+
+    async showGroupMembers(jid) {
+      Modal.show(
+        "Group Members",
+        '<div id="group-members-modal-body" class="text-sm text-muted">Loading members...</div>',
+      );
+
       const result = await API.get(
         `/sessions/${encodeURIComponent(selectedSessionId)}/groups/${encodeURIComponent(jid)}/members`,
       );
+      const body = document.getElementById("group-members-modal-body");
+      if (!body) return;
+
       if (!result.success) {
         UI.setHtml(
-          panel,
+          body,
           `<div class="text-sm text-danger">${escapeHtml(result.message || "Failed to load members")}</div>`,
         );
         return;
@@ -1170,12 +1398,12 @@
 
       const members = result.data?.participants || [];
       if (!members.length) {
-        UI.setHtml(panel, '<div class="text-sm text-muted">No members metadata available.</div>');
+        UI.setHtml(body, '<div class="text-sm text-muted">No members metadata available.</div>');
         return;
       }
 
       UI.setHtml(
-        panel,
+        body,
         `
         <div class="group-members-count">Members: ${members.length}</div>
         <div class="group-members-list">
@@ -1213,7 +1441,6 @@
             <button class="btn btn-outline btn-sm chat-menu-trigger" id="chatroom-menu" type="button" title="Chat actions">⋯</button>
           </div>
         </div>
-        ${isGroupMode ? '<div class="group-members-panel" id="group-members-panel"></div>' : ""}
         <div class="chatroom-messages" id="chatroom-messages"><div class="chatrooms-empty">Loading messages...</div></div>
         <form class="chatroom-input" id="chatroom-send-form">
           <input type="text" id="chatroom-text" placeholder="Type a message for this room..." autocomplete="off" maxlength="2000" />
@@ -1228,7 +1455,7 @@
 
       if (isGroupMode) {
         document.getElementById("chatroom-load-members").addEventListener("click", async () => {
-          await this.loadGroupMembers(jid);
+          await this.showGroupMembers(jid);
         });
       }
 

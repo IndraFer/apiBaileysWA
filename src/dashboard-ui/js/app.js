@@ -66,12 +66,6 @@
       render: () => ChatRoomsPage.render(),
       destroy: () => ChatRoomsPage.destroy?.(),
     },
-    groups: {
-      title: "Groups",
-      requires: "viewGroups",
-      needsSession: true,
-      render: () => GroupsPage.render(),
-    },
     webhooks: {
       title: "Webhooks",
       requires: "manageWebhooks",
