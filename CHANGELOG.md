@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.25.2] - 2026-11-04
+
+### Changed
+
+- compact module-level permission matrix
+
 ## [1.25.1] - 2026-11-04
 
 ### Fixed
