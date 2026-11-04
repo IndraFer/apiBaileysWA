@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.4] - 2026-11-04
+
+### Added
+
+- valid JSON header snippet and key prefixes
+
 ## [1.27.3] - 2026-11-04
 
 ### Fixed
