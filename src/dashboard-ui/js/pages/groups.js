@@ -1,5 +1,14 @@
 /** Groups Page */
 (() => {
+  function canManageGroups() {
+    try {
+      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      return Boolean(window.App?.hasCapability?.(user, "manageGroups"));
+    } catch {
+      return false;
+    }
+  }
+
   window.GroupsPage = {
     async render() {
       const sessions = await this.getSessions();
@@ -15,7 +24,7 @@
             <select id="group-session">${opts || "<option disabled>No sessions</option>"}</select>
           </div>
           <button class="btn btn-primary btn-sm" id="btn-load-groups">Load Groups</button>
-          <button class="btn btn-outline btn-sm" id="btn-create-group">+ Create Group</button>
+          ${canManageGroups() ? '<button class="btn btn-outline btn-sm" id="btn-create-group">+ Create Group</button>' : ""}
         </div>
         <div id="groups-list"><div class="empty-state"><p class="text-muted">Select a session and click "Load Groups"</p></div></div>`,
       );
@@ -23,7 +32,7 @@
       document.getElementById("btn-load-groups").addEventListener("click", () => this.loadGroups());
       document
         .getElementById("btn-create-group")
-        .addEventListener("click", () => this.showCreateModal());
+        ?.addEventListener("click", () => this.showCreateModal());
     },
 
     async loadGroups() {
@@ -62,8 +71,12 @@
             <td class="text-muted font-mono text-xs">${UI.escapeHtml(jid)}</td>
             <td>${UI.escapeHtml(g.size || g.participants?.length || "—")}</td>
             <td class="u-text-right">
-              <button class="btn btn-outline btn-sm" data-group-clear="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Clear Chat</button>
-              <button class="btn btn-outline-danger btn-sm" data-group-exit="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Exit &amp; Delete</button>
+              ${
+                canManageGroups()
+                  ? `<button class="btn btn-outline btn-sm" data-group-clear="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Clear Chat</button>
+                     <button class="btn btn-outline-danger btn-sm" data-group-exit="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Exit &amp; Delete</button>`
+                  : '<span class="text-muted text-xs">View only</span>'
+              }
             </td>
           </tr>`;
           })

@@ -50,7 +50,7 @@
           manager:
             "Handles assigned sessions: reconnect, session settings, webhooks, AI routing and REST API keys. Cannot create or delete sessions, or manage users.",
           assistant:
-            "Chat and group support only: replies in assigned sessions. No session management, AI, webhooks, REST API or settings page.",
+            "Chat and group support in assigned sessions. Settings is limited to your account/password and About; no role or system controls.",
         }[role] || "Limited operational access.";
 
       const perm = (kind, tip = "") => {
@@ -69,72 +69,38 @@
             "limited",
             "Assigned sessions only (or All Sessions when granted). Reconnect and edit settings; create/delete stay admin-only.",
           ),
-          perm("deny", "No Sessions page; chat access is limited to Chat Rooms."),
+          perm("deny"),
         ],
-        [
-          "Chat Rooms",
-          perm("allow"),
-          perm(
-            "limited",
-            "Assigned sessions only. Replies, outbound and group conversations are available.",
-          ),
-          perm("limited", "Assigned sessions only. Chat and group replies; no session controls."),
-        ],
+        ["Chat Rooms", perm("allow"), perm("allow"), perm("allow")],
         [
           "Groups",
           perm("allow"),
-          perm("limited", "Assigned sessions only. Full group management for those sessions."),
+          perm("allow"),
           perm(
-            "deny",
-            "No Groups management page. Group conversations remain available in Chat Rooms.",
+            "limited",
+            "Assigned groups are visible; create, clear and exit/delete remain manager/admin actions.",
           ),
         ],
         [
           "Messaging",
           perm("allow"),
-          perm("limited", "Assigned sessions only. Proactive outbound is enabled."),
-          perm("deny", "Reply-only; no proactive outbound page."),
-        ],
-        [
-          "AI & Routing",
           perm("allow"),
-          perm(
-            "limited",
-            "Assigned sessions only. No global metrics or settings for other sessions.",
-          ),
-          perm("deny", "AI routes are restricted to manager/admin roles."),
+          perm("limited", "Single messages allowed; Bulk Send is hidden for assistants."),
         ],
-        [
-          "Webhooks",
-          perm("allow"),
-          perm("limited", "Assigned sessions only. Global clear/reset actions remain admin-only."),
-          perm("deny", "Webhook configuration is restricted."),
-        ],
-        [
-          "REST API",
-          perm("allow"),
-          perm(
-            "limited",
-            "Keys and audit log are limited to assigned sessions; all-session keys are hidden.",
-          ),
-          perm("deny", "No REST API or key management."),
-        ],
-        [
-          "Events",
-          perm("allow"),
-          perm("limited", "Only events belonging to assigned sessions."),
-          perm("deny", "Event monitor is restricted."),
-        ],
+        ["AI & Routing", perm("allow"), perm("allow"), perm("deny")],
+        ["Webhooks", perm("allow"), perm("allow"), perm("deny")],
+        ["REST API", perm("allow"), perm("allow"), perm("deny")],
+        ["Events", perm("allow"), perm("allow"), perm("deny")],
         [
           "Settings",
           perm("allow"),
+          perm("allow"),
           perm(
             "limited",
-            "Account, password and this matrix; user and role management stay admin-only.",
+            "Account password and About only; role permissions and quick actions are hidden.",
           ),
-          perm("deny", "No Settings page."),
         ],
-        ["User management", perm("allow"), perm("deny"), perm("deny")],
+        ["User Management", perm("allow"), perm("deny"), perm("deny")],
       ];
 
       UI.setHtml(
@@ -154,7 +120,7 @@
           </button>
         </div>
 
-		<div class="card mb-2">
+		<div class="card mb-2 ${role === "assistant" ? "hidden" : ""}">
 		  <div class="card-header ui-between">
 			<h3>Role Permissions</h3>
 			${user.role === "admin" ? `<button class="btn btn-outline btn-sm" id="btn-show-users-modal"><span class="u-mr-035">👥</span>Users, Approvals & Roles</button>` : ""}
@@ -184,7 +150,7 @@
 		  </div>
 		</div>
 
-        <div class="card mb-2">
+        <div class="card mb-2 ${role === "assistant" ? "hidden" : ""}">
           <div class="card-header"><h3>Quick Actions</h3></div>
           <div class="flex gap-2 u-flex-wrap">
             <a href="/docs" target="_blank" class="btn btn-outline">📖 Swagger Docs</a>

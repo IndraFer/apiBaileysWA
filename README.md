@@ -725,10 +725,12 @@ CSP_REPORT_ONLY=false
   **All Sessions**). Can reconnect, edit session settings, manage webhooks, AI
   routing and REST keys **for those sessions only**, plus chats/groups/outbound.
   Cannot create or delete sessions and has no account/user controls.
-- `assistant`: **only assigned sessions**, chat/group support only. No Sessions
-  page, AI, webhooks, REST API, events or Settings page; an empty assignment
-  grants no session at all, so unassigned numbers never appear in dashboard or
-  API responses.
+- `assistant`: **only assigned sessions**, chat/group support with single-message
+  outbound (Bulk Send is hidden). Can open Groups in view-only mode and Settings
+  for account/password and About; role permissions, quick actions, Sessions, AI,
+  webhooks, REST API, events and user management stay hidden. An empty
+  assignment grants no session at all, so unassigned numbers never appear in
+  dashboard or API responses.
 - Session creation/deletion is admin-only. Managers receive a **Reconnect**
   action for disconnected assigned sessions; reconnect preserves persisted
   webhook/AI/routing settings and never deletes credentials.

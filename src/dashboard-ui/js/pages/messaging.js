@@ -1,5 +1,14 @@
 /** Messaging Page — send text, image, file, bulk messages */
 (() => {
+  function canSendBulk() {
+    try {
+      const user = JSON.parse(localStorage.getItem("wa-dashboard-user") || "{}");
+      return Boolean(window.App?.hasCapability?.(user, "sendBulk"));
+    } catch {
+      return false;
+    }
+  }
+
   window.MessagingPage = {
     async render() {
       const sessions = await this.getSessions();
@@ -58,7 +67,7 @@
           </form>
         </div>
 
-        <div class="card">
+        <div class="card ${canSendBulk() ? "" : "hidden"}">
           <div class="card-header"><h3>Bulk Send</h3></div>
           <form id="bulk-msg-form">
             <div class="form-group">
@@ -130,7 +139,7 @@
       });
 
       // Bulk send
-      document.getElementById("bulk-msg-form").addEventListener("submit", async (e) => {
+      document.getElementById("bulk-msg-form")?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const session = document.getElementById("bulk-session").value;
         const lines = document.getElementById("bulk-data").value.trim().split("\n").filter(Boolean);

@@ -11,11 +11,13 @@
       "sendOutbound",
       "replyIncoming",
       "manageGroups",
+      "viewGroups",
       "manageWebhooks",
       "manageApiKeys",
       "viewSettings",
       "viewEvents",
       "manageEvents",
+      "sendBulk",
     ]),
     manager: new Set([
       "viewSessions",
@@ -25,12 +27,21 @@
       "sendOutbound",
       "replyIncoming",
       "manageGroups",
+      "viewGroups",
       "manageWebhooks",
       "manageApiKeys",
       "viewSettings",
       "viewEvents",
+      "sendBulk",
     ]),
-    assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
+    assistant: new Set([
+      "viewSessions",
+      "viewChats",
+      "replyIncoming",
+      "sendOutbound",
+      "viewGroups",
+      "viewSettings",
+    ]),
   };
 
   const pages = {
@@ -57,7 +68,7 @@
     },
     groups: {
       title: "Groups",
-      requires: "manageGroups",
+      requires: "viewGroups",
       needsSession: true,
       render: () => GroupsPage.render(),
     },

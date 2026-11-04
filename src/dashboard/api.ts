@@ -68,6 +68,7 @@ type DashboardCapability =
   | "viewSettings"
   | "viewEvents"
   | "viewSessions"
+  | "viewGroups"
   | "viewChats"
   | "sendOutbound"
   | "replyIncoming"
@@ -89,6 +90,7 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "sendOutbound",
     "replyIncoming",
     "manageGroups",
+    "viewGroups",
     "manageEvents",
   ]),
   manager: new Set([
@@ -103,8 +105,16 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "sendOutbound",
     "replyIncoming",
     "manageGroups",
+    "viewGroups",
   ]),
-  assistant: new Set(["viewSessions", "viewChats", "replyIncoming"]),
+  assistant: new Set([
+    "viewSessions",
+    "viewChats",
+    "replyIncoming",
+    "sendOutbound",
+    "viewGroups",
+    "viewSettings",
+  ]),
 };
 
 function getDashboardUserPayload(c: Context): DashboardUserPayload {
