@@ -632,10 +632,9 @@
         return;
       }
 
-      const sessionIds = (sessionsRes.success ? sessionsRes.data : [])
-        .map((session) => String(session.sessionId || ""))
-        .filter(Boolean)
-        .sort((left, right) => left.localeCompare(right));
+      const sessions = (sessionsRes.success ? sessionsRes.data : [])
+        .filter((session) => session.sessionId)
+        .sort((left, right) => String(left.sessionId).localeCompare(String(right.sessionId)));
 
       let html = `
                 <tr>
@@ -653,14 +652,29 @@
         const date = new Date(u.createdAt).toLocaleDateString();
         const assignedSessions = Array.isArray(u.assignedSessions) ? u.assignedSessions : [];
         const assignedSummary = this.formatAssignedSessionsSummary(assignedSessions);
-        const sessionSelector = sessionIds.length
-          ? sessionIds
-              .map((sessionId) => {
+        const sessionSelector = sessions.length
+          ? sessions
+              .map((session) => {
+                const sessionId = String(session.sessionId);
                 const checked = assignedSessions.includes(sessionId) ? "checked" : "";
+                const user = session.user || {};
+                const phone = String(user.id || user.lid || "")
+                  .split("@")[0]
+                  .trim();
+                const lastActiveAt = Number(session.lastActiveAt || 0);
+                const lastActive =
+                  lastActiveAt > 0 ? new Date(lastActiveAt).toLocaleString() : "No activity yet";
+                const connected = Boolean(session.connected);
                 return `
-									<label class="ui-list-row">
+									<label class="session-assign-row">
 										<input type="checkbox" class="user-session-option" data-user-id="${escapeHtml(u.id)}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
-										<span class="text-sm u-break-all">${escapeHtml(sessionId)}</span>
+										<span class="session-assign-info">
+											<span class="session-assign-title">
+												${escapeHtml(sessionId)}
+												<span class="badge ${connected ? "badge-success" : "badge-danger"}">${connected ? "CONNECTED" : "OFFLINE"}</span>
+											</span>
+											<span class="session-assign-meta">${escapeHtml(phone || "Phone not available")} · Last active: ${escapeHtml(lastActive)}</span>
+										</span>
 									</label>`;
               })
               .join("")

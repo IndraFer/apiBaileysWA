@@ -881,6 +881,63 @@ tr:hover td {
   }
 }
 
+/* Session assignment rows in the user-management popover. */
+.session-assign-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.session-assign-row + .session-assign-row {
+  margin-top: 0.35rem;
+}
+.session-assign-row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+}
+.session-assign-row input[type="checkbox"] {
+  margin-top: 0.15rem;
+}
+.session-assign-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.session-assign-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.session-assign-title .badge {
+  padding: 0.1rem 0.35rem;
+  font-size: 0.6rem;
+}
+.session-assign-meta {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ui-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.2rem;
+  cursor: pointer;
+}
+
 .webhook-status-badge {
   white-space: nowrap;
   font-size: 0.68rem;

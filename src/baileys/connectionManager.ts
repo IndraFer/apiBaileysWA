@@ -222,9 +222,18 @@ class ConnectionManager {
     webhookSecretLast4: string;
     webhookEvents: string[];
     autoReply: SessionMetadata["autoReply"];
+    /** Epoch ms of the newest known chat activity, or null when never seen. */
+    lastActiveAt: number | null;
   }> {
     return [...this.connections.entries()].map(([id, conn]) => {
       const secret = conn.getOptions().webhookSecret || "";
+      let lastActiveAt: number | null = null;
+      for (const chat of conn.getStore().chats.values()) {
+        const timestamp = Number(chat.conversationTimestamp || 0);
+        if (timestamp > 0) {
+          lastActiveAt = Math.max(lastActiveAt ?? 0, timestamp * 1000);
+        }
+      }
       return {
         sessionId: id,
         ownerId: conn.getOptions().ownerId || "",
@@ -235,6 +244,7 @@ class ConnectionManager {
         webhookSecretLast4: secret ? secret.slice(-4) : "",
         webhookEvents: conn.getOptions().webhookEvents || [],
         autoReply: conn.getOptions().autoReply,
+        lastActiveAt,
       };
     });
   }
