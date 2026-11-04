@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.7] - 2026-11-04
+
+### Fixed
+
+- use one detection mode for OTP filtering
+
 ## [1.31.6] - 2026-11-04
 
 ### Added
