@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-04
+
+### Added
+
+- WhatsApp-first message rendering with Markdown enrichment
+
 ## [1.28.0] - 2026-11-04
 
 ### Added
