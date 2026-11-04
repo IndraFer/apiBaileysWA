@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.25.3] - 2026-11-04
+
+### Changed
+
+- make session assignment rows readable
+
 ## [1.25.2] - 2026-11-04
 
 ### Changed
