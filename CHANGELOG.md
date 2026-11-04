@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.5] - 2026-11-04
+
+### Added
+
+- informative room header with phone/LID context
+
 ## [1.31.4] - 2026-11-04
 
 ### Fixed
