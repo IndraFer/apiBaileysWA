@@ -368,6 +368,48 @@
         </div>
 
         <div class="card">
+          <div class="card-header"><h3>Message Filters</h3></div>
+          <label class="toggle-row">
+            <input type="checkbox" id="otp-filter-enabled" class="toggle-input" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-copy">
+              <strong>Ignore OTP / Verification Messages</strong>
+              <small>Skips AI and static auto-replies for matching messages. Messages are still stored, and webhooks still fire.</small>
+            </span>
+          </label>
+          <div id="otp-filter-settings" class="hidden">
+            <div class="form-group">
+              <label for="otp-ignored-senders">Ignored Senders (Ignore List)</label>
+              <textarea id="otp-ignored-senders" class="input" rows="4"
+                placeholder="628123456789&#10;120363000000000000@g.us"></textarea>
+              <small class="text-muted">One phone number or JID per line. No sender is ignored by default.</small>
+            </div>
+            <label class="toggle-row">
+              <input type="checkbox" id="otp-keyword-filter" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Filter by Keywords</strong>
+                <small>Case-insensitive matching. No keyword is built in; maintain the list below.</small>
+              </span>
+            </label>
+            <div id="otp-keyword-settings" class="hidden">
+              <div class="form-group">
+                <label for="otp-keywords">Keywords</label>
+                <textarea id="otp-keywords" class="input" rows="4"
+                  placeholder="verification code&#10;one-time password&#10;your login code&#10;do not share this code"></textarea>
+                <small class="text-muted">One keyword or phrase per line.</small>
+              </div>
+              <div class="form-group">
+                <label for="otp-exclude-keywords">Exclude Keywords</label>
+                <textarea id="otp-exclude-keywords" class="input" rows="3"
+                  placeholder="not received&#10;didn't receive&#10;resend"></textarea>
+                <small class="text-muted">If a message contains one of these, the keyword filter will not ignore it. One phrase per line.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-header"><h3>System Instruction</h3></div>
           <div class="form-group">
             <textarea id="ai-instruction" class="input" rows="18"
@@ -449,6 +491,12 @@
       document.getElementById("ai-vision-enabled")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
+      document.getElementById("otp-filter-enabled")?.addEventListener("change", () => {
+        this.syncOtpFilterUi();
+      });
+      document.getElementById("otp-keyword-filter")?.addEventListener("change", () => {
+        this.syncOtpFilterUi();
+      });
       document.getElementById("ai-send-scope")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
@@ -502,7 +550,16 @@
       const visionEnabled = document.getElementById("ai-vision-enabled");
       if (visionEnabled) visionEnabled.checked = Boolean(vision.enabled);
       set("ai-vision-model", vision.model || "");
+      const otpFilter = ai.otpFilter || {};
+      const otpEnabled = document.getElementById("otp-filter-enabled");
+      if (otpEnabled) otpEnabled.checked = Boolean(otpFilter.enabled);
+      const otpKeywordEnabled = document.getElementById("otp-keyword-filter");
+      if (otpKeywordEnabled) otpKeywordEnabled.checked = Boolean(otpFilter.keywordFilter);
+      set("otp-ignored-senders", (otpFilter.ignoredSenders || []).join("\n"));
+      set("otp-keywords", (otpFilter.keywords || []).join("\n"));
+      set("otp-exclude-keywords", (otpFilter.excludeKeywords || []).join("\n"));
       this.syncSendMessageUi();
+      this.syncOtpFilterUi();
 
       const credentials = document.getElementById("ai-credentials");
       if (credentials) credentials.value = "";
@@ -545,6 +602,16 @@
             ? "The current conversation is always allowed. Add recipients above to let the model contact other chats. Group sends still obey ALLOW_GROUP_SEND; rate limit is enforced server-side."
             : "The model may contact any number or JID the customer names; the current conversation is the default when no receiver is given. Group sends still obey ALLOW_GROUP_SEND; rate limit is enforced server-side.";
       }
+    },
+
+    /** Keep the OTP/filter fields consistent with their toggles. */
+    syncOtpFilterUi() {
+      const enabled = Boolean(document.getElementById("otp-filter-enabled")?.checked);
+      const keywordEnabled = Boolean(document.getElementById("otp-keyword-filter")?.checked);
+      document.getElementById("otp-filter-settings")?.classList.toggle("hidden", !enabled);
+      document
+        .getElementById("otp-keyword-settings")
+        ?.classList.toggle("hidden", !enabled || !keywordEnabled);
     },
 
     /** Show the responder chain that will actually run for this number. */
@@ -679,6 +746,22 @@
           vision: {
             enabled: Boolean(document.getElementById("ai-vision-enabled")?.checked),
             model: value("ai-vision-model"),
+          },
+          otpFilter: {
+            enabled: Boolean(document.getElementById("otp-filter-enabled")?.checked),
+            ignoredSenders: value("otp-ignored-senders")
+              .split(/\r?\n/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
+            keywordFilter: Boolean(document.getElementById("otp-keyword-filter")?.checked),
+            keywords: value("otp-keywords")
+              .split(/\r?\n/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
+            excludeKeywords: value("otp-exclude-keywords")
+              .split(/\r?\n/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
           },
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),

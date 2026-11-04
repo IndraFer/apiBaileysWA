@@ -129,6 +129,16 @@ export const aiVisionSchema = z
   })
   .strict();
 
+export const otpFilterSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    ignoredSenders: z.array(z.string().trim().min(3).max(64)).max(200).optional(),
+    keywordFilter: z.boolean().optional(),
+    keywords: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
+    excludeKeywords: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
+  })
+  .strict();
+
 export const aiConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -151,6 +161,7 @@ export const aiConfigSchema = z
     credentialsJson: z.string().max(8000).optional(),
     sendMessage: aiSendMessageSchema.optional(),
     vision: aiVisionSchema.optional(),
+    otpFilter: otpFilterSchema.optional(),
   })
   .strict();
 

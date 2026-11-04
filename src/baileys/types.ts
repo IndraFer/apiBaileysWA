@@ -92,6 +92,19 @@ export interface AiSendMessageConfig {
   maxPerHour?: number;
 }
 
+/** Optional deny-list/keyword filter for OTP and verification messages. */
+export interface OtpFilterConfig {
+  enabled?: boolean;
+  /** Senders whose auto-replies are skipped. One number/JID per entry. */
+  ignoredSenders?: string[];
+  /** Enable the configurable keyword layer. */
+  keywordFilter?: boolean;
+  /** Operator-maintained keywords; no built-in values. */
+  keywords?: string[];
+  /** If a keyword matches, do not treat the message as OTP. */
+  excludeKeywords?: string[];
+}
+
 /** Opt-in image understanding for the OpenAI-compatible driver. */
 export interface AiVisionConfig {
   enabled?: boolean;
@@ -136,6 +149,8 @@ export interface AiAgentConfig {
   sendMessage?: AiSendMessageConfig;
   /** Optional image understanding (default off). */
   vision?: AiVisionConfig;
+  /** Optional OTP/verification auto-reply filter (default off). */
+  otpFilter?: OtpFilterConfig;
 }
 
 export interface SessionOptions {

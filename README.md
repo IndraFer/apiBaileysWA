@@ -123,6 +123,20 @@ list on every request when enabled. It is off by default and text-only.
   checked, redirect-rejecting, size-capped fetch. Previews are untrusted data in
   the user prompt; the model cannot fetch arbitrary URLs.
 
+#### OTP / verification auto-reply filter
+
+**AI & Routing → Message Filters** is an optional deny-list for messages that
+should not receive an automatic reply (OTP, login codes, verification notices).
+
+- **Ignored Senders (Ignore List)** — one phone number or JID per line. Sender
+  matching also checks group participants.
+- **Filter by Keywords** — off by default. Keywords and Exclude Keywords are
+  operator-maintained, one phrase per line; no keyword is built in.
+- A sender match, or a keyword match without an exclude match, skips both the AI
+  and static auto-reply. Messages are still stored and webhooks still fire.
+- OTP content is never written to the filter log; only the match reason/JID is
+  logged. The filter is disabled by default.
+
 #### Runtime date/time context
 
 Every OpenAI-compatible request carries a server-generated `<get_info>` block

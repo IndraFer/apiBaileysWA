@@ -583,6 +583,13 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
             enabled: ai.vision?.enabled ?? false,
             model: ai.vision?.model ?? "",
           },
+          otpFilter: {
+            enabled: ai.otpFilter?.enabled ?? false,
+            ignoredSenders: ai.otpFilter?.ignoredSenders ?? [],
+            keywordFilter: ai.otpFilter?.keywordFilter ?? false,
+            keywords: ai.otpFilter?.keywords ?? [],
+            excludeKeywords: ai.otpFilter?.excludeKeywords ?? [],
+          },
         },
         defaults: {
           routing: config.routing,
@@ -637,6 +644,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       apiKey,
       sendMessage: sendMessagePatch,
       vision: visionPatch,
+      otpFilter: otpFilterPatch,
       ...aiFields
     } = parsed.data.ai ?? {};
     const ai: AiAgentConfig = { ...(current.ai ?? {}), ...aiFields };
@@ -646,6 +654,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     }
     if (visionPatch) {
       ai.vision = { ...(current.ai?.vision ?? {}), ...visionPatch };
+    }
+    if (otpFilterPatch) {
+      ai.otpFilter = { ...(current.ai?.otpFilter ?? {}), ...otpFilterPatch };
     }
 
     if (credentialsJson !== undefined || apiKey !== undefined) {

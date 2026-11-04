@@ -48,6 +48,7 @@ import { ConversationRouter, type RouterGeneration } from "@/services/conversati
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
 import { sendUnifiedMessage } from "@/services/messageSender";
+import { matchOtpFilter, resolveOtpFilter } from "@/services/otpFilter";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
 import type { ToolExecution } from "@/services/ragTools";
 import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
@@ -721,10 +722,31 @@ export class BaileysConnection {
     const ai = resolveAiConfig(this.options.ai);
     const routing = resolveRoutingConfig(this.options.routing);
 
-    // Only reply to incoming messages from others
-    const messages = data.messages.filter(
-      (m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid),
-    );
+    // Only reply to incoming messages from others.
+    const otpFilter = resolveOtpFilter(this.options.ai?.otpFilter);
+    const messages = data.messages
+      .filter((m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid))
+      .filter((m) => {
+        const match = matchOtpFilter(
+          {
+            remoteJid: m.key.remoteJid,
+            participant: m.key.participant,
+            text: extractMessageText(m),
+          },
+          otpFilter,
+        );
+        if (match.ignored) {
+          // Webhook delivery and local storage already happened before this
+          // handler; only automatic responses are suppressed.
+          logger.debug(
+            "[%s] Auto-reply skipped for %s (otp_filter:%s)",
+            this.sessionId,
+            m.key.remoteJid,
+            match.reason ?? "matched",
+          );
+        }
+        return !match.ignored;
+      });
     if (messages.length === 0) return;
     if (!autoReply.enabled && !ai.enabled) return;
 
