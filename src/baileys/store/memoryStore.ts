@@ -209,7 +209,7 @@ export class MemoryStore extends EventEmitter {
   }
 
   /** Register a LID <-> phone-number mapping and merge any duplicate rooms. */
-  private registerLidMapping(lidRaw: string, pnRaw: string): void {
+  public registerLidMapping(lidRaw: string, pnRaw: string): void {
     try {
       const lid = jidNormalizedUser(lidRaw);
       const pn = jidNormalizedUser(pnRaw);

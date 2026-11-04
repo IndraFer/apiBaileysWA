@@ -263,6 +263,8 @@ export class BaileysConnection {
   private _isConnected = false;
   private _qrCode: string | null = null;
   private _pairingCode: string | null = null;
+  /** One reconciliation per connection; new mappings still arrive by event. */
+  private lidReconciled = false;
 
   constructor(sessionId: string, options: SessionOptions) {
     this.sessionId = sessionId;
@@ -577,6 +579,7 @@ export class BaileysConnection {
       this._qrCode = null;
       this.reconnectCount = 0;
       logger.info("[%s] Connected successfully", this.sessionId);
+      await this.reconcileLidRooms();
     }
 
     if (connection === "close") {
@@ -1512,6 +1515,34 @@ export class BaileysConnection {
   }
 
   // Store access
+  /**
+   * Resolve legacy @lid rooms through Baileys' persisted LID mapping and merge
+   * them into the canonical phone-number room. This closes the gap left by old
+   * store files that contain both rooms but no mapping event yet.
+   */
+  async reconcileLidRooms(): Promise<void> {
+    if (this.lidReconciled || !this.socket?.signalRepository?.lidMapping) return;
+    this.lidReconciled = true;
+    const lids = new Set(
+      [...this.store.chats.keys(), ...this.store.messages.keys()].filter((jid) =>
+        jid.endsWith("@lid"),
+      ),
+    );
+    for (const lid of lids) {
+      try {
+        const pn = await this.socket.signalRepository.lidMapping.getPNForLID(lid);
+        if (pn) this.store.registerLidMapping(lid, pn);
+      } catch (error) {
+        logger.debug(
+          "[%s] LID reconciliation failed for %s: %s",
+          this.sessionId,
+          lid,
+          errorToString(error),
+        );
+      }
+    }
+  }
+
   getStore(): MemoryStore {
     return this.store;
   }

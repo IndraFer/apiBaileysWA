@@ -1139,7 +1139,7 @@ dashboardApi.post("/sessions/:sessionId/send", async (c) => {
  * GET /dashboard/api/sessions/:sessionId/chats
  * Get chat list from store (default: 1-on-1 only).
  */
-dashboardApi.get("/sessions/:sessionId/chats", (c) => {
+dashboardApi.get("/sessions/:sessionId/chats", async (c) => {
   const denied = requireCapability(c, "viewChats");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
@@ -1149,6 +1149,7 @@ dashboardApi.get("/sessions/:sessionId/chats", (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
+    await session.reconcileLidRooms();
     const self = session.user as { id?: string; lid?: string } | null;
     const selfIds = new Set(
       [self?.id, self?.lid].filter(Boolean).map((value) => normalizeChatJid(value)),
