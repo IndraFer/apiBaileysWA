@@ -53,6 +53,90 @@
             "Chat and group support only: replies in assigned sessions. No session management, AI, webhooks, REST API or settings page.",
         }[role] || "Limited operational access.";
 
+      const perm = (kind, tip = "") => {
+        const label = { allow: "✅ Allowed", limited: "⚠️ Limited", deny: "❌ Restricted" }[kind];
+        const className = `perm-badge perm-${kind}`;
+        if (kind !== "limited" || !tip) return `<span class="${className}">${label}</span>`;
+        const safeTip = escapeHtml(tip);
+        return `<span class="${className}" tabindex="0" data-tip="${safeTip}" title="${safeTip}">${label}</span>`;
+      };
+
+      const moduleRows = [
+        [
+          "Sessions",
+          perm("allow"),
+          perm(
+            "limited",
+            "Assigned sessions only (or All Sessions when granted). Reconnect and edit settings; create/delete stay admin-only.",
+          ),
+          perm("deny", "No Sessions page; chat access is limited to Chat Rooms."),
+        ],
+        [
+          "Chat Rooms",
+          perm("allow"),
+          perm(
+            "limited",
+            "Assigned sessions only. Replies, outbound and group conversations are available.",
+          ),
+          perm("limited", "Assigned sessions only. Chat and group replies; no session controls."),
+        ],
+        [
+          "Groups",
+          perm("allow"),
+          perm("limited", "Assigned sessions only. Full group management for those sessions."),
+          perm(
+            "deny",
+            "No Groups management page. Group conversations remain available in Chat Rooms.",
+          ),
+        ],
+        [
+          "Messaging",
+          perm("allow"),
+          perm("limited", "Assigned sessions only. Proactive outbound is enabled."),
+          perm("deny", "Reply-only; no proactive outbound page."),
+        ],
+        [
+          "AI & Routing",
+          perm("allow"),
+          perm(
+            "limited",
+            "Assigned sessions only. No global metrics or settings for other sessions.",
+          ),
+          perm("deny", "AI routes are restricted to manager/admin roles."),
+        ],
+        [
+          "Webhooks",
+          perm("allow"),
+          perm("limited", "Assigned sessions only. Global clear/reset actions remain admin-only."),
+          perm("deny", "Webhook configuration is restricted."),
+        ],
+        [
+          "REST API",
+          perm("allow"),
+          perm(
+            "limited",
+            "Keys and audit log are limited to assigned sessions; all-session keys are hidden.",
+          ),
+          perm("deny", "No REST API or key management."),
+        ],
+        [
+          "Events",
+          perm("allow"),
+          perm("limited", "Only events belonging to assigned sessions."),
+          perm("deny", "Event monitor is restricted."),
+        ],
+        [
+          "Settings",
+          perm("allow"),
+          perm(
+            "limited",
+            "Account, password and this matrix; user and role management stay admin-only.",
+          ),
+          perm("deny", "No Settings page."),
+        ],
+        ["User management", perm("allow"), perm("deny"), perm("deny")],
+      ];
+
       UI.setHtml(
         document.getElementById("page-content"),
         `
@@ -83,24 +167,17 @@
 					<span>Show full permission matrix</span>
 					<span class="text-muted text-xs">Expand</span>
 				</summary>
-				<div class="table-wrapper u-p-0-075-075">
+				<div class="table-wrapper permission-matrix u-p-0-075-075">
 				  <table>
-					<tr><th>Capability</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr>
-					<tr><td>Session scope</td><td>✅ All sessions</td><td>✅ Assigned (or all if granted)</td><td>✅ Assigned (chat only)</td></tr>
-					<tr><td>Session management page</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Hidden</td></tr>
-					<tr><td>Reconnect assigned sessions</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
-					<tr><td>Create sessions</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
-					<tr><td>Delete sessions</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
-					<tr><td>Session settings (webhook / AI)</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
-					<tr><td>Webhooks page</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
-					<tr><td>AI &amp; Routing page</td><td>✅ All sessions</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
-					<tr><td>REST API keys / audit log</td><td>✅ All sessions</td><td>✅ Assigned sessions only</td><td>❌ Restricted</td></tr>
-					<tr><td>Chats and inbound replies</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>✅ Assigned sessions</td></tr>
-					<tr><td>Proactive outbound messaging</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>❌ Restricted</td></tr>
-					<tr><td>Group conversations (Chat Rooms)</td><td>✅ Allowed</td><td>✅ Assigned sessions</td><td>✅ Assigned sessions</td></tr>
-					<tr><td>Group management / Events</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Restricted</td></tr>
-					<tr><td>Settings page (account / matrix)</td><td>✅ Allowed</td><td>✅ Allowed</td><td>❌ Hidden</td></tr>
-					<tr><td>User approval / role changes</td><td>✅ Allowed</td><td>❌ Restricted</td><td>❌ Restricted</td></tr>
+					<thead><tr><th>Module</th><th>Admin</th><th>Manager</th><th>Assistant</th></tr></thead>
+					<tbody>
+					${moduleRows
+            .map(
+              ([module, admin, manager, assistant]) =>
+                `<tr><td>${module}</td><td>${admin}</td><td>${manager}</td><td>${assistant}</td></tr>`,
+            )
+            .join("")}
+					</tbody>
 				  </table>
 				</div>
 			</details>
