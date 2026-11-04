@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-11-04
+
+### Added
+
+- persist selected session and merge LID/PN rooms
+
 ## [1.30.0] - 2026-11-04
 
 ### Added
