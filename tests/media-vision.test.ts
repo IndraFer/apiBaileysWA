@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { generateAgentReply, type ResolvedAiConfig } from "@/services/aiAgent";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext, extractUrls } from "@/services/linkPreview";
-import { generateAgentReply, type ResolvedAiConfig } from "@/services/aiAgent";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -46,9 +46,7 @@ test("media descriptors keep captionless media eligible for the AI", () => {
 });
 
 test("links are extracted and private targets are refused without fetching", async () => {
-  expect(extractUrls(["see https://example.com/a", "dummy"])).toEqual([
-    "https://example.com/a",
-  ]);
+  expect(extractUrls(["see https://example.com/a", "dummy"])).toEqual(["https://example.com/a"]);
   expect(await collectLinkContext(["http://127.0.0.1/private"])).toBe("");
   expect(await collectLinkContext(["no links here"])).toBe("");
 });

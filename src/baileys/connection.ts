@@ -263,8 +263,10 @@ export class BaileysConnection {
   private _isConnected = false;
   private _qrCode: string | null = null;
   private _pairingCode: string | null = null;
-  /** One reconciliation per connection; new mappings still arrive by event. */
-  private lidReconciled = false;
+  /** LIDs already resolved on this connection; unresolved IDs are retried. */
+  private lidResolved = new Set<string>();
+  /** Deduplicates concurrent reconciliation requests. */
+  private lidReconcileInFlight: Promise<void> | null = null;
 
   constructor(sessionId: string, options: SessionOptions) {
     this.sessionId = sessionId;
@@ -579,11 +581,14 @@ export class BaileysConnection {
       this._qrCode = null;
       this.reconnectCount = 0;
       logger.info("[%s] Connected successfully", this.sessionId);
+      this.lidResolved.clear();
       await this.reconcileLidRooms();
     }
 
     if (connection === "close") {
       this._isConnected = false;
+      this.lidResolved.clear();
+      this.lidReconcileInFlight = null;
       const error = lastDisconnect?.error as { output?: { statusCode?: number } } | undefined;
       const statusCode = error?.output?.statusCode;
       const shouldReconnect =
@@ -1521,25 +1526,41 @@ export class BaileysConnection {
    * store files that contain both rooms but no mapping event yet.
    */
   async reconcileLidRooms(): Promise<void> {
-    if (this.lidReconciled || !this.socket?.signalRepository?.lidMapping) return;
-    this.lidReconciled = true;
+    const mapping = this.socket?.signalRepository?.lidMapping;
+    if (!mapping) return;
+    if (this.lidReconcileInFlight) return this.lidReconcileInFlight;
+
     const lids = new Set(
-      [...this.store.chats.keys(), ...this.store.messages.keys()].filter((jid) =>
-        jid.endsWith("@lid"),
+      [...this.store.chats.keys(), ...this.store.messages.keys()].filter(
+        (jid) => jid.endsWith("@lid") && !this.lidResolved.has(jid),
       ),
     );
-    for (const lid of lids) {
-      try {
-        const pn = await this.socket.signalRepository.lidMapping.getPNForLID(lid);
-        if (pn) this.store.registerLidMapping(lid, pn);
-      } catch (error) {
-        logger.debug(
-          "[%s] LID reconciliation failed for %s: %s",
-          this.sessionId,
-          lid,
-          errorToString(error),
-        );
+    if (lids.size === 0) return;
+
+    const run = (async () => {
+      for (const lid of lids) {
+        try {
+          const pn = await mapping.getPNForLID(lid);
+          if (pn) {
+            this.store.registerLidMapping(lid, pn);
+            this.lidResolved.add(lid);
+          }
+        } catch (error) {
+          logger.debug(
+            "[%s] LID reconciliation failed for %s: %s",
+            this.sessionId,
+            lid,
+            errorToString(error),
+          );
+        }
       }
+    })();
+
+    this.lidReconcileInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (this.lidReconcileInFlight === run) this.lidReconcileInFlight = null;
     }
   }
 

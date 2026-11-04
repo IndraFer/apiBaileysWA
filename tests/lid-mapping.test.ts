@@ -87,3 +87,62 @@ test("saved contact name wins from either PN or LID record", async () => {
   await store.destroy();
   rmSync("sessions/lid-contact-name_store.json", { force: true });
 });
+
+test("reconciliation retries unresolved LIDs and deduplicates concurrent runs", async () => {
+  const { BaileysConnection } = await import("@/baileys/connection");
+  type FakeConnection = {
+    sessionId: string;
+    lidResolved: Set<string>;
+    lidReconcileInFlight: Promise<void> | null;
+    store: {
+      chats: Map<string, Record<string, unknown>>;
+      messages: Map<string, Map<string, unknown>>;
+      registerLidMapping: (lid: string, phone: string) => void;
+    };
+    socket: {
+      signalRepository: { lidMapping: { getPNForLID: (lid: string) => Promise<string | null> } };
+    };
+    reconcileLidRooms: () => Promise<void>;
+  };
+
+  let lookups = 0;
+  let registered: [string, string] | null = null;
+  let release: (value: string | null) => void = () => {};
+  const pending = new Promise<string | null>((resolve) => {
+    release = resolve;
+  });
+  const fake = Object.create(BaileysConnection.prototype) as FakeConnection;
+  fake.sessionId = "lid-reconcile-test";
+  fake.lidResolved = new Set();
+  fake.lidReconcileInFlight = null;
+  fake.store = {
+    chats: new Map([[lid, {}]]),
+    messages: new Map(),
+    registerLidMapping: (from, phone) => {
+      registered = [from, phone];
+    },
+  };
+  fake.socket = {
+    signalRepository: {
+      lidMapping: {
+        getPNForLID: async () => {
+          lookups += 1;
+          return lookups === 1 ? null : pending;
+        },
+      },
+    },
+  };
+
+  await fake.reconcileLidRooms();
+  expect(lookups).toBe(1);
+  const before = registered as [string, string] | null;
+  expect(before).toBeNull();
+
+  const first = fake.reconcileLidRooms();
+  const second = fake.reconcileLidRooms();
+  expect(lookups).toBe(2); // second call reused the in-flight promise
+  release("628123456789@s.whatsapp.net");
+  await Promise.all([first, second]);
+  const after = registered as [string, string] | null;
+  expect(after).toEqual([lid, "628123456789@s.whatsapp.net"]);
+});
