@@ -476,6 +476,13 @@ old key.
 The API speaks plain HTTP; **terminate TLS in front of it** (Caddy, nginx,
 Cloudflare, an ALB). Never publish port 3000 to the internet.
 
+> **Subpath hosting is not supported.** The dashboard, REST API, docs, SSE and
+> session cookie use absolute root paths (`/dashboard`, `/api/v1`, `/docs`,
+> `Path=/dashboard`). Mounting the gateway at `/gateway`—with or without prefix
+> stripping—breaks assets, cookies and API calls. Run it at the root of its
+> host. Subpath support would require a `BASE_PATH` implementation across
+> routes, assets, cookies, CSP and clients.
+
 ```
 Internet ──HTTPS──> proxy (TLS) ──HTTP──> api:3000 (compose network only)
 ```
