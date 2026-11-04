@@ -1,6 +1,6 @@
 {
 	"name": "api-baileys-wa-hono",
-	"version": "1.23.0",
+	"version": "1.24.0",
 	"type": "module",
 	"description": "WhatsApp REST API powered by Baileys WA Sockets with multi-session support, Dual-Runtime support, Redis integration, and broadcast queuing.",
 	"author": "indrafer",

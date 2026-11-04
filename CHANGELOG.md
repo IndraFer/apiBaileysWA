@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-11-04
+
+### Fixed
+
+- make send tool addressable beyond the current chat; neutralize get_info
+
 ## [1.23.0] - 2026-11-04
 
 ### Added
