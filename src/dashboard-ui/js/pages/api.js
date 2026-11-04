@@ -209,7 +209,7 @@
     const result = await window.API.post("/api-keys", { label, session });
 
     button.disabled = false;
-    button.textContent = "Create key";
+    button.textContent = "Create Key";
 
     if (!result.success) {
       window.Toast.error(result.message);
@@ -222,7 +222,7 @@
       `<p class="text-sm">Copy this token now. Only its hash is stored, so it cannot be shown again.</p>
        <pre class="webhook-ref-code" id="new-key-token"></pre>
        <div class="u-mt-075">
-         <button class="btn btn-primary btn-sm" id="btn-copy-key">Copy token</button>
+         <button class="btn btn-primary btn-sm" id="btn-copy-key">Copy Token</button>
        </div>`,
     );
 
@@ -325,18 +325,18 @@
        <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-url">Copy URL</button></div>
        <h4>Headers</h4>
        <pre class="webhook-ref-code" id="snippet-headers"></pre>
-       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-headers">Copy headers</button></div>
-       <h4>JSON Schema (tool parameters)</h4>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-headers">Copy Headers</button></div>
+       <h4>JSON Schema (Tool Parameters)</h4>
        <pre class="webhook-ref-code" id="snippet-schema"></pre>
-       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-schema">Copy schema</button></div>
-       <h4>Example body</h4>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-schema">Copy Schema</button></div>
+       <h4>Example Body</h4>
        <pre class="webhook-ref-code" id="snippet-body"></pre>
-       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-body">Copy body</button></div>
-       <h4>Full tool definition</h4>
+       <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-body">Copy Body</button></div>
+       <h4>Full Tool Definition</h4>
        <pre class="webhook-ref-code" id="snippet-tool"></pre>
        <div>
-         <button class="btn btn-outline btn-sm" data-copy-snippet="snippet-tool">Copy full JSON</button>
-         <button class="btn btn-primary btn-sm" id="btn-download-tool">Download .json</button>
+         <button class="btn btn-outline btn-sm" data-copy-snippet="snippet-tool">Copy Full JSON</button>
+         <button class="btn btn-primary btn-sm" id="btn-download-tool">Download JSON</button>
        </div>`,
     );
 
@@ -394,7 +394,7 @@
         </div>
 
         <div class="card">
-          <h3 class="u-mt-0">Create API key</h3>
+          <h3 class="u-mt-0">Create API Key</h3>
           <div class="u-row-create">
             <div class="form-group u-mb-0">
               <label for="key-session">Session</label>
@@ -404,7 +404,7 @@
               <label for="key-label">Label</label>
               <input id="key-label" class="input" placeholder="app-title" autocomplete="off">
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-create-key">Create key</button>
+            <button class="btn btn-primary btn-sm" id="btn-create-key">Create Key</button>
           </div>
           <p class="text-muted text-xs u-mt-05">One key is bound to one session. Sessions that already have a key are not listed here.</p>
         </div>
@@ -419,7 +419,7 @@
 
         <div class="card">
           <div class="u-between-center u-mb-075">
-            <h3 class="u-mt-0">Request log</h3>
+            <h3 class="u-mt-0">Request Log</h3>
             <div class="flex gap-1">
               <input id="log-filter-session" class="input input-sm" placeholder="filter session">
               <select id="log-filter-status" class="input input-sm">

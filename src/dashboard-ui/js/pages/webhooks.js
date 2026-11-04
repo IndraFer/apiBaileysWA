@@ -117,7 +117,7 @@
         document.getElementById("page-content"),
         `
         <div class="card mb-2">
-          <div class="card-header"><h3>Where webhooks fit</h3></div>
+          <div class="card-header"><h3>Where Webhooks Fit</h3></div>
           <p class="text-sm text-muted mb-2">
             Webhooks only <strong>deliver events</strong> to your endpoint — they never answer
             messages. Replies come from the responder chain:

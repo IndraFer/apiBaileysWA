@@ -33,7 +33,7 @@
               </div>
             </div>
             <div class="form-group">
-              <label class="checkbox-label"><input type="checkbox" id="msg-is-group" /> Send to Group (use Group JID)</label>
+              <label class="checkbox-label"><input type="checkbox" id="msg-is-group" /> Send to Group (Use Group JID)</label>
             </div>
             <div class="form-group">
               <label>Message Type</label>
@@ -53,7 +53,7 @@
               <input type="url" id="msg-url" placeholder="https://example.com/image.jpg" />
             </div>
             <div class="form-group hidden" id="msg-caption-group">
-              <label>Caption (optional)</label>
+              <label>Caption (Optional)</label>
               <input type="text" id="msg-caption" placeholder="Image caption" />
             </div>
             <div class="form-group hidden" id="msg-location-group">

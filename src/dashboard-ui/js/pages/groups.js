@@ -75,7 +75,7 @@
                 canManageGroups()
                   ? `<button class="btn btn-outline btn-sm" data-group-clear="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Clear Chat</button>
                      <button class="btn btn-outline-danger btn-sm" data-group-exit="${UI.escapeHtml(jid)}" data-group-name="${UI.escapeHtml(name)}">Exit &amp; Delete</button>`
-                  : '<span class="text-muted text-xs">View only</span>'
+                  : '<span class="text-muted text-xs">View Only</span>'
               }
             </td>
           </tr>`;
@@ -148,7 +148,7 @@
         `
         <form id="create-group-form">
           <div class="form-group"><label>Group Name</label><input type="text" id="grp-name" required /></div>
-          <div class="form-group"><label>Participants (comma-separated phones)</label><input type="text" id="grp-participants" placeholder="6281234567890,6281234567891" required /></div>
+          <div class="form-group"><label>Participants (Comma-Separated Phones)</label><input type="text" id="grp-participants" placeholder="6281234567890,6281234567891" required /></div>
           <button type="submit" class="btn btn-primary btn-full">Create</button>
         </form>`,
       );

@@ -117,7 +117,7 @@
             <input type="text" id="session-id" placeholder="e.g. my-phone" required />
           </div>
           <div class="form-group">
-            <label for="session-webhook">Webhook URL (optional)</label>
+            <label for="session-webhook">Webhook URL (Optional)</label>
             <input type="url" id="session-webhook" placeholder="https://your-server.com/webhook" />
           </div>
           <div class="form-group">

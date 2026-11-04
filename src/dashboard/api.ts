@@ -578,6 +578,10 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
             allowlist: ai.sendMessage?.allowlist ?? [],
             maxPerHour: ai.sendMessage?.maxPerHour ?? 10,
           },
+          vision: {
+            enabled: ai.vision?.enabled ?? false,
+            model: ai.vision?.model ?? "",
+          },
         },
         defaults: {
           routing: config.routing,
@@ -631,12 +635,16 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       credentialsJson,
       apiKey,
       sendMessage: sendMessagePatch,
+      vision: visionPatch,
       ...aiFields
     } = parsed.data.ai ?? {};
     const ai: AiAgentConfig = { ...(current.ai ?? {}), ...aiFields };
     if (sendMessagePatch) {
       // Nested merge: a partial patch must not drop scope/allowlist/maxPerHour.
       ai.sendMessage = { ...(current.ai?.sendMessage ?? {}), ...sendMessagePatch };
+    }
+    if (visionPatch) {
+      ai.vision = { ...(current.ai?.vision ?? {}), ...visionPatch };
     }
 
     if (credentialsJson !== undefined || apiKey !== undefined) {

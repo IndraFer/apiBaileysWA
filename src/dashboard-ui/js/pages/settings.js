@@ -130,7 +130,7 @@
 			<p class="text-muted text-sm u-mb-08">${roleSummary}</p>
 			<details class="ui-border-card">
 				<summary class="ui-accordion">
-					<span>Show full permission matrix</span>
+					<span>Show Full Permission Matrix</span>
 					<span class="text-muted text-xs">Expand</span>
 				</summary>
 				<div class="table-wrapper permission-matrix u-p-0-075-075">
@@ -517,7 +517,7 @@
         `
                 <p class="text-muted text-sm mb-2">Manage dashboard users, approve pending registrations, assign roles, and scope session access.</p>
                 <div class="card u-mb-1">
-                    <h4 class="u-mt-0">Add user</h4>
+                    <h4 class="u-mt-0">Add User</h4>
                     <div class="u-grid-3-gap">
                         <div class="form-group u-mb-0">
                             <label for="new-user-username">Username</label>
@@ -526,7 +526,7 @@
                         <div class="form-group u-mb-0">
                             <label for="new-user-password">Password</label>
                             <div class="input-password-wrapper">
-                                <input id="new-user-password" type="password" class="input" autocomplete="new-password" placeholder="Temporary password">
+                                <input id="new-user-password" type="password" class="input" autocomplete="new-password" placeholder="Temporary Password">
                                 ${window.passwordToggleHtml("new-user-password")}
                             </div>
                         </div>
@@ -541,7 +541,7 @@
                     </div>
                     <div class="u-mt-075-between">
                         <span class="text-muted text-xs">Non-admin users are limited per role; admin accounts are unlimited.</span>
-                        <button class="btn btn-primary btn-sm" id="btn-create-user">Add user</button>
+                        <button class="btn btn-primary btn-sm" id="btn-create-user">Add User</button>
                     </div>
                 </div>
                 <div class="table-wrapper">
@@ -566,7 +566,7 @@
         button.textContent = "Creating...";
         const res = await window.API.post("/auth/users", { username, password, role });
         button.disabled = false;
-        button.textContent = "Add user";
+        button.textContent = "Add User";
 
         if (res.success) {
           Toast.success(`User @${username} created`);

@@ -199,11 +199,11 @@
           </div>
           <div class="toolbar-spacer"></div>
           <button class="btn btn-outline btn-sm" id="ai-refresh">↻ Refresh</button>
-          <button class="btn btn-primary btn-sm" id="ai-save">Save changes</button>
+          <button class="btn btn-primary btn-sm" id="ai-save">Save Changes</button>
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>How responders fit together</h3></div>
+          <div class="card-header"><h3>How Responders Fit Together</h3></div>
           <details>
             <summary class="text-xs" id="ai-chain-summary">Show effective chain</summary>
             <div class="u-mt-05" id="ai-chain">
@@ -213,17 +213,17 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Responder &amp; schedule</h3></div>
+          <div class="card-header"><h3>Responder &amp; Schedule</h3></div>
           <div class="form-row cols-2">
             <div class="form-group">
-              <label for="ai-enabled">Enable AI for this number</label>
+              <label for="ai-enabled">Enable AI for This Number</label>
               <select id="ai-enabled" class="input">
                 <option value="false">No — static auto-reply</option>
                 <option value="true">Yes — AI agent</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="ai-mode">When may the AI answer?</label>
+              <label for="ai-mode">When May the AI Answer?</label>
               <select id="ai-mode" class="input">
                 <option value="off">Off (static only)</option>
                 <option value="window">Inside the time window</option>
@@ -246,25 +246,25 @@
               <input id="ai-timezone" class="input" placeholder="Asia/Jakarta" />
             </div>
             <div class="form-group">
-              <label for="ai-batch-idle">Idle (sec)</label>
+              <label for="ai-batch-idle">Idle (Sec)</label>
               <input id="ai-batch-idle" class="input" type="number" min="3" max="120" />
             </div>
             <div class="form-group">
-              <label for="ai-human-idle">Human pause (min)</label>
+              <label for="ai-human-idle">Human Pause (Min)</label>
               <input id="ai-human-idle" class="input" type="number" min="1" max="1440" />
             </div>
             <div class="form-group">
-              <label for="ai-handoff-pause">Handoff pause (min)</label>
+              <label for="ai-handoff-pause">Handoff Pause (Min)</label>
               <input id="ai-handoff-pause" class="input" type="number" min="1" max="1440" />
             </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Model &amp; API key</h3></div>
+          <div class="card-header"><h3>Model &amp; API Key</h3></div>
           <div class="form-row cols-2">
             <div class="form-group">
-              <label for="ai-base-url">Base URL (OpenAI-compatible)</label>
+              <label for="ai-base-url">Base URL (OpenAI-Compatible)</label>
               <input id="ai-base-url" class="input" placeholder="https://openrouter.ai/api/v1" />
               <small class="text-muted">
                 OpenRouter, OpenAI, Google Vertex (OpenAI-compatible), Fireworks,
@@ -290,20 +290,20 @@
               <input id="ai-min-p" class="input" type="number" step="0.01" min="0" max="1" />
             </div>
             <div class="form-group">
-              <label for="ai-freq-penalty">Freq. penalty</label>
+              <label for="ai-freq-penalty">Freq. Penalty</label>
               <input id="ai-freq-penalty" class="input" type="number" step="0.1" min="-2" max="2" />
             </div>
             <div class="form-group">
-              <label for="ai-pres-penalty">Pres. penalty</label>
+              <label for="ai-pres-penalty">Pres. Penalty</label>
               <input id="ai-pres-penalty" class="input" type="number" step="0.1" min="-2" max="2" />
             </div>
             <div class="form-group">
-              <label for="ai-max-tokens">Max tokens</label>
+              <label for="ai-max-tokens">Max Tokens</label>
               <input id="ai-max-tokens" class="input" type="number" min="64" max="8192" />
             </div>
           </div>
           <div class="form-group">
-            <label for="ai-api-key">API key (provider)</label>
+            <label for="ai-api-key">API Key (Provider)</label>
             <div class="input-password-wrapper">
               <input id="ai-api-key" class="input" type="password" autocomplete="new-password" placeholder="sk-or-..." />
               ${window.passwordToggleHtml("ai-api-key")}
@@ -314,16 +314,7 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>System instruction</h3></div>
-          <div class="form-group">
-            <textarea id="ai-instruction" class="input" rows="18"
-              placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
-            <small class="text-muted">Persona, tone, language and escalation rules.</small>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header"><h3>AI capabilities</h3></div>
+          <div class="card-header"><h3>AI Capabilities</h3></div>
           <div class="u-mb-05">
             <label class="toggle-row">
               <input type="checkbox" id="ai-send-enabled" class="toggle-input" />
@@ -345,19 +336,19 @@
           <div id="ai-send-settings" class="hidden">
             <div class="form-row cols-2">
               <div class="form-group">
-                <label for="ai-send-scope">Recipient scope</label>
+                <label for="ai-send-scope">Recipient Scope</label>
                 <select id="ai-send-scope" class="input">
                   <option value="allowlist">Allowlist (plus current chat)</option>
                   <option value="any">Any recipient</option>
                 </select>
               </div>
               <div class="form-group">
-                <label for="ai-send-max">Max sends per hour</label>
+                <label for="ai-send-max">Max Sends per Hour</label>
                 <input id="ai-send-max" class="input" type="number" min="1" max="200" step="1" value="10" />
               </div>
             </div>
             <div class="form-group" id="ai-send-allowlist-wrap">
-              <label for="ai-send-allowlist">Allowed recipients</label>
+              <label for="ai-send-allowlist">Allowed Recipients</label>
               <textarea id="ai-send-allowlist" class="input" rows="4"
                 placeholder="628123456789&#10;628987654321"></textarea>
               <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
@@ -366,7 +357,7 @@
           </div>
           <div id="ai-vision-settings" class="hidden">
             <div class="form-group">
-              <label for="ai-vision-model">Vision model (optional)</label>
+              <label for="ai-vision-model">Vision Model (Optional)</label>
               <input id="ai-vision-model" class="input" type="text" maxlength="128"
                 placeholder="Leave empty to use the main model" />
               <small class="text-muted">
@@ -377,11 +368,20 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Knowledge endpoints</h3></div>
+          <div class="card-header"><h3>System Instruction</h3></div>
+          <div class="form-group">
+            <textarea id="ai-instruction" class="input" rows="18"
+              placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
+            <small class="text-muted">Persona, tone, language and escalation rules.</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Knowledge Endpoints</h3></div>
           <div class="form-group">
             <div class="flex gap-1 u-between-center u-mb-05">
-              <label for="ai-endpoints">Endpoints the assistant may call</label>
-              <button type="button" class="btn btn-outline btn-sm" id="ai-example">View example</button>
+              <label for="ai-endpoints">Endpoints the Assistant May Call</label>
+              <button type="button" class="btn btn-outline btn-sm" id="ai-example">View Example</button>
             </div>
             <textarea id="ai-endpoints" class="input" rows="12"
               placeholder='[ { "name": "...", "method": "GET", "url": "https://...", "params": [] } ]'></textarea>
@@ -394,8 +394,8 @@
           </div>
 
           <div class="card-header u-mt-15">
-            <h3>Endpoint credentials (optional)</h3>
-            <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-example">View example</button>
+            <h3>Endpoint Credentials (Optional)</h3>
+            <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-example">View Example</button>
           </div>
           <div class="form-group">
             <textarea id="ai-credentials" class="input" rows="8"
@@ -408,14 +408,14 @@
             <small class="text-muted">
               <strong>How to authenticate those endpoints.</strong> Keys are endpoint names;
               values are the <code>headers</code> / <code>query</code> to add. Leave empty when
-              the endpoint needs no key. The provider key is the field in “Model &amp; API key”.
+              the endpoint needs no key. The provider key is the field in “Model &amp; API Key”.
             </small>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <h3>Routing metrics</h3>
+            <h3>Routing Metrics</h3>
             <button class="btn btn-outline btn-sm" id="ai-reset-metrics">Reset</button>
           </div>
           <div id="ai-metrics"><div class="empty-state"><p class="text-muted">Loading…</p></div></div>
@@ -720,19 +720,19 @@
 
       return `
         <div class="stats-grid cols-4">
-          <div class="stat-card"><div class="stat-info"><h4>AI replies</h4><div class="stat-value">${metricValue(counters.aiReplies)}</div></div></div>
-          <div class="stat-card"><div class="stat-info"><h4>Human handled</h4><div class="stat-value">${metricValue(counters.humanSkips)}</div></div></div>
-          <div class="stat-card"><div class="stat-info"><h4>Static replies</h4><div class="stat-value">${metricValue(counters.staticReplies)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>AI Replies</h4><div class="stat-value">${metricValue(counters.aiReplies)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Human Handled</h4><div class="stat-value">${metricValue(counters.humanSkips)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Static Replies</h4><div class="stat-value">${metricValue(counters.staticReplies)}</div></div></div>
           <div class="stat-card"><div class="stat-info"><h4>Failures</h4><div class="stat-value">${metricValue(counters.failures)}</div></div></div>
-          <div class="stat-card"><div class="stat-info"><h4>Tool calls</h4><div class="stat-value">${metricValue(counters.toolCalls)}</div></div></div>
-          <div class="stat-card"><div class="stat-info"><h4>Avg latency</h4><div class="stat-value">${metricValue(latency.avgMs)} ms</div></div></div>
-          <div class="stat-card"><div class="stat-info"><h4>Tokens in / out</h4><div class="stat-value">${metricValue(counters.tokensIn)} / ${metricValue(counters.tokensOut)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Tool Calls</h4><div class="stat-value">${metricValue(counters.toolCalls)}</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Avg Latency</h4><div class="stat-value">${metricValue(latency.avgMs)} ms</div></div></div>
+          <div class="stat-card"><div class="stat-info"><h4>Tokens In / Out</h4><div class="stat-value">${metricValue(counters.tokensIn)} / ${metricValue(counters.tokensOut)}</div></div></div>
         </div>
         <p class="text-muted text-xs u-mt-8px">
           In-process counters since ${new Date(metrics.since).toLocaleString()} — they reset on restart.
         </p>
 
-        <div class="card-header"><h3>Per hour</h3></div>
+        <div class="card-header"><h3>Per Hour</h3></div>
         <div class="table-wrapper"><table>
           <thead><tr><th>Hour</th><th>AI</th><th>Human</th><th>Share</th></tr></thead>
           <tbody>${
@@ -752,7 +752,7 @@
           }
           </tbody></table></div>
 
-        <div class="card-header u-mt-15"><h3>Recent decisions</h3></div>
+        <div class="card-header u-mt-15"><h3>Recent Decisions</h3></div>
         <div class="table-wrapper"><table>
           <thead><tr><th>Time</th><th>Route</th><th>Conversation</th><th>Reason</th><th>Latency</th></tr></thead>
           <tbody>${
@@ -783,7 +783,7 @@
          </p>
          <pre class="example-json">${escapeHtml(json)}</pre>
          <div class="flex gap-1 u-end-mt-1">
-           <button type="button" class="btn btn-outline btn-sm" id="ai-example-use">Use example</button>
+           <button type="button" class="btn btn-outline btn-sm" id="ai-example-use">Use Example</button>
            <button type="button" class="btn btn-primary btn-sm" id="ai-example-copy">Copy JSON</button>
          </div>`,
       );
@@ -822,7 +822,7 @@
          </p>
          <pre class="example-json">${escapeHtml(json)}</pre>
          <div class="flex gap-1 u-end-mt-1">
-           <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-use">Use example</button>
+           <button type="button" class="btn btn-outline btn-sm" id="ai-credentials-use">Use Example</button>
            <button type="button" class="btn btn-primary btn-sm" id="ai-credentials-copy">Copy JSON</button>
          </div>`,
       );
