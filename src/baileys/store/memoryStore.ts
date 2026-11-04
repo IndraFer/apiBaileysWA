@@ -317,13 +317,19 @@ export class MemoryStore extends EventEmitter {
   getChatList(isGroup = false): Record<string, unknown>[] {
     const enrich = (chat: Record<string, unknown>): Record<string, unknown> => {
       const id = jidNormalizedUser(String(chat.id ?? ""));
-      const alternate = this.pnToLid.get(id);
-      const contact =
-        this.contacts.get(id) || (alternate ? this.contacts.get(alternate) : undefined);
-      const contactName =
-        contact && typeof contact === "object"
-          ? String(contact.name || contact.notify || contact.verifiedName || "").trim()
-          : "";
+      // Check both sides of the PN/LID pair: a saved name may live on either
+      // record, even when the primary record only carries a push name.
+      const alternate = this.pnToLid.get(id) || this.lidToPn.get(id);
+      const records = [
+        this.contacts.get(id),
+        alternate ? this.contacts.get(alternate) : undefined,
+      ].filter((contact): contact is Record<string, unknown> => Boolean(contact));
+      const savedName = records.map((contact) => String(contact.name || "").trim()).find(Boolean);
+      const pushName = records.map((contact) => String(contact.notify || "").trim()).find(Boolean);
+      const verifiedName = records
+        .map((contact) => String(contact.verifiedName || "").trim())
+        .find(Boolean);
+      const contactName = savedName || pushName || verifiedName || "";
       return contactName ? { ...chat, contactName } : chat;
     };
 

@@ -122,7 +122,9 @@
   }
 
   function normalizeContactName(chat) {
-    const savedName = chat.name || chat.subject || chat.contactName;
+    // contactName is resolved from both PN/LID records and is the saved name,
+    // so it must win over a chat.name that may only be the push name.
+    const savedName = chat.contactName || chat.name || chat.subject;
     if (savedName) return String(savedName);
     const pushName = chat.notify || chat.pushName;
     if (pushName) return String(pushName);

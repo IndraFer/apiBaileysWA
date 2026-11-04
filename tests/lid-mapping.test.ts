@@ -63,3 +63,27 @@ test("a later LID mapping migrates an existing LID room", async () => {
   expect(store.chats.has(pn)).toBe(true);
   await store.destroy();
 });
+
+test("saved contact name wins from either PN or LID record", async () => {
+  const { store, events } = bindStore("lid-contact-name");
+  events.emit("lid-mapping.update", { lid, pn });
+  events.emit("contacts.upsert", [
+    { id: pn, notify: "Push Name" },
+    { id: lid, name: "Saved Contact Name" },
+  ] as never);
+  events.emit("messages.upsert", {
+    type: "notify",
+    messages: [
+      {
+        key: { id: "name-1", remoteJid: pn },
+        messageTimestamp: 100,
+        message: { conversation: "hello" },
+      },
+    ],
+  } as never);
+
+  const chat = store.getChatList(false)[0];
+  expect(chat?.contactName).toBe("Saved Contact Name");
+  await store.destroy();
+  rmSync("sessions/lid-contact-name_store.json", { force: true });
+});
