@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-11-04
+
+### Added
+
+- built-in send tool and authoritative runtime clock
+
+### Changed
+
+- unescape integration snippet code fences
+- drop stale 1.6 section and duplicated content
+- correct replay and credential-leak guidance
+
 ## [1.22.0] - 2026-11-02
 
 ### Added
