@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.2] - 2026-11-04
+
+### Fixed
+
+- prefer saved contact name from either PN or LID record
+
 ## [1.31.1] - 2026-11-04
 
 ### Added
