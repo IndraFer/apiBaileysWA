@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-11-04
+
+### Fixed
+
+- use the configured default when the message is blank
+
 ## [1.27.2] - 2026-11-04
 
 ### Fixed
