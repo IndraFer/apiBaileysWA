@@ -33,6 +33,8 @@ export interface ApiKeyRecord {
   sessions: string[];
   createdAt: string;
   lastUsedAt: string | null;
+  /** First 8 characters of the token, for identification only (never the key). */
+  tokenPrefix?: string;
 }
 
 export interface ApiKeySummary {
@@ -42,6 +44,7 @@ export interface ApiKeySummary {
   sessions: string[];
   createdAt: string;
   lastUsedAt: string | null;
+  tokenPrefix?: string;
 }
 
 export interface ApiKeyAuth {
@@ -111,6 +114,8 @@ function parseRecord(hash: string, raw: string): ApiKeyRecord | null {
         : ["*"],
       createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
       lastUsedAt: typeof parsed.lastUsedAt === "string" ? parsed.lastUsedAt : null,
+      tokenPrefix:
+        typeof parsed.tokenPrefix === "string" ? parsed.tokenPrefix.slice(0, 8) : undefined,
     };
   } catch {
     return null;
@@ -125,6 +130,7 @@ function toSummary(record: ApiKeyRecord): ApiKeySummary {
     sessions: record.sessions,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
+    tokenPrefix: record.tokenPrefix,
   };
 }
 
@@ -245,6 +251,7 @@ export async function createApiKey(input: {
     sessions: [input.session.trim()],
     createdAt: new Date().toISOString(),
     lastUsedAt: null,
+    tokenPrefix: token.slice(0, 8),
   };
 
   await persistRecord(record);

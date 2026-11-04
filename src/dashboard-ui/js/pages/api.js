@@ -105,7 +105,7 @@
       .map(
         (key) => `
         <tr>
-          <td><strong>${esc(key.label)}</strong><div class="text-muted text-xs font-mono">${esc(key.id)}</div></td>
+          <td><strong>${esc(key.label)}</strong><div class="text-muted text-xs font-mono">ID: ${esc(key.id)}</div><div class="text-muted text-xs font-mono">Key prefix: ${key.tokenPrefix ? `${esc(key.tokenPrefix)}…` : "unavailable (legacy key)"}</div></td>
           <td class="text-sm">${esc(scopeLabel(key.sessions))}</td>
           <td class="text-muted text-sm">${formatTime(key.createdAt)}</td>
           <td class="text-muted text-sm">${formatTime(key.lastUsedAt)}</td>
@@ -323,7 +323,7 @@
        <h4>Method &amp; URL</h4>
        <pre class="webhook-ref-code" id="snippet-url"></pre>
        <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-url">Copy URL</button></div>
-       <h4>Headers</h4>
+       <h4>Headers (JSON)</h4>
        <pre class="webhook-ref-code" id="snippet-headers"></pre>
        <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-headers">Copy Headers</button></div>
        <h4>JSON Schema (Tool Parameters)</h4>
@@ -345,7 +345,17 @@
       if (element) element.textContent = text;
     };
     setText("snippet-url", `POST ${endpoint}`);
-    setText("snippet-headers", "Authorization: Bearer <API_KEY>\nContent-Type: application/json");
+    setText(
+      "snippet-headers",
+      JSON.stringify(
+        {
+          Authorization: "Bearer <API_KEY>",
+          "Content-Type": "application/json",
+        },
+        null,
+        2,
+      ),
+    );
     setText("snippet-schema", JSON.stringify(schema, null, 2));
     setText("snippet-body", JSON.stringify(example, null, 2));
     setText("snippet-tool", JSON.stringify(tool, null, 2));
