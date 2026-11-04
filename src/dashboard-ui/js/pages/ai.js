@@ -351,11 +351,7 @@
                 placeholder="628123456789&#10;628987654321"></textarea>
               <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
             </div>
-            <small class="text-muted">
-              The current conversation is always allowed. Add recipients above to
-              let the model contact other chats. Group sends still obey
-              <code>ALLOW_GROUP_SEND</code>. Rate limit is enforced server-side.
-            </small>
+            <small class="text-muted" id="ai-send-scope-hint"></small>
           </div>
         </div>
 
@@ -511,6 +507,13 @@
       document
         .getElementById("ai-send-allowlist-wrap")
         ?.classList.toggle("hidden", scope !== "allowlist");
+      const hint = document.getElementById("ai-send-scope-hint");
+      if (hint) {
+        hint.textContent =
+          scope === "allowlist"
+            ? "The current conversation is always allowed. Add recipients above to let the model contact other chats. Group sends still obey ALLOW_GROUP_SEND; rate limit is enforced server-side."
+            : "The model may contact any number or JID the customer names; the current conversation is the default when no receiver is given. Group sends still obey ALLOW_GROUP_SEND; rate limit is enforced server-side.";
+      }
     },
 
     /** Show the responder chain that will actually run for this number. */
