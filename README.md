@@ -108,6 +108,21 @@ list on every request when enabled. It is off by default and text-only.
 - **Execution** — the tool calls the same service as `POST /api/v1/messages`;
   it does not make an internal HTTP request or carry an API key.
 
+#### Media and link context
+
+- Captionless images, videos, audio and documents are described with metadata
+  (`[media: image, mime: ...]`) so they still reach the AI instead of falling
+  straight to the static reply. Video/audio contents are not processed.
+- Optional **image understanding** is a per-session toggle in AI & Routing.
+  Inbound images are downloaded in memory, bounded and re-encoded to JPEG, sent
+  as `image_url` parts, then discarded. Nothing is stored in the chat history or
+  media directory; history keeps a text placeholder only. The optional vision
+  model uses the same base URL/API key; empty means the main model, and a
+  rejection falls back once to a text-only descriptor.
+- Customer links get bounded title/description previews through a DNS/private-IP
+  checked, redirect-rejecting, size-capped fetch. Previews are untrusted data in
+  the user prompt; the model cannot fetch arbitrary URLs.
+
 #### Runtime date/time context
 
 Every OpenAI-compatible request carries a server-generated `<get_info>` block

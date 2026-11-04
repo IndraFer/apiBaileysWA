@@ -56,6 +56,7 @@ export interface ResolvedAiConfig {
   ragEndpoints: RagEndpointConfig[];
   credentials: ToolCredentials;
   sendMessage: ResolvedSendMessageConfig;
+  vision: { enabled: boolean; model: string };
 }
 
 export interface AgentHistoryMessage {
@@ -84,6 +85,10 @@ export interface AgentReplyRequest {
   now?: Date;
   /** Present only when the session exposes the built-in send tool. */
   sendMessage?: SendMessageToolHandler;
+  /** In-memory images for an opt-in vision turn. */
+  images?: Array<{ mime: string; data: string }>;
+  /** Untrusted title/description metadata for links in the current texts. */
+  linkContext?: string;
 }
 
 export type AgentReplyResult =
@@ -171,6 +176,11 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
         ? Math.min(Math.max(Number(stored.sendMessage?.maxPerHour), 1), 200)
         : 10,
     },
+    vision: {
+      enabled: stored.vision?.enabled ?? false,
+      model:
+        typeof stored.vision?.model === "string" ? stored.vision.model.trim().slice(0, 128) : "",
+    },
   };
 }
 
@@ -197,8 +207,13 @@ function buildToolGuidance(endpoints: RagEndpointConfig[]): string {
   ].join("\n");
 }
 
+type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+type ChatContent = string | ChatContentPart[];
+
 type ChatMessage =
-  | { role: "system" | "user"; content: string }
+  | { role: "system" | "user"; content: ChatContent }
   | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
 
@@ -327,16 +342,32 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   }
 
   const combined = req.texts.map((text) => redactOwnNumber(text)).join("\n");
-  messages.push({ role: "user", content: wrapUserContent(combined) });
+  const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
+  const textContent = wrapUserContent(`${combined}${linkContext}`);
+  const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];
+  let userContent: ChatContent = textContent;
+  if (images.length > 0) {
+    userContent = [
+      { type: "text", text: textContent },
+      ...images.map((image) => ({
+        type: "image_url" as const,
+        image_url: { url: `data:${image.mime};base64,${image.data}` },
+      })),
+    ];
+  }
+  const userIndex = messages.length;
+  messages.push({ role: "user", content: userContent });
 
+  let activeModel = images.length > 0 && ai.vision.model ? ai.vision.model : ai.model;
+  let visionFallbackUsed = false;
   const toolsUsed: string[] = [];
 
   for (let round = 0; round <= ai.toolMaxRounds; round++) {
     const allowTools = tools.length > 0 && round < ai.toolMaxRounds;
-    const outcome = await postCompletion(
+    let outcome = await postCompletion(
       endpoint,
       {
-        model: ai.model,
+        model: activeModel,
         messages,
         temperature: ai.temperature,
         top_p: ai.topP,
@@ -351,6 +382,34 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       ai.apiKey,
       ai.timeoutMs,
     );
+
+    // A text-only main model can reject image parts. Retry once without the
+    // images but keep the media descriptor already present in the text, so a
+    // bad vision model never hides the customer's message.
+    if (!outcome.ok && images.length > 0 && !visionFallbackUsed) {
+      visionFallbackUsed = true;
+      activeModel = ai.model;
+      messages[userIndex] = {
+        role: "user",
+        content: `${textContent}\n\n[Image omitted: vision model unavailable or not image-capable]`,
+      };
+      outcome = await postCompletion(
+        endpoint,
+        {
+          model: activeModel,
+          messages,
+          temperature: ai.temperature,
+          top_p: ai.topP,
+          frequency_penalty: ai.frequencyPenalty,
+          presence_penalty: ai.presencePenalty,
+          ...(ai.minP > 0 && /openrouter\.ai/i.test(ai.baseUrl) ? { min_p: ai.minP } : {}),
+          max_tokens: ai.maxTokens,
+          ...(allowTools ? { tools, tool_choice: "auto" } : {}),
+        },
+        ai.apiKey,
+        ai.timeoutMs,
+      );
+    }
 
     if (!outcome.ok) return { ok: false, error: outcome.error ?? "provider error" };
 

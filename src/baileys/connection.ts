@@ -26,6 +26,7 @@ import { toDataURL } from "qrcode";
 import { type AuthStateResult, useAuthState } from "@/baileys/authState";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
 import { shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
+import { downloadImageForVision } from "@/baileys/helpers/visionMedia";
 import { humanizeReadBeforeReply, resolveHumanizeOptions } from "@/baileys/replyEngine";
 import { MemoryStore } from "@/baileys/store/memoryStore";
 import type { SessionMetadata, SessionOptions, WebhookPayload } from "@/baileys/types";
@@ -43,6 +44,8 @@ import {
   type ResolvedSendMessageConfig,
 } from "@/services/aiSendTool";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
+import { collectLinkContext } from "@/services/linkPreview";
 import { sendUnifiedMessage } from "@/services/messageSender";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
 import type { ToolExecution } from "@/services/ragTools";
@@ -128,6 +131,8 @@ function extractMessageText(message: WAMessage): string | null {
     content.extendedTextMessage?.text ||
     content.imageMessage?.caption ||
     content.videoMessage?.caption ||
+    content.documentMessage?.caption ||
+    content.documentWithCaptionMessage?.message?.documentMessage?.caption ||
     null;
   return typeof text === "string" && text.trim() ? text.trim() : null;
 }
@@ -798,8 +803,21 @@ export class BaileysConnection {
     if (!last || !remoteJid) return false;
 
     const guard = config.ai.guard;
-    const texts = messages
-      .map((m) => extractMessageText(m))
+    const parts = messages.map((message) => {
+      const text = extractMessageText(message);
+      const media = extractMediaInfo(message);
+      // A media-only message still has usable context. This prevents the
+      // static fallback from answering image/video/document messages that have
+      // no caption.
+      const descriptor = media ? mediaDescriptor(media) : "";
+      return {
+        content: [text, descriptor].filter(Boolean).join("\n"),
+        media,
+        message,
+      };
+    });
+    const texts = parts
+      .map((part) => part.content)
       .filter((text): text is string => Boolean(text))
       .map((text) => sanitizeUserText(text, guard.maxInputChars))
       .filter(Boolean);
@@ -874,7 +892,10 @@ export class BaileysConnection {
     }
 
     void this.humanizeReadStep(last);
-    this.aiRouter.enqueue(remoteJid, texts, last);
+    const imageMessages = parts
+      .filter((part) => part.media?.kind === "image")
+      .map((part) => part.message);
+    this.aiRouter.enqueue(remoteJid, texts, last, imageMessages);
     return true;
   }
 
@@ -984,10 +1005,23 @@ export class BaileysConnection {
     }
   }
 
+  /** Download at most two current-batch images for an opt-in vision request. */
+  private async downloadVisionImages(
+    media: WAMessage[],
+  ): Promise<Array<{ mime: string; data: string }>> {
+    const images: Array<{ mime: string; data: string }> = [];
+    for (const message of media.slice(-2)) {
+      const image = await downloadImageForVision(message);
+      if (image) images.push(image);
+    }
+    return images;
+  }
+
   /** Generate a reply, or dispatch the event when the webhook driver is used. */
   private async generateAiReply(input: {
     conversationId: string;
     texts: string[];
+    media?: WAMessage[];
   }): Promise<RouterGeneration> {
     const ai = resolveAiConfig(this.options.ai);
     const startedAt = Date.now();
@@ -1033,6 +1067,8 @@ export class BaileysConnection {
       ai,
       timezone: routingCfg.timezone,
       sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
+      images: ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [],
+      linkContext: await collectLinkContext(input.texts),
     });
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {

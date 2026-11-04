@@ -40,6 +40,8 @@ export interface ConversationRouterOptions {
   generateReply: (input: {
     conversationId: string;
     texts: string[];
+    /** Image messages from this batch, for opt-in vision. */
+    media?: WAMessage[];
   }) => Promise<RouterGeneration | AgentReplyResult>;
   /** Deliver a generated text back to the chat. */
   deliver: (conversationId: string, text: string, lastMessage: WAMessage) => Promise<void>;
@@ -50,6 +52,7 @@ export interface ConversationRouterOptions {
 
 interface ConversationState {
   texts: string[];
+  media: WAMessage[];
   lastMessage: WAMessage | null;
   firstAt: number;
   pausedUntil: number;
@@ -68,8 +71,13 @@ export class ConversationRouter {
     this.options = options;
   }
 
-  /** Queue inbound texts for a conversation. */
-  enqueue(conversationId: string, texts: string[], lastMessage: WAMessage): void {
+  /** Queue inbound texts (and image messages for vision) for a conversation. */
+  enqueue(
+    conversationId: string,
+    texts: string[],
+    lastMessage: WAMessage,
+    media: WAMessage[] = [],
+  ): void {
     if (texts.length === 0) return;
     const routing = this.options.getRouting();
     const state = this.ensure(conversationId);
@@ -87,10 +95,14 @@ export class ConversationRouter {
     }
 
     state.texts.push(...texts);
+    state.media.push(...media);
     state.lastMessage = lastMessage;
     if (state.firstAt === 0) state.firstAt = now;
     if (state.texts.length > routing.maxBatchMessages) {
       state.texts = state.texts.slice(-routing.maxBatchMessages);
+    }
+    if (state.media.length > 2) {
+      state.media = state.media.slice(-2);
     }
 
     if (state.pausedUntil > now) {
@@ -143,6 +155,7 @@ export class ConversationRouter {
     const state = this.ensure(conversationId);
     state.mutedUntil = Math.max(state.mutedUntil, until);
     state.texts = [];
+    state.media = [];
     state.firstAt = 0;
     state.epoch += 1;
     if (state.timer) {
@@ -169,6 +182,7 @@ export class ConversationRouter {
       if (state.timer) clearTimeout(state.timer);
       state.timer = null;
       state.texts = [];
+      state.media = [];
     }
     this.conversations.clear();
   }
@@ -178,6 +192,7 @@ export class ConversationRouter {
     if (existing) return existing;
     const created: ConversationState = {
       texts: [],
+      media: [],
       lastMessage: null,
       firstAt: 0,
       pausedUntil: 0,
@@ -238,18 +253,21 @@ export class ConversationRouter {
         state.texts.length,
       );
       state.texts = [];
+      state.media = [];
       state.firstAt = 0;
       return;
     }
 
     state.flushing = true;
     const texts = [...state.texts];
+    const media = [...state.media];
     const lastMessage = state.lastMessage;
     state.texts = [];
+    state.media = [];
     state.firstAt = 0;
 
     try {
-      const result = await this.options.generateReply({ conversationId, texts });
+      const result = await this.options.generateReply({ conversationId, texts, media });
       if (!result.ok) {
         this.options.logger.warn(
           "[%s] AI reply failed for %s: %s",

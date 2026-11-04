@@ -323,16 +323,24 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Send message tool</h3></div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="ai-send-enabled" />
-              Allow AI to send WhatsApp messages
+          <div class="card-header"><h3>AI capabilities</h3></div>
+          <div class="u-mb-05">
+            <label class="toggle-row">
+              <input type="checkbox" id="ai-send-enabled" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Allow AI to send WhatsApp messages</strong>
+                <small>Adds <code>send_whatsapp_message</code> to every request. Plain text only; off by default.</small>
+              </span>
             </label>
-            <small class="text-muted u-block-mt-035">
-              Adds <code>send_whatsapp_message</code> to the tools on every request.
-              Off by default; the AI can only send plain text.
-            </small>
+            <label class="toggle-row">
+              <input type="checkbox" id="ai-vision-enabled" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Allow AI to understand images</strong>
+                <small>Downloads inbound images in memory for a vision request. Off by default; videos and audio are not processed.</small>
+              </span>
+            </label>
           </div>
           <div id="ai-send-settings" class="hidden">
             <div class="form-row cols-2">
@@ -355,6 +363,16 @@
               <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
             </div>
             <small class="text-muted" id="ai-send-scope-hint"></small>
+          </div>
+          <div id="ai-vision-settings" class="hidden">
+            <div class="form-group">
+              <label for="ai-vision-model">Vision model (optional)</label>
+              <input id="ai-vision-model" class="input" type="text" maxlength="128"
+                placeholder="Leave empty to use the main model" />
+              <small class="text-muted">
+                Uses the same base URL and API key. Leave empty only if the main model supports image inputs.
+              </small>
+            </div>
           </div>
         </div>
 
@@ -428,6 +446,9 @@
       document.getElementById("ai-send-enabled")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
+      document.getElementById("ai-vision-enabled")?.addEventListener("change", () => {
+        this.syncSendMessageUi();
+      });
       document.getElementById("ai-send-scope")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
@@ -477,6 +498,10 @@
       set("ai-send-scope", sendMessage.scope || "allowlist");
       set("ai-send-allowlist", (sendMessage.allowlist || []).join("\n"));
       set("ai-send-max", sendMessage.maxPerHour ?? 10);
+      const vision = ai.vision || {};
+      const visionEnabled = document.getElementById("ai-vision-enabled");
+      if (visionEnabled) visionEnabled.checked = Boolean(vision.enabled);
+      set("ai-vision-model", vision.model || "");
       this.syncSendMessageUi();
 
       const credentials = document.getElementById("ai-credentials");
@@ -507,7 +532,9 @@
     syncSendMessageUi() {
       const enabled = Boolean(document.getElementById("ai-send-enabled")?.checked);
       const scope = document.getElementById("ai-send-scope")?.value || "allowlist";
+      const visionEnabled = Boolean(document.getElementById("ai-vision-enabled")?.checked);
       document.getElementById("ai-send-settings")?.classList.toggle("hidden", !enabled);
+      document.getElementById("ai-vision-settings")?.classList.toggle("hidden", !visionEnabled);
       document
         .getElementById("ai-send-allowlist-wrap")
         ?.classList.toggle("hidden", scope !== "allowlist");
@@ -648,6 +675,10 @@
               .map((entry) => entry.trim())
               .filter(Boolean),
             maxPerHour: Math.min(Math.max(Number(value("ai-send-max")) || 10, 1), 200),
+          },
+          vision: {
+            enabled: Boolean(document.getElementById("ai-vision-enabled")?.checked),
+            model: value("ai-vision-model"),
           },
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),

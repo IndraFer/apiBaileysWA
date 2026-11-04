@@ -92,6 +92,13 @@ export interface AiSendMessageConfig {
   maxPerHour?: number;
 }
 
+/** Opt-in image understanding for the OpenAI-compatible driver. */
+export interface AiVisionConfig {
+  enabled?: boolean;
+  /** Optional vision-capable model slug; empty means the main model. */
+  model?: string;
+}
+
 export interface AiAgentConfig {
   enabled?: boolean;
   /**
@@ -127,6 +134,8 @@ export interface AiAgentConfig {
   credentials?: string;
   /** Optional built-in send-message tool (default off). */
   sendMessage?: AiSendMessageConfig;
+  /** Optional image understanding (default off). */
+  vision?: AiVisionConfig;
 }
 
 export interface SessionOptions {

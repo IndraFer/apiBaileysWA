@@ -133,6 +133,7 @@ describe("generateAgentReply runtime integration", () => {
         allowlist: [],
         maxPerHour: 5,
       },
+      vision: { enabled: false, model: "" },
     };
 
     const result = await generateAgentReply({

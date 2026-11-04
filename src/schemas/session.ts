@@ -122,6 +122,13 @@ export const aiSendMessageSchema = z
   })
   .strict();
 
+export const aiVisionSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    model: z.string().max(128).optional(),
+  })
+  .strict();
+
 export const aiConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -143,6 +150,7 @@ export const aiConfigSchema = z
     ragEndpoints: z.array(ragEndpointSchema).max(20).optional(),
     credentialsJson: z.string().max(8000).optional(),
     sendMessage: aiSendMessageSchema.optional(),
+    vision: aiVisionSchema.optional(),
   })
   .strict();
 
