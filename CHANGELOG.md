@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-11-04
+
+### Changed
+
+- label the permission matrix column Capability
+
 ## [1.27.0] - 2026-11-04
 
 ### Added
