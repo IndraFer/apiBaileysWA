@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-11-11
+
+### Fixed
+
+- make the static fallback honour its trigger and the webhook path
+
 ## [1.33.0] - 2026-11-11
 
 ### Added
