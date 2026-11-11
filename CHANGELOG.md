@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-11-11
+
+### Added
+
+- one static reply policy instead of role plus trigger
+
 ## [1.33.2] - 2026-11-11
 
 ### Fixed
