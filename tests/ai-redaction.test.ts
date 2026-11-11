@@ -1,45 +1,73 @@
 import { describe, expect, test } from "bun:test";
-import { maskOwnNumbers } from "@/services/aiAgent";
+import { maskSensitiveIdentities } from "@/services/aiAgent";
+import { scrubModelOutput } from "@/services/promptGuard";
 
-const own = ["628123456789@s.whatsapp.net", "111222333444555@lid", "628999000111@s.whatsapp.net"];
+const self = ["628999000111@s.whatsapp.net", "111222333444555@lid"];
 
-describe("maskOwnNumbers", () => {
-  test("masks the conversation's own number in common shapes", () => {
-    expect(maskOwnNumbers("nomor saya 628123456789", own)).toBe("nomor saya [nomor]");
-    expect(maskOwnNumbers("wa: +628123456789 ya", own)).toBe("wa: [nomor] ya");
-    expect(maskOwnNumbers("628123456789:12@s.whatsapp.net", own)).toBe("[nomor]:12@s.whatsapp.net");
+describe("maskSensitiveIdentities", () => {
+  test("masks the account's own number, not the customer's", () => {
+    // The customer's own number is visible to them and may be repeated back.
+    expect(maskSensitiveIdentities("nomor saya 628123456789", self)).toBe(
+      "nomor saya 628123456789",
+    );
+    expect(maskSensitiveIdentities("nomor kami 628999000111", self)).toBe("nomor kami [nomor]");
+    expect(maskSensitiveIdentities("wa: +628999000111 ya", self)).toBe("wa: [nomor] ya");
   });
 
-  test("masks the LID alias and the session's own number", () => {
-    expect(maskOwnNumbers("id 111222333444555", own)).toBe("id [nomor]");
-    expect(maskOwnNumbers("admin 628999000111", own)).toBe("admin [nomor]");
+  test("masks the account's LID", () => {
+    expect(maskSensitiveIdentities("id 111222333444555", self)).toBe("id [nomor]");
   });
 
-  test("leaves every other number intact", () => {
-    // The old blanket rule replaced all 10+ digit runs, which hid exactly the
-    // answers customers ask for.
-    expect(maskOwnNumbers("order 2024000123", own)).toBe("order 2024000123");
-    expect(maskOwnNumbers("hubungi supplier +628111222333", own)).toBe(
+  test("masks every raw JID, whichever side it belongs to", () => {
+    expect(maskSensitiveIdentities("628123456789@s.whatsapp.net", self)).toBe("[jid]");
+    expect(maskSensitiveIdentities("120363000000000000@g.us", self)).toBe("[jid]");
+    expect(maskSensitiveIdentities("kirim ke 628123456789:12@s.whatsapp.net", self)).toBe(
+      "kirim ke [jid]",
+    );
+    expect(maskSensitiveIdentities("lihat status@broadcast", self)).toBe("lihat [jid]");
+  });
+
+  test("leaves order IDs, membership numbers and other phone numbers alone", () => {
+    expect(maskSensitiveIdentities("order 2024000123", self)).toBe("order 2024000123");
+    expect(maskSensitiveIdentities("hubungi supplier +628111222333", self)).toBe(
       "hubungi supplier +628111222333",
     );
-    expect(maskOwnNumbers("NIK 3201234567890001", own)).toBe("NIK 3201234567890001");
+    expect(maskSensitiveIdentities("NIK 3201234567890001", self)).toBe("NIK 3201234567890001");
   });
 
   test("never cuts a longer digit run in half", () => {
-    // The own number embedded in a longer run must not be partially replaced.
-    expect(maskOwnNumbers("96281234567890000", own)).toBe("96281234567890000");
-    expect(maskOwnNumbers("06281234567899", own)).toBe("06281234567899");
+    expect(maskSensitiveIdentities("96289990001110000", self)).toBe("96289990001110000");
+    expect(maskSensitiveIdentities("062899900011199", self)).toBe("062899900011199");
   });
 
-  test("groups and unknown identities are ignored", () => {
-    expect(maskOwnNumbers("grup 120363000000000000", ["120363000000000000@g.us"])).toBe(
-      "grup 120363000000000000",
+  test("an empty identity list changes nothing except JIDs", () => {
+    expect(maskSensitiveIdentities("nomor 628999000111", undefined)).toBe("nomor 628999000111");
+    expect(maskSensitiveIdentities("nomor 628999000111", [])).toBe("nomor 628999000111");
+  });
+});
+
+describe("scrubModelOutput", () => {
+  test("keeps the customer's number but removes raw JIDs", () => {
+    expect(scrubModelOutput("nomor Anda 628123456789")).toBe("nomor Anda 628123456789");
+    expect(scrubModelOutput("chat 628123456789@s.whatsapp.net")).toBe("chat [jid]");
+  });
+
+  test("removes the session id as a whole token only", () => {
+    expect(scrubModelOutput("session rog8 aktif", { sessionId: "rog8" })).toBe(
+      "session [session] aktif",
     );
-    expect(maskOwnNumbers("nomor 628123456789", undefined)).toBe("nomor 628123456789");
-    expect(maskOwnNumbers("nomor 628123456789", [])).toBe("nomor 628123456789");
+    // Part of a longer word must not be rewritten.
+    expect(scrubModelOutput("dropbox rog8x", { sessionId: "rog8" })).toBe("dropbox rog8x");
   });
 
-  test("masks every occurrence, including a repeated one", () => {
-    expect(maskOwnNumbers("628123456789 lalu 628123456789", own)).toBe("[nomor] lalu [nomor]");
+  test("ignores very short session ids so ordinary words survive", () => {
+    expect(scrubModelOutput("ini cs kami", { sessionId: "cs" })).toBe("ini cs kami");
+  });
+
+  test("still scrubs credentials", () => {
+    expect(scrubModelOutput("key sk-abcdefghijklmno")).toBe("key [redacted]");
+    expect(scrubModelOutput("Authorization: Bearer abcdefghijklmnop")).toBe(
+      "Authorization: Bearer [redacted]",
+    );
   });
 });

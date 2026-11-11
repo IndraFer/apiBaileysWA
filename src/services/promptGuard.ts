@@ -128,10 +128,47 @@ export function wrapUserContent(text: string): string {
  * Remove credential-shaped strings from the model output before it is sent to
  * a customer (defence against the model echoing keys or headers).
  */
-export function scrubModelOutput(text: string): string {
-  return text
+/**
+ * Remove anything the model must never show a customer: credentials on one side,
+ * and internal addressing on the other.
+ *
+ * The session identifier is operator-chosen, so it is matched as a whole token
+ * only. Short ids are skipped: masking a two-letter id would damage ordinary
+ * words, and the id never enters the prompt anyway.
+ */
+export function scrubModelOutput(text: string, options?: { sessionId?: string }): string {
+  let output = text
     .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{10,}\b/gi, "Bearer [redacted]")
     .replace(/\b[A-Za-z0-9_-]{32,}\b(?=\s*$)/g, "[redacted]")
-    .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, "[redacted]");
+    .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, "[redacted]")
+    // Raw WhatsApp addresses are internal plumbing, never customer-facing text.
+    .replace(
+      /\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi,
+      "[jid]",
+    );
+
+  const sessionId = options?.sessionId?.trim() ?? "";
+  if (sessionId.length >= 3) output = replaceWholeToken(output, sessionId, "[session]");
+
+  return output;
+}
+
+/** Replace one standalone token, never a fragment of a longer word. */
+function replaceWholeToken(text: string, token: string, replacement: string): string {
+  const wordChar = /[A-Za-z0-9_-]/;
+  let out = "";
+  let index = 0;
+
+  for (;;) {
+    const found = text.indexOf(token, index);
+    if (found < 0) break;
+    const before = text[found - 1];
+    const after = text[found + token.length];
+    const standalone = !(before && wordChar.test(before)) && !(after && wordChar.test(after));
+    out += text.slice(index, found) + (standalone ? replacement : token);
+    index = found + token.length;
+  }
+
+  return out + text.slice(index);
 }

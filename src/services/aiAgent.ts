@@ -100,10 +100,11 @@ export interface AgentReplyRequest {
   /** Untrusted title/description metadata for links in the current texts. */
   linkContext?: string;
   /**
-   * Identities that must never reach the provider: the conversation's own
-   * number plus the session's own number. Empty means nothing is masked.
+   * The account's own identities (number and LID). Their bare digits never reach
+   * the provider. The customer's own number is not included on purpose: it is
+   * visible to them already.
    */
-  ownIdentities?: string[];
+  selfIdentities?: string[];
 }
 
 export type AgentReplyResult =
@@ -212,25 +213,49 @@ function identityDigits(value: string): string {
   return local.replace(/\D/g, "");
 }
 
-/**
- * Mask only the identities this conversation already belongs to: the customer's
- * own number (PN and its LID alias) and the session's own number.
- *
- * Other numbers are left intact. A membership number, an order ID or a supplier
- * phone number is information the customer asked about, and replacing it with a
- * placeholder both hides the answer and teaches the model to repeat the
- * placeholder back. Groups are skipped: a group JID is not a phone number.
- */
-export function maskOwnNumbers(text: string, ownIdentities: string[] | undefined): string {
-  let output = String(text ?? "");
-  const seen = new Set<string>();
+/** Any WhatsApp address is internal plumbing, never something a customer reads. */
+const JID_PATTERN = /\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi;
 
-  for (const identity of ownIdentities ?? []) {
-    const normalized = String(identity ?? "")
-      .trim()
-      .replace(/:\d+(?=@)/, "");
-    if (!normalized || normalized.endsWith("@g.us")) continue;
-    const digits = identityDigits(normalized);
+/** Replace one standalone token, never a fragment of a longer word. */
+export function replaceWholeToken(text: string, token: string, replacement: string): string {
+  const trimmed = String(token ?? "").trim();
+  if (!trimmed) return text;
+  const wordChar = /[A-Za-z0-9_-]/;
+  let out = "";
+  let index = 0;
+
+  for (;;) {
+    const found = text.indexOf(trimmed, index);
+    if (found < 0) break;
+    const before = text[found - 1];
+    const after = text[found + trimmed.length];
+    const standalone = !(before && wordChar.test(before)) && !(after && wordChar.test(after));
+    out += text.slice(index, found) + (standalone ? replacement : trimmed);
+    index = found + trimmed.length;
+  }
+
+  return out + text.slice(index);
+}
+
+/**
+ * Strip internal addressing from text before the model or the customer sees it.
+ *
+ * Allowed to pass through: the customer's own visible phone number, order IDs,
+ * membership numbers and any other number they asked about.
+ *
+ * Never allowed out: raw JIDs and the account's own identities (its number and
+ * its LID). The session id is removed on the way out as well, so an operator's
+ * internal identifier cannot be echoed to a customer.
+ */
+export function maskSensitiveIdentities(
+  text: string,
+  selfIdentities: string[] | undefined,
+): string {
+  let output = String(text ?? "").replace(JID_PATTERN, "[jid]");
+
+  const seen = new Set<string>();
+  for (const identity of selfIdentities ?? []) {
+    const digits = identityDigits(identity);
     if (digits.length < 6 || seen.has(digits)) continue;
     seen.add(digits);
 
@@ -238,7 +263,6 @@ export function maskOwnNumbers(text: string, ownIdentities: string[] | undefined
     output = output.replace(pattern, (match, offset: number) => {
       const before = output[offset - 1];
       const after = output[offset + match.length];
-      // Never cut a longer digit run in half.
       if (before && /\d/.test(before)) return match;
       if (after && /\d/.test(after)) return match;
       return "[nomor]";
@@ -405,10 +429,15 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   if (system) messages.push({ role: "system", content: system });
 
   for (const item of req.history.slice(-12)) {
-    messages.push({ role: item.role, content: maskOwnNumbers(item.content, req.ownIdentities) });
+    messages.push({
+      role: item.role,
+      content: maskSensitiveIdentities(item.content, req.selfIdentities),
+    });
   }
 
-  const combined = req.texts.map((text) => maskOwnNumbers(text, req.ownIdentities)).join("\n");
+  const combined = req.texts
+    .map((text) => maskSensitiveIdentities(text, req.selfIdentities))
+    .join("\n");
   const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
   const textContent = wrapUserContent(`${combined}${linkContext}`);
   const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];
@@ -488,7 +517,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       if (!text) return { ok: false, error: "provider returned an empty reply" };
       return {
         ok: true,
-        text: scrubModelOutput(text),
+        text: scrubModelOutput(text, { sessionId: req.sessionId }),
         toolsUsed,
         usage: {
           promptTokens: outcome.body?.usage?.prompt_tokens ?? 0,
@@ -540,7 +569,11 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
             : undefined;
         const result = await req.sendMessage({ receiver, text });
         toolsUsed.push(name);
-        messages.push({ role: "tool", tool_call_id: call.id, content: result.content });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: maskSensitiveIdentities(result.content, req.selfIdentities),
+        });
         continue;
       }
 
@@ -555,7 +588,11 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         }
         const result = await executeWebSearch(args);
         toolsUsed.push(name);
-        messages.push({ role: "tool", tool_call_id: call.id, content: result.content });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: maskSensitiveIdentities(result.content, req.selfIdentities),
+        });
         continue;
       }
 
@@ -571,7 +608,11 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       }
       const result = await executeTool(target, args, credential);
       toolsUsed.push(name);
-      messages.push({ role: "tool", tool_call_id: call.id, content: result.content });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: maskSensitiveIdentities(result.content, req.selfIdentities),
+      });
     }
   }
 

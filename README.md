@@ -166,14 +166,28 @@ automatic reply (OTP, login codes, verification notices).
 - OTP content is never written to the filter log; only the match reason and, in
   smart mode, the score are logged. The filter is disabled by default.
 
-#### Own-number masking
+#### Internal identity masking
 
-Before a request leaves the server, only the identities that belong to the
-conversation are replaced with `[nomor]`: the customer's own number (PN and its
-LID alias) and the session's own number. Everything else is left intact, because
-an order ID, a membership number or a supplier phone number is usually the answer
-the customer asked for. Runs inside a longer digit string are never partially
-replaced, and group JIDs are not treated as phone numbers.
+Two directions, two rules.
+
+**Towards the model** (history, current texts and tool output) only internal
+plumbing is removed:
+
+| Removed | Replaced with |
+|---|---|
+| Raw JIDs (`…@s.whatsapp.net`, `…@lid`, `…@g.us`, `@broadcast`, `@newsletter`) | `[jid]` |
+| The account's own number and its LID | `[nomor]` |
+
+The customer's own number is deliberately **not** masked: it is the number they
+see in their own app, and hiding it broke legitimate answers. Order IDs,
+membership numbers, supplier numbers and any other number pass through intact.
+A match inside a longer digit run is never partially replaced, and device
+suffixes (`:12@`) are part of the matched JID rather than a separate number.
+
+**Towards the customer** (`scrubModelOutput`) removes credentials, raw JIDs and
+the operator's session identifier (`[session]`). The session id is matched as a
+whole token and only when it is at least three characters, so a short id cannot
+damage ordinary words.
 
 #### Runtime date/time context
 
