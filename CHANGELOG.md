@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.33.2] - 2026-11-11
+
+### Fixed
+
+- tidy the responder controls and drop the redundant AI "off" mode
+
 ## [1.33.1] - 2026-11-11
 
 ### Fixed
