@@ -588,6 +588,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
             allowlist: ai.sendMessage?.allowlist ?? [],
             maxPerHour: ai.sendMessage?.maxPerHour ?? 10,
           },
+          persona: {
+            scope: ai.persona?.scope === "strict" ? "strict" : "flexible",
+          },
           webSearch: {
             enabled: ai.webSearch?.enabled ?? false,
           },
@@ -666,6 +669,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       credentialsJson,
       apiKey,
       sendMessage: sendMessagePatch,
+      persona: personaPatch,
       webSearch: webSearchPatch,
       vision: visionPatch,
       otpFilter: otpFilterPatch,
@@ -675,6 +679,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     if (sendMessagePatch) {
       // Nested merge: a partial patch must not drop scope/allowlist/maxPerHour.
       ai.sendMessage = { ...(current.ai?.sendMessage ?? {}), ...sendMessagePatch };
+    }
+    if (personaPatch) {
+      ai.persona = { ...(current.ai?.persona ?? {}), ...personaPatch };
     }
     if (webSearchPatch) {
       ai.webSearch = { ...(current.ai?.webSearch ?? {}), ...webSearchPatch };
@@ -753,6 +760,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
           apiKeySet: Boolean(saved.apiKey),
           credentialsSet: Object.keys(saved.endpoints ?? {}).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
+          persona: {
+            scope: ai.persona?.scope === "strict" ? "strict" : "flexible",
+          },
           webSearch: { enabled: ai.webSearch?.enabled ?? false },
         },
       },

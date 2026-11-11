@@ -452,6 +452,14 @@
               placeholder="You are a professional assistant. Answer clearly, concisely and politely in the customer's language. Ask a short clarifying question when the request is ambiguous. Never invent facts; use the available tools when data is required. Hand the conversation to a human when the customer asks for one or when you are unsure."></textarea>
             <small class="text-muted">Persona, tone, language and escalation rules.</small>
           </div>
+          <div class="form-group">
+            <label for="ai-persona-scope">Response Scope</label>
+            <select id="ai-persona-scope" class="input">
+              <option value="flexible" selected>Flexible — domain first, brief general questions allowed</option>
+              <option value="strict">Strict — only the configured domain, everything else declined</option>
+            </select>
+            <small class="text-muted">Injection resistance is always enforced and is not affected by this setting.</small>
+          </div>
         </div>
 
         <div class="card">
@@ -581,6 +589,8 @@
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
       const sendMessage = ai.sendMessage || {};
+      const persona = ai.persona || {};
+      set("ai-persona-scope", persona.scope === "strict" ? "strict" : "flexible");
       const webSearch = ai.webSearch || {};
       const webSearchAvailable = data.defaults?.webSearchAvailable !== false;
       const webSearchToggle = document.getElementById("ai-web-search-enabled");
@@ -810,6 +820,9 @@
               .map((entry) => entry.trim())
               .filter(Boolean),
             maxPerHour: Math.min(Math.max(Number(value("ai-send-max")) || 10, 1), 200),
+          },
+          persona: {
+            scope: value("ai-persona-scope") || "flexible",
           },
           webSearch: {
             // When the server has no instance configured the toggle is disabled;

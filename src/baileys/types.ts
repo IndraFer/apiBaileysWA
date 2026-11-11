@@ -130,6 +130,19 @@ export interface OtpFilterConfig {
   excludeKeywords?: string[];
 }
 
+/**
+ * How far the assistant may leave the operator's domain:
+ * - "strict"   — only the configured domain, everything else is declined
+ * - "flexible" — the domain first, but brief general questions are allowed
+ */
+export type AiPersonaScope = "strict" | "flexible";
+
+/** Persona scope. The injection-resistance block is not configurable. */
+export interface AiPersonaConfig {
+  /** Default: "flexible". */
+  scope?: AiPersonaScope;
+}
+
 /** Opt-in built-in web_search tool backed by the operator's SearXNG instance. */
 export interface AiWebSearchConfig {
   enabled?: boolean;
@@ -177,6 +190,8 @@ export interface AiAgentConfig {
   credentials?: string;
   /** Optional built-in send-message tool (default off). */
   sendMessage?: AiSendMessageConfig;
+  /** Persona scope: how far the model may leave the configured domain. */
+  persona?: AiPersonaConfig;
   /** Optional built-in web search tool (default off, requires SEARXNG_URL). */
   webSearch?: AiWebSearchConfig;
   /** Optional image understanding (default off). */
