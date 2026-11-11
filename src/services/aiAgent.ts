@@ -28,6 +28,7 @@ import {
   type ToolCredentials,
   type ToolExecution,
 } from "@/services/ragTools";
+import { maskInternalIds } from "@/services/redaction";
 import { buildRuntimeContext } from "@/services/runtimeContext";
 import {
   buildWebSearchGuidance,
@@ -355,10 +356,13 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   if (system) messages.push({ role: "system", content: system });
 
   for (const item of req.history.slice(-12)) {
-    messages.push({ role: item.role, content: item.content });
+    messages.push({
+      role: item.role,
+      content: maskInternalIds(item.content, req.sessionId),
+    });
   }
 
-  const combined = req.texts.join("\n");
+  const combined = req.texts.map((text) => maskInternalIds(text, req.sessionId)).join("\n");
   const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
   const textContent = wrapUserContent(`${combined}${linkContext}`);
   const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];
@@ -438,7 +442,8 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       if (!text) return { ok: false, error: "provider returned an empty reply" };
       return {
         ok: true,
-        text: scrubModelOutput(text),
+        // Belt and braces: the reply must not carry an identifier either.
+        text: maskInternalIds(scrubModelOutput(text), req.sessionId),
         toolsUsed,
         usage: {
           promptTokens: outcome.body?.usage?.prompt_tokens ?? 0,
@@ -493,7 +498,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: result.content,
+          content: maskInternalIds(result.content, req.sessionId),
         });
         continue;
       }
@@ -512,7 +517,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: result.content,
+          content: maskInternalIds(result.content, req.sessionId),
         });
         continue;
       }
@@ -532,7 +537,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       messages.push({
         role: "tool",
         tool_call_id: call.id,
-        content: result.content,
+        content: maskInternalIds(result.content, req.sessionId),
       });
     }
   }

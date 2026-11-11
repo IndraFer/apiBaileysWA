@@ -168,21 +168,33 @@ automatic reply (OTP, login codes, verification notices).
 
 #### Internal identifiers
 
-Nothing is masked or removed from the conversation. Phone numbers, JIDs, order
-IDs and contact details reach the model exactly as written, because the operator
-usually puts the answer itself there ("call us on …"). Deleting or replacing it
-turned usable answers into broken sentences, and the model explained the
-censorship instead of answering.
+Two layers, with different jobs.
 
-Internal identifiers are handled by the always-on security block instead. It
-forbids printing raw WhatsApp addresses (`@s.whatsapp.net`, `@lid`, `@g.us`,
-`@broadcast`, `@newsletter`), LIDs, and the internal session identifier, and it
-states explicitly that ordinary contact details from the operator instructions
-must be shared normally when asked.
+**1. Deterministic removal** (`src/services/redaction.ts`) before anything reaches
+the model — history, current texts and tool output — and again on the reply:
 
-That is a policy rule, not a deterministic filter — it depends on the model
-following the instruction. The trade-off is deliberate: masking was reliable but
-destroyed legitimate answers.
+- raw WhatsApp addresses (`…@s.whatsapp.net`, `…@lid`, `…@g.us`, `@broadcast`,
+  `@newsletter`), including a device suffix such as `:12@`;
+- the session identifier, matched as a whole token.
+
+Nothing else is touched. Phone numbers, order IDs, emails and every other contact
+detail pass through unchanged, because the operator usually puts the answer itself
+in the instructions ("call us on 0812-…"). The token is **deleted rather than
+replaced**: a visible marker like `[jid]` told the model that something was
+censored, and it explained the censorship instead of answering. Spacing left
+behind by the removal is tidied.
+
+**2. Prompt rules** (always-on security block) cover what a filter cannot:
+
+- never print internal identifiers, LIDs or the session identifier;
+- ordinary contact details are **not** internal identifiers and must be shared
+  normally when asked;
+- never say that something was removed, masked, censored or filtered, never print
+  a placeholder, and never refuse a request only because an identifier is absent —
+  answer with the details that are available.
+
+The second layer is what keeps the first one invisible: a reply must read as a
+normal answer, not as a redacted document.
 
 The output scrubber still removes credential-shaped strings (API keys, bearer
 tokens, private keys) before a reply is sent.
