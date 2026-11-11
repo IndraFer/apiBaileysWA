@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-11-11
+
+### Added
+
+- answer groups with the AI only, never with a static reply
+
 ## [1.31.11] - 2026-11-11
 
 ### Fixed
