@@ -136,6 +136,12 @@ export const groupReplySchema = z
   })
   .strict();
 
+export const aiWebSearchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
 export const otpFilterSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -170,6 +176,7 @@ export const aiConfigSchema = z
     ragEndpoints: z.array(ragEndpointSchema).max(20).optional(),
     credentialsJson: z.string().max(8000).optional(),
     sendMessage: aiSendMessageSchema.optional(),
+    webSearch: aiWebSearchSchema.optional(),
     vision: aiVisionSchema.optional(),
     otpFilter: otpFilterSchema.optional(),
   })

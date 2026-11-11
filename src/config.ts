@@ -140,6 +140,12 @@ const {
   AI_GUARD_MAX_STRIKES,
   AI_GUARD_MUTE_MS,
   AI_GUARD_MAX_INPUT_CHARS,
+  // Optional SearXNG instance backing the built-in web_search tool.
+  SEARXNG_URL,
+  SEARXNG_TIMEOUT_MS,
+  SEARXNG_MAX_RESULTS,
+  SEARXNG_LANGUAGE,
+  SEARXNG_SAFESEARCH,
 } = process.env;
 
 /**
@@ -353,6 +359,18 @@ const config = {
    * AI agent gateway defaults. Per-session values override these; secrets are
    * stored encrypted in session metadata, never in this global config.
    */
+  /**
+   * Optional SearXNG backend for the built-in web_search tool. An empty baseUrl
+   * means the feature is unavailable: the tool is never advertised to the model
+   * and the dashboard toggle stays disabled.
+   */
+  searxng: {
+    baseUrl: (SEARXNG_URL ?? "").trim().replace(/\/+$/, ""),
+    timeoutMs: SEARXNG_TIMEOUT_MS ? Number(SEARXNG_TIMEOUT_MS) : 8000,
+    maxResults: Math.min(Math.max(SEARXNG_MAX_RESULTS ? Number(SEARXNG_MAX_RESULTS) : 5, 1), 10),
+    language: (SEARXNG_LANGUAGE ?? "").trim(),
+    safeSearch: SEARXNG_SAFESEARCH ?? "1",
+  },
   ai: {
     /** "openai" calls an OpenAI-compatible API directly, "webhook" posts to a gateway. */
     driver: (AI_DRIVER === "webhook" ? "webhook" : "openai") as "openai" | "webhook",

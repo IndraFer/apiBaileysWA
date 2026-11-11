@@ -28,6 +28,7 @@ const baseAi: ResolvedAiConfig = {
   ragEndpoints: [],
   credentials: {},
   sendMessage: { enabled: false, scope: "allowlist", allowlist: [], maxPerHour: 10 },
+  webSearch: { enabled: false },
   vision: { enabled: true, model: "vision-model" },
 };
 

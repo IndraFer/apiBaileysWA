@@ -127,6 +127,7 @@ describe("generateAgentReply runtime integration", () => {
       systemInstruction: "You are a helpful assistant.",
       ragEndpoints: [],
       credentials: {},
+      webSearch: { enabled: false },
       sendMessage: {
         enabled: true,
         scope: "allowlist",

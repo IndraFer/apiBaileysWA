@@ -28,6 +28,13 @@ import {
   type ToolExecution,
 } from "@/services/ragTools";
 import { buildRuntimeContext } from "@/services/runtimeContext";
+import {
+  buildWebSearchGuidance,
+  buildWebSearchToolSchema,
+  executeWebSearch,
+  isWebSearchAvailable,
+  WEB_SEARCH_TOOL_NAME,
+} from "@/services/webSearch";
 import { errorToString } from "@/utils/validation";
 
 /** Shape of the decrypted `ai.credentials` blob. */
@@ -56,6 +63,7 @@ export interface ResolvedAiConfig {
   ragEndpoints: RagEndpointConfig[];
   credentials: ToolCredentials;
   sendMessage: ResolvedSendMessageConfig;
+  webSearch: { enabled: boolean };
   vision: { enabled: boolean; model: string };
 }
 
@@ -175,6 +183,9 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
       maxPerHour: Number.isFinite(stored.sendMessage?.maxPerHour)
         ? Math.min(Math.max(Number(stored.sendMessage?.maxPerHour), 1), 200)
         : 10,
+    },
+    webSearch: {
+      enabled: stored.webSearch?.enabled ?? false,
     },
     vision: {
       enabled: stored.vision?.enabled ?? false,
@@ -307,15 +318,23 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
 
   const endpoint = `${ai.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   const ragTools = buildToolSchemas(ai.ragEndpoints);
-  const tools = ai.sendMessage.enabled
-    ? [
-        buildSendMessageToolSchema(ai.sendMessage.scope),
-        ...ragTools.filter((tool) => tool.function.name !== SEND_MESSAGE_TOOL_NAME),
-      ]
-    : ragTools;
+  // Only advertised when an operator configured a search instance, so a model
+  // never sees a tool that would always fail.
+  const webTools =
+    ai.webSearch.enabled && isWebSearchAvailable() ? [buildWebSearchToolSchema()] : [];
+  const reserved = new Set<string>();
+  if (ai.sendMessage.enabled) reserved.add(SEND_MESSAGE_TOOL_NAME);
+  if (webTools.length > 0) reserved.add(WEB_SEARCH_TOOL_NAME);
+  const tools = [
+    ...(ai.sendMessage.enabled ? [buildSendMessageToolSchema(ai.sendMessage.scope)] : []),
+    ...webTools,
+    // A configured endpoint must not shadow a built-in tool name.
+    ...ragTools.filter((tool) => !reserved.has(tool.function.name)),
+  ];
   const guidance = [
     buildToolGuidance(ai.ragEndpoints),
     ai.sendMessage.enabled ? buildSendMessageGuidance(ai.sendMessage) : "",
+    webTools.length > 0 ? buildWebSearchGuidance() : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -472,6 +491,21 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
             ? args.receiver.trim()
             : undefined;
         const result = await req.sendMessage({ receiver, text });
+        toolsUsed.push(name);
+        messages.push({ role: "tool", tool_call_id: call.id, content: result.content });
+        continue;
+      }
+
+      if (name === WEB_SEARCH_TOOL_NAME) {
+        if (!ai.webSearch.enabled || !isWebSearchAvailable()) {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: "Tool error: web_search is disabled for this session",
+          });
+          continue;
+        }
+        const result = await executeWebSearch(args);
         toolsUsed.push(name);
         messages.push({ role: "tool", tool_call_id: call.id, content: result.content });
         continue;

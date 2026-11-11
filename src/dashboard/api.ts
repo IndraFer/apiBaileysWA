@@ -588,6 +588,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
             allowlist: ai.sendMessage?.allowlist ?? [],
             maxPerHour: ai.sendMessage?.maxPerHour ?? 10,
           },
+          webSearch: {
+            enabled: ai.webSearch?.enabled ?? false,
+          },
           vision: {
             enabled: ai.vision?.enabled ?? false,
             model: ai.vision?.model ?? "",
@@ -609,6 +612,8 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           routing: config.routing,
           baseUrl: config.ai.baseUrl,
           agentUrl: config.ai.agentUrl,
+          // The toggle is only usable when the operator configured an instance.
+          webSearchAvailable: Boolean(config.searxng.baseUrl),
         },
       },
     });
@@ -661,6 +666,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       credentialsJson,
       apiKey,
       sendMessage: sendMessagePatch,
+      webSearch: webSearchPatch,
       vision: visionPatch,
       otpFilter: otpFilterPatch,
       ...aiFields
@@ -669,6 +675,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     if (sendMessagePatch) {
       // Nested merge: a partial patch must not drop scope/allowlist/maxPerHour.
       ai.sendMessage = { ...(current.ai?.sendMessage ?? {}), ...sendMessagePatch };
+    }
+    if (webSearchPatch) {
+      ai.webSearch = { ...(current.ai?.webSearch ?? {}), ...webSearchPatch };
     }
     if (visionPatch) {
       ai.vision = { ...(current.ai?.vision ?? {}), ...visionPatch };
@@ -744,6 +753,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
           apiKeySet: Boolean(saved.apiKey),
           credentialsSet: Object.keys(saved.endpoints ?? {}).length > 0,
           credentialsEncrypted: isEncrypted(ai.credentials),
+          webSearch: { enabled: ai.webSearch?.enabled ?? false },
         },
       },
     });

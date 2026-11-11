@@ -130,6 +130,11 @@ export interface OtpFilterConfig {
   excludeKeywords?: string[];
 }
 
+/** Opt-in built-in web_search tool backed by the operator's SearXNG instance. */
+export interface AiWebSearchConfig {
+  enabled?: boolean;
+}
+
 /** Opt-in image understanding for the OpenAI-compatible driver. */
 export interface AiVisionConfig {
   enabled?: boolean;
@@ -172,6 +177,8 @@ export interface AiAgentConfig {
   credentials?: string;
   /** Optional built-in send-message tool (default off). */
   sendMessage?: AiSendMessageConfig;
+  /** Optional built-in web search tool (default off, requires SEARXNG_URL). */
+  webSearch?: AiWebSearchConfig;
   /** Optional image understanding (default off). */
   vision?: AiVisionConfig;
   /** Optional OTP/verification auto-reply filter (default off). */

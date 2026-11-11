@@ -318,6 +318,15 @@
           <div class="card-header"><h3>AI Capabilities</h3></div>
           <div class="u-mb-05">
             <label class="toggle-row">
+              <input type="checkbox" id="ai-web-search-enabled" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Allow Web Search</strong>
+                <small>Adds <code>web_search</code> to every request, backed by the SearXNG instance configured on the server. Off by default.</small>
+              </span>
+            </label>
+            <small class="text-muted" id="ai-web-search-hint"></small>
+            <label class="toggle-row">
               <input type="checkbox" id="ai-send-enabled" class="toggle-input" />
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               <span class="toggle-copy">
@@ -572,6 +581,19 @@
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
       const sendMessage = ai.sendMessage || {};
+      const webSearch = ai.webSearch || {};
+      const webSearchAvailable = data.defaults?.webSearchAvailable !== false;
+      const webSearchToggle = document.getElementById("ai-web-search-enabled");
+      if (webSearchToggle) {
+        webSearchToggle.checked = Boolean(webSearch.enabled) && webSearchAvailable;
+        webSearchToggle.disabled = !webSearchAvailable;
+      }
+      const webSearchHint = document.getElementById("ai-web-search-hint");
+      if (webSearchHint) {
+        webSearchHint.textContent = webSearchAvailable
+          ? "Uses the server-side search instance. The model only sends the query; result snippets are treated as untrusted data."
+          : "Unavailable: set SEARXNG_URL on the server to enable this tool.";
+      }
       const sendEnabled = document.getElementById("ai-send-enabled");
       if (sendEnabled) sendEnabled.checked = Boolean(sendMessage.enabled);
       set("ai-send-scope", sendMessage.scope || "allowlist");
@@ -788,6 +810,14 @@
               .map((entry) => entry.trim())
               .filter(Boolean),
             maxPerHour: Math.min(Math.max(Number(value("ai-send-max")) || 10, 1), 200),
+          },
+          webSearch: {
+            // When the server has no instance configured the toggle is disabled;
+            // keep the stored flag instead of silently clearing it on save.
+            enabled:
+              state.config?.defaults?.webSearchAvailable !== false
+                ? Boolean(document.getElementById("ai-web-search-enabled")?.checked)
+                : Boolean(state.config?.ai?.webSearch?.enabled),
           },
           vision: {
             enabled: Boolean(document.getElementById("ai-vision-enabled")?.checked),
