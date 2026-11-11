@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.34.2] - 2026-11-11
+
+### Added
+
+- canonicalise stored auto-reply config on read
+
+### Changed
+
+- align README with the current response pipeline and fix .env.example
+
 ## [1.34.1] - 2026-11-11
 
 ### Added
