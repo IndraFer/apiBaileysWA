@@ -60,8 +60,11 @@ describe("scrubModelOutput", () => {
     expect(scrubModelOutput("dropbox rog8x", { sessionId: "rog8" })).toBe("dropbox rog8x");
   });
 
-  test("ignores very short session ids so ordinary words survive", () => {
-    expect(scrubModelOutput("ini cs kami", { sessionId: "cs" })).toBe("ini cs kami");
+  test("removes short session ids but never rewrites substrings", () => {
+    // The id must not leak, whatever its length.
+    expect(scrubModelOutput("ini cs kami", { sessionId: "cs" })).toBe("ini [session] kami");
+    // Whole-token matching keeps substrings of real words intact.
+    expect(scrubModelOutput("lihat docs ini", { sessionId: "cs" })).toBe("lihat docs ini");
   });
 
   test("still scrubs credentials", () => {

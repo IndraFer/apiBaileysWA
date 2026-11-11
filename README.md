@@ -185,9 +185,10 @@ A match inside a longer digit run is never partially replaced, and device
 suffixes (`:12@`) are part of the matched JID rather than a separate number.
 
 **Towards the customer** (`scrubModelOutput`) removes credentials, raw JIDs and
-the operator's session identifier (`[session]`). The session id is matched as a
-whole token and only when it is at least three characters, so a short id cannot
-damage ordinary words.
+the operator's session identifier (`[session]`). The session id is removed
+whatever its length, and matched as a whole token so it cannot rewrite a fragment
+of a longer word. A very short id can therefore also mask a standalone word that
+happens to match it — pick a distinctive id.
 
 #### Runtime date/time context
 

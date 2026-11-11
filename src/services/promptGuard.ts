@@ -132,9 +132,10 @@ export function wrapUserContent(text: string): string {
  * Remove anything the model must never show a customer: credentials on one side,
  * and internal addressing on the other.
  *
- * The session identifier is operator-chosen, so it is matched as a whole token
- * only. Short ids are skipped: masking a two-letter id would damage ordinary
- * words, and the id never enters the prompt anyway.
+ * The session identifier is operator-chosen and must never be echoed, so it is
+ * always removed. Whole-token matching keeps it from rewriting a fragment of a
+ * longer word; a short id can still collide with a standalone word, which is
+ * the operator's choice of id, not a reason to leak it.
  */
 export function scrubModelOutput(text: string, options?: { sessionId?: string }): string {
   let output = text
@@ -149,7 +150,7 @@ export function scrubModelOutput(text: string, options?: { sessionId?: string })
     );
 
   const sessionId = options?.sessionId?.trim() ?? "";
-  if (sessionId.length >= 3) output = replaceWholeToken(output, sessionId, "[session]");
+  if (sessionId) output = replaceWholeToken(output, sessionId, "[session]");
 
   return output;
 }
