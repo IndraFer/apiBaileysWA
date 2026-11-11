@@ -133,7 +133,7 @@ export function wrapUserContent(text: string): string {
  * and internal addressing on the other.
  *
  * The session identifier is operator-chosen and must never be echoed, so it is
- * always removed. Whole-token matching keeps it from rewriting a fragment of a
+ * removed entirely. Whole-token matching keeps it from rewriting a fragment of a
  * longer word; a short id can still collide with a standalone word, which is
  * the operator's choice of id, not a reason to leak it.
  */
@@ -144,15 +144,23 @@ export function scrubModelOutput(text: string, options?: { sessionId?: string })
     .replace(/\b[A-Za-z0-9_-]{32,}\b(?=\s*$)/g, "[redacted]")
     .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, "[redacted]")
     // Raw WhatsApp addresses are internal plumbing, never customer-facing text.
-    .replace(
-      /\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi,
-      "[jid]",
-    );
+    .replace(/\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi, "");
 
   const sessionId = options?.sessionId?.trim() ?? "";
-  if (sessionId) output = replaceWholeToken(output, sessionId, "[session]");
+  // Deleted rather than replaced: a marker would tell the model, and the
+  // customer, that something was censored.
+  if (sessionId) output = replaceWholeToken(output, sessionId, "");
 
-  return output;
+  return tidyRemoved(output);
+}
+
+/** Remove the spacing artifacts left behind by a deleted token. */
+function tidyRemoved(text: string): string {
+  return text
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
 }
 
 /** Replace one standalone token, never a fragment of a longer word. */

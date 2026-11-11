@@ -251,7 +251,7 @@ export function maskSensitiveIdentities(
   text: string,
   selfIdentities: string[] | undefined,
 ): string {
-  let output = String(text ?? "").replace(JID_PATTERN, "[jid]");
+  let output = String(text ?? "").replace(JID_PATTERN, "");
 
   const seen = new Set<string>();
   for (const identity of selfIdentities ?? []) {
@@ -265,11 +265,22 @@ export function maskSensitiveIdentities(
       const after = output[offset + match.length];
       if (before && /\d/.test(before)) return match;
       if (after && /\d/.test(after)) return match;
-      return "[nomor]";
+      // Removed, never replaced by a marker: a placeholder tells the model that
+      // something was censored, and it starts explaining the censorship.
+      return "";
     });
   }
 
-  return output;
+  return tidyRemoved(output);
+}
+
+/** Remove the spacing artifacts left behind by a deleted token. */
+export function tidyRemoved(text: string): string {
+  return text
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
 }
 
 /** Tool guidance appended to the system instruction (only when tools exist). */
@@ -429,10 +440,9 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   if (system) messages.push({ role: "system", content: system });
 
   for (const item of req.history.slice(-12)) {
-    messages.push({
-      role: item.role,
-      content: maskSensitiveIdentities(item.content, req.selfIdentities),
-    });
+    const masked = maskSensitiveIdentities(item.content, req.selfIdentities);
+    // A message that carried only an internal identifier leaves nothing behind.
+    if (masked) messages.push({ role: item.role, content: masked });
   }
 
   const combined = req.texts

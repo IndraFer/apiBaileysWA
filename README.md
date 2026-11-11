@@ -170,25 +170,31 @@ automatic reply (OTP, login codes, verification notices).
 
 Two directions, two rules.
 
+Removal, never a placeholder. A marker such as `[jid]` tells the model that
+something was censored, and it starts explaining the censorship to the customer
+instead of answering.
+
 **Towards the model** (history, current texts and tool output) only internal
-plumbing is removed:
+plumbing is deleted:
 
-| Removed | Replaced with |
-|---|---|
-| Raw JIDs (`…@s.whatsapp.net`, `…@lid`, `…@g.us`, `@broadcast`, `@newsletter`) | `[jid]` |
-| The account's own number and its LID | `[nomor]` |
+- raw JIDs (`…@s.whatsapp.net`, `…@lid`, `…@g.us`, `@broadcast`, `@newsletter`),
+  including a device suffix such as `:12@`;
+- the account's own number and its LID.
 
-The customer's own number is deliberately **not** masked: it is the number they
+The customer's own number is deliberately **not** removed: it is the number they
 see in their own app, and hiding it broke legitimate answers. Order IDs,
 membership numbers, supplier numbers and any other number pass through intact.
-A match inside a longer digit run is never partially replaced, and device
-suffixes (`:12@`) are part of the matched JID rather than a separate number.
+A match inside a longer digit run is never partially removed, and a message that
+consisted only of an internal identifier is dropped instead of being sent empty.
 
-**Towards the customer** (`scrubModelOutput`) removes credentials, raw JIDs and
-the operator's session identifier (`[session]`). The session id is removed
-whatever its length, and matched as a whole token so it cannot rewrite a fragment
-of a longer word. A very short id can therefore also mask a standalone word that
-happens to match it — pick a distinctive id.
+**Towards the customer** (`scrubModelOutput`) deletes raw JIDs and the operator's
+session identifier, plus credentials (those keep `[redacted]`, since a key is a
+value rather than a reference). The session id is removed whatever its length and
+matched as a whole token, so it cannot rewrite a fragment of a longer word; a very
+short id can also match a standalone word, so pick a distinctive one.
+
+Deletion leaves spacing behind, so both paths collapse the gaps and trailing
+whitespace at the end.
 
 #### Runtime date/time context
 
