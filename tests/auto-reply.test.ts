@@ -40,7 +40,10 @@ describe("auto reply policy", () => {
     expect(resolveAutoReplyPolicy({ role: "both", type: "always" })).toBe("both");
     expect(resolveAutoReplyPolicy({ role: "both", type: "time_range" })).toBe("window");
     expect(resolveAutoReplyPolicy({ role: "both", type: "on_webhook_fail" })).toBe("fallback");
-    expect(resolveAutoReplyPolicy({ role: "primary" })).toBe("primary");
+    // "primary" is folded into "both": it never answered as a fallback, which
+    // "both" already covers.
+    expect(resolveAutoReplyPolicy({ role: "primary" })).toBe("both");
+    expect(resolveAutoReplyPolicy({ policy: "primary" })).toBe("both");
     expect(resolveAutoReplyPolicy({ role: "fallback" })).toBe("fallback");
     // An explicit policy always wins over the legacy fields.
     expect(resolveAutoReplyPolicy({ policy: "window", role: "primary" })).toBe("window");
@@ -62,7 +65,6 @@ describe("auto reply policy", () => {
 
   test("primary eligibility follows the policy", () => {
     expect(primaryStaticAllowed("both", false)).toBe(true);
-    expect(primaryStaticAllowed("primary", false)).toBe(true);
     expect(primaryStaticAllowed("window", true)).toBe(true);
     expect(primaryStaticAllowed("window", false)).toBe(false);
     expect(primaryStaticAllowed("fallback", true)).toBe(false);
@@ -73,13 +75,11 @@ describe("auto reply policy", () => {
     expect(fallbackStaticAllowed("fallback", false)).toBe(true);
     expect(fallbackStaticAllowed("window", true)).toBe(true);
     expect(fallbackStaticAllowed("window", false)).toBe(false);
-    expect(fallbackStaticAllowed("primary", true)).toBe(false);
   });
 
   test("policy writes consistent legacy fields", () => {
     expect(policyToLegacy("both")).toEqual({ role: "both", type: "always" });
     expect(policyToLegacy("window")).toEqual({ role: "both", type: "time_range" });
-    expect(policyToLegacy("primary")).toEqual({ role: "primary", type: "always" });
     expect(policyToLegacy("fallback")).toEqual({ role: "fallback", type: "always" });
   });
 });

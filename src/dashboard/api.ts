@@ -45,7 +45,12 @@ import {
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
-import { normalizeAutoReplyConfig, resolveAutoReplyConfig } from "@/services/autoReply";
+import {
+  normalizeAutoReplyConfig,
+  policyToLegacy,
+  resolveAutoReplyConfig,
+  resolveAutoReplyPolicy,
+} from "@/services/autoReply";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -544,7 +549,7 @@ dashboardApi.post("/sessions/:sessionId/webhook/rotate", async (c) => {
  * the global env defaults). Credentials are never returned: the response only
  * tells whether they are stored and whether they are encrypted.
  */
-dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
+dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
   const denied = requireCapability(c, "manageSessions");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
@@ -552,8 +557,33 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
   if (sessionDenied) return sessionDenied;
 
   try {
-    const options = connectionManager.getSession(sessionId).getOptions();
-    const ai = options.ai ?? {};
+    const session = connectionManager.getSession(sessionId);
+    const options = session.getOptions();
+    let ai = options.ai ?? {};
+    let autoReply = options.autoReply;
+
+    // One-time migration, written back so the stored shape stops disagreeing
+    // with what the dashboard shows.
+    let migrated = false;
+    if (ai.mode === "off") {
+      // "off" duplicated the enable switch and is no longer selectable.
+      ai = { ...ai, enabled: false, mode: "window" };
+      migrated = true;
+    }
+    if (autoReply && !autoReply.policy) {
+      const policy = resolveAutoReplyPolicy(autoReply);
+      autoReply = { ...autoReply, policy, ...policyToLegacy(policy) };
+      migrated = true;
+    }
+    if (migrated) {
+      session.updateOptions({ ai, autoReply });
+      await updateSessionMetadata(sessionId, {
+        ...session.getSessionMetadata(),
+        ai,
+        autoReply,
+      });
+      logger.info("[Dashboard] Normalized legacy response config for %s", sessionId);
+    }
     const stored = readStoredCredentials(ai.credentials);
     const endpointCredentials = stored.endpoints ?? {};
     return c.json({
@@ -565,7 +595,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           senders: options.groupReply?.senders ?? [],
           fallbackToStatic: options.groupReply?.fallbackToStatic === true,
         },
-        autoReply: resolveAutoReplyConfig(options.autoReply),
+        autoReply: resolveAutoReplyConfig(autoReply),
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,

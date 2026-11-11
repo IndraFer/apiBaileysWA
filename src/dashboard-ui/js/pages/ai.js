@@ -9,17 +9,19 @@
   const AUTO_REPLY_POLICY_LABELS = {
     both: "both",
     window: "window time",
-    primary: "primary only",
+    primary: "both",
     fallback: "fallback only",
   };
 
   /** Mirror of resolveAutoReplyPolicy for configs saved before `policy` existed. */
   function autoReplyPolicyOf(autoReply) {
     const policy = autoReply?.policy;
+    if (policy === "primary") return "both";
     if (AUTO_REPLY_POLICIES.includes(policy)) return policy;
     const role = autoReply?.role || "both";
     if (role === "fallback") return "fallback";
-    if (role === "primary") return "primary";
+    // "primary" is folded into "both"; older configs resolve here.
+    if (role === "primary") return "both";
     if (autoReply?.type === "time_range") return "window";
     if (autoReply?.type === "on_webhook_fail") return "fallback";
     return "both";
@@ -259,7 +261,6 @@
               <select id="ai-autoreply-policy" class="input">
                 <option value="both">Both — primary when AI is off / out of window, fallback when AI or Webhook delivery fails</option>
                 <option value="window">Window Time — only inside the hours below</option>
-                <option value="primary">Primary Only — static answers first, never as a fallback</option>
                 <option value="fallback">Fallback Only — only when the AI or Webhook delivery fails</option>
               </select>
             </div>
@@ -657,11 +658,8 @@
         if (el) el.value = value ?? "";
       };
 
-      // "off" used to be a mode. It duplicated the enable switch, so it is
-      // gone from the UI; an older config is read as AI disabled instead.
-      const legacyModeOff = ai.mode === "off";
-      set("ai-enabled", String(Boolean(ai.enabled) && !legacyModeOff));
-      set("ai-mode", legacyModeOff ? "window" : ai.mode || "window");
+      set("ai-enabled", String(Boolean(ai.enabled)));
+      set("ai-mode", ai.mode || "window");
       set("ai-window-start", routing.aiWindowStart || "");
       set("ai-window-end", routing.aiWindowEnd || "");
       set("ai-timezone", routing.timezone || "");

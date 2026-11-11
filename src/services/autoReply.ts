@@ -38,11 +38,14 @@ const POLICIES: readonly AutoReplyPolicy[] = ["both", "window", "primary", "fall
  */
 export function resolveAutoReplyPolicy(config?: Partial<AutoReplyConfig>): AutoReplyPolicy {
   const explicit = config?.policy;
+  // "primary" was folded into "both": it answered first and never as a
+  // fallback, which "both" already covers.
+  if (explicit === "primary") return "both";
   if (explicit && POLICIES.includes(explicit)) return explicit;
 
   const role = config?.role ?? "both";
   if (role === "fallback") return "fallback";
-  if (role === "primary") return "primary";
+  if (role === "primary") return "both";
   if (config?.type === "time_range") return "window";
   if (config?.type === "on_webhook_fail") return "fallback";
   return "both";
