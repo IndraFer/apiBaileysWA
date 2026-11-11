@@ -713,6 +713,11 @@ a:active {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* A two-column row with one hidden field: let the remaining field span it. */
+.form-row.cols-2.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .form-row.cols-6 {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }

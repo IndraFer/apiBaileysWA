@@ -1,7 +1,6 @@
 /** AI & Routing Page — per-number responder, model, instruction, knowledge tools, metrics */
 (() => {
   const MODE_HINTS = {
-    off: "Static auto-reply (AUTO_REPLY_*) answers instead of the AI.",
     window: "AI answers inside the window; the static rules apply outside it.",
     always: 'AI answers 24/7 ("full handle"). A human reply still pauses it.',
   };
@@ -236,7 +235,7 @@
               <div class="form-group">
                 <label for="ai-autoreply-role">Role When AI Routing Is On</label>
                 <select id="ai-autoreply-role" class="input">
-                  <option value="both">Both — primary when AI is off / out of window, fallback when AI fails</option>
+                  <option value="both">Both — primary when AI is off / out of window, fallback when AI or Webhook delivery fails</option>
                   <option value="primary">Primary only — static answers first</option>
                   <option value="fallback">Fallback only — static answers only when the AI or webhook delivery fails</option>
                 </select>
@@ -263,24 +262,25 @@
 
         <div class="card">
           <div class="card-header"><h3>Responder &amp; Schedule</h3></div>
-          <div class="form-group">
-            <label for="ai-enabled">Enable AI for This Number</label>
-            <select id="ai-enabled" class="input">
-              <option value="false">No — static auto-reply</option>
-              <option value="true">Yes — AI agent</option>
-            </select>
-            <small class="text-muted">Turning this off hides the AI configuration and leaves the static auto reply in charge of direct chats.</small>
-          </div>
-          <div id="ai-settings-body" class="hidden">
+          <div class="form-row cols-2" id="ai-responder-row">
             <div class="form-group">
+              <label for="ai-enabled">Enable AI for This Number</label>
+              <select id="ai-enabled" class="input">
+                <option value="false">No — static auto-reply</option>
+                <option value="true">Yes — AI agent</option>
+              </select>
+              <small class="text-muted">Turning this off hides the AI configuration and leaves the static auto reply in charge of direct chats.</small>
+            </div>
+            <div class="form-group" id="ai-mode-group">
               <label for="ai-mode">When May the AI Answer?</label>
               <select id="ai-mode" class="input">
-                <option value="off">Off (static only)</option>
                 <option value="window">Inside the time window</option>
                 <option value="always">Always (full handle)</option>
               </select>
               <small class="text-muted" id="ai-mode-hint"></small>
             </div>
+          </div>
+          <div id="ai-settings-body" class="hidden">
             <div class="form-row cols-6">
               <div class="form-group">
                 <label for="ai-window-start">Start</label>
@@ -635,8 +635,11 @@
         if (el) el.value = value ?? "";
       };
 
-      set("ai-enabled", String(Boolean(ai.enabled)));
-      set("ai-mode", ai.mode || "window");
+      // "off" used to be a mode. It duplicated the enable switch, so it is
+      // gone from the UI; an older config is read as AI disabled instead.
+      const legacyModeOff = ai.mode === "off";
+      set("ai-enabled", String(Boolean(ai.enabled) && !legacyModeOff));
+      set("ai-mode", legacyModeOff ? "window" : ai.mode || "window");
       set("ai-window-start", routing.aiWindowStart || "");
       set("ai-window-end", routing.aiWindowEnd || "");
       set("ai-timezone", routing.timezone || "");
@@ -777,6 +780,8 @@
     syncAiVisibility() {
       const enabled = (document.getElementById("ai-enabled")?.value || "false") === "true";
       document.getElementById("ai-settings-body")?.classList.toggle("hidden", !enabled);
+      document.getElementById("ai-mode-group")?.classList.toggle("hidden", !enabled);
+      document.getElementById("ai-responder-row")?.classList.toggle("single", !enabled);
       for (const card of document.querySelectorAll(".ai-dependent")) {
         card.classList.toggle("hidden", !enabled);
       }
