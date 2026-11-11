@@ -43,7 +43,7 @@ import {
   isReceiverAllowed,
   type ResolvedSendMessageConfig,
 } from "@/services/aiSendTool";
-import { resolveAutoReplyConfig } from "@/services/autoReply";
+import { resolveAutoReplyConfig, staticTriggerMatches } from "@/services/autoReply";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
 import {
   isStaticReplyAllowed,
@@ -305,6 +305,17 @@ export class BaileysConnection {
         const role = autoReply.role ?? "both";
         // Static answers a failed AI call only when it plays the fallback role.
         if (!autoReply.enabled || (role !== "fallback" && role !== "both")) return;
+        // The AI failing is not a webhook failure, and its own time window still
+        // applies, so an "outside working hours" message never appears mid-day.
+        if (!staticTriggerMatches(autoReply, { webhookFailed: false })) {
+          logger.debug(
+            "[%s] Static fallback skipped for %s: trigger %s does not match",
+            this.sessionId,
+            conversationId,
+            autoReply.type,
+          );
+          return;
+        }
         await this.sendMessage(
           conversationId,
           { text: autoReply.message },
@@ -814,8 +825,10 @@ export class BaileysConnection {
 
     if (!autoReply.enabled) return;
     const autoRole = autoReply.role ?? "both";
-    // "fallback" means static never competes as the primary responder.
-    if (autoRole !== "primary" && autoRole !== "both") return;
+    // "fallback" never competes as the primary responder, but webhook delivery
+    // failure is a failure path of its own, so that trigger stays available.
+    const webhookFailurePath = autoReply.type === "on_webhook_fail";
+    if (autoRole === "fallback" && !webhookFailurePath) return;
 
     // Groups are answered by the AI only; static never speaks there.
     const staticMessages = messages.filter((m) =>
@@ -831,26 +844,7 @@ export class BaileysConnection {
       return;
     }
 
-    let shouldReply = false;
-    if (autoReply.type === "always") {
-      shouldReply = true;
-    } else if (autoReply.type === "on_webhook_fail") {
-      shouldReply = webhookFailed;
-    } else if (autoReply.type === "time_range") {
-      const now = new Date();
-      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const { timeStart, timeEnd } = autoReply;
-
-      if (timeStart && timeEnd) {
-        if (timeStart <= timeEnd) {
-          // Normal range (e.g., 08:00 - 17:00)
-          shouldReply = currentTime >= timeStart && currentTime <= timeEnd;
-        } else {
-          // Overnight range (e.g., 22:00 - 06:00)
-          shouldReply = currentTime >= timeStart || currentTime <= timeEnd;
-        }
-      }
-    }
+    const shouldReply = staticTriggerMatches(autoReply, { webhookFailed });
 
     if (shouldReply) {
       for (const m of staticMessages) {

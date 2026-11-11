@@ -238,7 +238,7 @@
                 <select id="ai-autoreply-role" class="input">
                   <option value="both">Both — primary when AI is off / out of window, fallback when AI fails</option>
                   <option value="primary">Primary only — static answers first</option>
-                  <option value="fallback">Fallback only — static answers only when AI fails</option>
+                  <option value="fallback">Fallback only — static answers only when the AI or webhook delivery fails</option>
                 </select>
               </div>
             </div>
@@ -472,7 +472,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="group-reply-card">
           <div class="card-header"><h3>Group Reply</h3></div>
           <div class="form-group">
             <label for="group-reply-mode">Reply Policy</label>
@@ -603,6 +603,7 @@
       });
       document.getElementById("ai-autoreply-enabled")?.addEventListener("change", () => {
         this.syncAutoReplyUi();
+        this.syncGroupReplyVisibility();
       });
       document.getElementById("ai-autoreply-type")?.addEventListener("change", () => {
         this.syncAutoReplyUi();
@@ -762,6 +763,16 @@
         ?.classList.toggle("hidden", !enabled || mode !== "smart");
     },
 
+    /**
+     * The group policy only matters when something can answer automatically: the
+     * AI, or the static fallback. With both off there is nothing to scope.
+     */
+    syncGroupReplyVisibility() {
+      const aiOn = (document.getElementById("ai-enabled")?.value || "false") === "true";
+      const staticOn = Boolean(document.getElementById("ai-autoreply-enabled")?.checked);
+      document.getElementById("group-reply-card")?.classList.toggle("hidden", !aiOn && !staticOn);
+    },
+
     /** Hide AI configuration while the AI is switched off for this number. */
     syncAiVisibility() {
       const enabled = (document.getElementById("ai-enabled")?.value || "false") === "true";
@@ -769,6 +780,7 @@
       for (const card of document.querySelectorAll(".ai-dependent")) {
         card.classList.toggle("hidden", !enabled);
       }
+      this.syncGroupReplyVisibility();
     },
 
     /** Static auto-reply fields follow the toggle and the trigger mode. */
