@@ -99,12 +99,6 @@ export interface AgentReplyRequest {
   images?: Array<{ mime: string; data: string }>;
   /** Untrusted title/description metadata for links in the current texts. */
   linkContext?: string;
-  /**
-   * The account's own identities (number and LID). Their bare digits never reach
-   * the provider. The customer's own number is not included on purpose: it is
-   * visible to them already.
-   */
-  selfIdentities?: string[];
 }
 
 export type AgentReplyResult =
@@ -202,85 +196,6 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
         typeof stored.vision?.model === "string" ? stored.vision.model.trim().slice(0, 128) : "",
     },
   };
-}
-
-/** Digits of one identity; a device suffix (`:12@`) is stripped, not counted. */
-function identityDigits(value: string): string {
-  const normalized = String(value ?? "")
-    .trim()
-    .replace(/:\d+(?=@)/, "");
-  const local = normalized.includes("@") ? (normalized.split("@")[0] ?? "") : normalized;
-  return local.replace(/\D/g, "");
-}
-
-/** Any WhatsApp address is internal plumbing, never something a customer reads. */
-const JID_PATTERN = /\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi;
-
-/** Replace one standalone token, never a fragment of a longer word. */
-export function replaceWholeToken(text: string, token: string, replacement: string): string {
-  const trimmed = String(token ?? "").trim();
-  if (!trimmed) return text;
-  const wordChar = /[A-Za-z0-9_-]/;
-  let out = "";
-  let index = 0;
-
-  for (;;) {
-    const found = text.indexOf(trimmed, index);
-    if (found < 0) break;
-    const before = text[found - 1];
-    const after = text[found + trimmed.length];
-    const standalone = !(before && wordChar.test(before)) && !(after && wordChar.test(after));
-    out += text.slice(index, found) + (standalone ? replacement : trimmed);
-    index = found + trimmed.length;
-  }
-
-  return out + text.slice(index);
-}
-
-/**
- * Strip internal addressing from text before the model or the customer sees it.
- *
- * Allowed to pass through: the customer's own visible phone number, order IDs,
- * membership numbers and any other number they asked about.
- *
- * Never allowed out: raw JIDs and the account's own identities (its number and
- * its LID). The session id is removed on the way out as well, so an operator's
- * internal identifier cannot be echoed to a customer.
- */
-export function maskSensitiveIdentities(
-  text: string,
-  selfIdentities: string[] | undefined,
-): string {
-  let output = String(text ?? "").replace(JID_PATTERN, "");
-
-  const seen = new Set<string>();
-  for (const identity of selfIdentities ?? []) {
-    const digits = identityDigits(identity);
-    if (digits.length < 6 || seen.has(digits)) continue;
-    seen.add(digits);
-
-    const pattern = new RegExp(`\\+?${digits}`, "g");
-    output = output.replace(pattern, (match, offset: number) => {
-      const before = output[offset - 1];
-      const after = output[offset + match.length];
-      if (before && /\d/.test(before)) return match;
-      if (after && /\d/.test(after)) return match;
-      // Removed, never replaced by a marker: a placeholder tells the model that
-      // something was censored, and it starts explaining the censorship.
-      return "";
-    });
-  }
-
-  return tidyRemoved(output);
-}
-
-/** Remove the spacing artifacts left behind by a deleted token. */
-export function tidyRemoved(text: string): string {
-  return text
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/[ \t]+([.,;:!?])/g, "$1")
-    .replace(/[ \t]+$/gm, "")
-    .trim();
 }
 
 /** Tool guidance appended to the system instruction (only when tools exist). */
@@ -440,14 +355,10 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   if (system) messages.push({ role: "system", content: system });
 
   for (const item of req.history.slice(-12)) {
-    const masked = maskSensitiveIdentities(item.content, req.selfIdentities);
-    // A message that carried only an internal identifier leaves nothing behind.
-    if (masked) messages.push({ role: item.role, content: masked });
+    messages.push({ role: item.role, content: item.content });
   }
 
-  const combined = req.texts
-    .map((text) => maskSensitiveIdentities(text, req.selfIdentities))
-    .join("\n");
+  const combined = req.texts.join("\n");
   const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
   const textContent = wrapUserContent(`${combined}${linkContext}`);
   const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];
@@ -527,7 +438,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       if (!text) return { ok: false, error: "provider returned an empty reply" };
       return {
         ok: true,
-        text: scrubModelOutput(text, { sessionId: req.sessionId }),
+        text: scrubModelOutput(text),
         toolsUsed,
         usage: {
           promptTokens: outcome.body?.usage?.prompt_tokens ?? 0,
@@ -582,7 +493,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: maskSensitiveIdentities(result.content, req.selfIdentities),
+          content: result.content,
         });
         continue;
       }
@@ -601,7 +512,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: maskSensitiveIdentities(result.content, req.selfIdentities),
+          content: result.content,
         });
         continue;
       }
@@ -621,7 +532,7 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
       messages.push({
         role: "tool",
         tool_call_id: call.id,
-        content: maskSensitiveIdentities(result.content, req.selfIdentities),
+        content: result.content,
       });
     }
   }

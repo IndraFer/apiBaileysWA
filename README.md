@@ -166,35 +166,26 @@ automatic reply (OTP, login codes, verification notices).
 - OTP content is never written to the filter log; only the match reason and, in
   smart mode, the score are logged. The filter is disabled by default.
 
-#### Internal identity masking
+#### Internal identifiers
 
-Two directions, two rules.
+Nothing is masked or removed from the conversation. Phone numbers, JIDs, order
+IDs and contact details reach the model exactly as written, because the operator
+usually puts the answer itself there ("call us on …"). Deleting or replacing it
+turned usable answers into broken sentences, and the model explained the
+censorship instead of answering.
 
-Removal, never a placeholder. A marker such as `[jid]` tells the model that
-something was censored, and it starts explaining the censorship to the customer
-instead of answering.
+Internal identifiers are handled by the always-on security block instead. It
+forbids printing raw WhatsApp addresses (`@s.whatsapp.net`, `@lid`, `@g.us`,
+`@broadcast`, `@newsletter`), LIDs, and the internal session identifier, and it
+states explicitly that ordinary contact details from the operator instructions
+must be shared normally when asked.
 
-**Towards the model** (history, current texts and tool output) only internal
-plumbing is deleted:
+That is a policy rule, not a deterministic filter — it depends on the model
+following the instruction. The trade-off is deliberate: masking was reliable but
+destroyed legitimate answers.
 
-- raw JIDs (`…@s.whatsapp.net`, `…@lid`, `…@g.us`, `@broadcast`, `@newsletter`),
-  including a device suffix such as `:12@`;
-- the account's own number and its LID.
-
-The customer's own number is deliberately **not** removed: it is the number they
-see in their own app, and hiding it broke legitimate answers. Order IDs,
-membership numbers, supplier numbers and any other number pass through intact.
-A match inside a longer digit run is never partially removed, and a message that
-consisted only of an internal identifier is dropped instead of being sent empty.
-
-**Towards the customer** (`scrubModelOutput`) deletes raw JIDs and the operator's
-session identifier, plus credentials (those keep `[redacted]`, since a key is a
-value rather than a reference). The session id is removed whatever its length and
-matched as a whole token, so it cannot rewrite a fragment of a longer word; a very
-short id can also match a standalone word, so pick a distinctive one.
-
-Deletion leaves spacing behind, so both paths collapse the gaps and trailing
-whitespace at the end.
+The output scrubber still removes credential-shaped strings (API keys, bearer
+tokens, private keys) before a reply is sent.
 
 #### Runtime date/time context
 

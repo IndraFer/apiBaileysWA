@@ -1165,7 +1165,6 @@ export class BaileysConnection {
       sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
       images: ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [],
       linkContext: await collectLinkContext(input.texts),
-      selfIdentities: this.ownIdentitiesFor(),
     });
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {
@@ -1195,18 +1194,6 @@ export class BaileysConnection {
   }
 
   /** Recent history, excluding the texts that are being answered now. */
-  /**
-   * The account's own identities. The customer's own number is deliberately not
-   * included: it is their visible number, and masking it destroyed legitimate
-   * answers.
-   */
-  private ownIdentitiesFor(): string[] {
-    const self = this.user as { id?: string; lid?: string } | null;
-    return [self?.id, self?.lid].filter(
-      (value): value is string => typeof value === "string" && value.length > 0,
-    );
-  }
-
   private buildHistory(
     conversationId: string,
     currentTexts: string[],

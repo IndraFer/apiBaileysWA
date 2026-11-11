@@ -128,56 +128,10 @@ export function wrapUserContent(text: string): string {
  * Remove credential-shaped strings from the model output before it is sent to
  * a customer (defence against the model echoing keys or headers).
  */
-/**
- * Remove anything the model must never show a customer: credentials on one side,
- * and internal addressing on the other.
- *
- * The session identifier is operator-chosen and must never be echoed, so it is
- * removed entirely. Whole-token matching keeps it from rewriting a fragment of a
- * longer word; a short id can still collide with a standalone word, which is
- * the operator's choice of id, not a reason to leak it.
- */
-export function scrubModelOutput(text: string, options?: { sessionId?: string }): string {
-  let output = text
+export function scrubModelOutput(text: string): string {
+  return text
     .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{10,}\b/g, "[redacted]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{10,}\b/gi, "Bearer [redacted]")
     .replace(/\b[A-Za-z0-9_-]{32,}\b(?=\s*$)/g, "[redacted]")
-    .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, "[redacted]")
-    // Raw WhatsApp addresses are internal plumbing, never customer-facing text.
-    .replace(/\b[\w.-]{2,}(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)\b/gi, "");
-
-  const sessionId = options?.sessionId?.trim() ?? "";
-  // Deleted rather than replaced: a marker would tell the model, and the
-  // customer, that something was censored.
-  if (sessionId) output = replaceWholeToken(output, sessionId, "");
-
-  return tidyRemoved(output);
-}
-
-/** Remove the spacing artifacts left behind by a deleted token. */
-function tidyRemoved(text: string): string {
-  return text
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/[ \t]+([.,;:!?])/g, "$1")
-    .replace(/[ \t]+$/gm, "")
-    .trim();
-}
-
-/** Replace one standalone token, never a fragment of a longer word. */
-function replaceWholeToken(text: string, token: string, replacement: string): string {
-  const wordChar = /[A-Za-z0-9_-]/;
-  let out = "";
-  let index = 0;
-
-  for (;;) {
-    const found = text.indexOf(token, index);
-    if (found < 0) break;
-    const before = text[found - 1];
-    const after = text[found + token.length];
-    const standalone = !(before && wordChar.test(before)) && !(after && wordChar.test(after));
-    out += text.slice(index, found) + (standalone ? replacement : token);
-    index = found + token.length;
-  }
-
-  return out + text.slice(index);
+    .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, "[redacted]");
 }
