@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-11-11
+
+### Added
+
+- prioritise static reply, hide idle AI cards, add group fallback opt-in
+
 ## [1.32.0] - 2026-11-11
 
 ### Added
