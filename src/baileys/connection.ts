@@ -43,7 +43,13 @@ import {
   isReceiverAllowed,
   type ResolvedSendMessageConfig,
 } from "@/services/aiSendTool";
-import { resolveAutoReplyConfig, staticTriggerMatches } from "@/services/autoReply";
+import {
+  fallbackStaticAllowed,
+  primaryStaticAllowed,
+  resolveAutoReplyConfig,
+  resolveAutoReplyPolicy,
+  staticWindowMatches,
+} from "@/services/autoReply";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
 import {
   isStaticReplyAllowed,
@@ -302,17 +308,16 @@ export class BaileysConnection {
           return;
         }
         const autoReply = resolveAutoReplyConfig(this.options.autoReply);
-        const role = autoReply.role ?? "both";
-        // Static answers a failed AI call only when it plays the fallback role.
-        if (!autoReply.enabled || (role !== "fallback" && role !== "both")) return;
-        // The AI failing is not a webhook failure, and its own time window still
-        // applies, so an "outside working hours" message never appears mid-day.
-        if (!staticTriggerMatches(autoReply, { webhookFailed: false })) {
+        if (!autoReply.enabled) return;
+        const policy = resolveAutoReplyPolicy(autoReply);
+        // A "window" policy keeps its fallback inside the configured hours too,
+        // so an away message never appears mid-day.
+        if (!fallbackStaticAllowed(policy, staticWindowMatches(autoReply))) {
           logger.debug(
-            "[%s] Static fallback skipped for %s: trigger %s does not match",
+            "[%s] Static fallback skipped for %s: policy %s does not apply",
             this.sessionId,
             conversationId,
-            autoReply.type,
+            policy,
           );
           return;
         }
@@ -824,11 +829,15 @@ export class BaileysConnection {
     if (this.enqueueForAi(messages, routing)) return;
 
     if (!autoReply.enabled) return;
-    const autoRole = autoReply.role ?? "both";
-    // "fallback" never competes as the primary responder, but webhook delivery
-    // failure is a failure path of its own, so that trigger stays available.
-    const webhookFailurePath = autoReply.type === "on_webhook_fail";
-    if (autoRole === "fallback" && !webhookFailurePath) return;
+
+    const policy = resolveAutoReplyPolicy(autoReply);
+    const inWindow = staticWindowMatches(autoReply);
+    // Two independent chances to answer: the AI is unavailable (primary), or
+    // delivery failed (fallback). Webhook failure is reported here, AI failure
+    // arrives later through onFailure().
+    const primaryEligible = primaryStaticAllowed(policy, inWindow);
+    const webhookEligible = webhookFailed && fallbackStaticAllowed(policy, inWindow);
+    if (!primaryEligible && !webhookEligible) return;
 
     // Groups are answered by the AI only; static never speaks there.
     const staticMessages = messages.filter((m) =>
@@ -844,41 +853,37 @@ export class BaileysConnection {
       return;
     }
 
-    const shouldReply = staticTriggerMatches(autoReply, { webhookFailed });
+    for (const m of staticMessages) {
+      try {
+        const remoteJid = m.key.remoteJid;
+        if (!remoteJid) continue;
 
-    if (shouldReply) {
-      for (const m of staticMessages) {
-        try {
-          const remoteJid = m.key.remoteJid;
-          if (!remoteJid) continue;
-
-          const cooldownKey = `${this.sessionId}:cooldown:${remoteJid}`;
-          const burstKey = `${this.sessionId}:burst:${remoteJid}:${m.key.id || "unknown"}`;
-          if (autoReplyCooldownCache.has(cooldownKey) || autoReplyBurstCache.has(burstKey)) {
-            logger.debug(
-              "[%s] Skipping auto-reply to %s due to cooldown/dedupe",
-              this.sessionId,
-              remoteJid,
-            );
-            continue;
-          }
-
-          autoReplyBurstCache.set(burstKey, true);
-          autoReplyCooldownCache.set(cooldownKey, true);
-
-          await this.humanizeReadStep(m);
-
-          logger.info("[%s] Sending auto-reply to %s", this.sessionId, remoteJid);
-          await this.sendMessage(remoteJid, { text: autoReply.message }, { quoted: m });
-          recordDecision({
-            sessionId: this.sessionId,
-            conversationId: remoteJid,
-            route: "static",
-            reason: autoReply.type,
-          });
-        } catch (err) {
-          logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
+        const cooldownKey = `${this.sessionId}:cooldown:${remoteJid}`;
+        const burstKey = `${this.sessionId}:burst:${remoteJid}:${m.key.id || "unknown"}`;
+        if (autoReplyCooldownCache.has(cooldownKey) || autoReplyBurstCache.has(burstKey)) {
+          logger.debug(
+            "[%s] Skipping auto-reply to %s due to cooldown/dedupe",
+            this.sessionId,
+            remoteJid,
+          );
+          continue;
         }
+
+        autoReplyBurstCache.set(burstKey, true);
+        autoReplyCooldownCache.set(cooldownKey, true);
+
+        await this.humanizeReadStep(m);
+
+        logger.info("[%s] Sending auto-reply to %s", this.sessionId, remoteJid);
+        await this.sendMessage(remoteJid, { text: autoReply.message }, { quoted: m });
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId: remoteJid,
+          route: "static",
+          reason: autoReply.type,
+        });
+      } catch (err) {
+        logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
       }
     }
   }

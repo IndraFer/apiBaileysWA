@@ -5,6 +5,37 @@
     always: 'AI answers 24/7 ("full handle"). A human reply still pauses it.',
   };
 
+  const AUTO_REPLY_POLICIES = ["both", "window", "primary", "fallback"];
+  const AUTO_REPLY_POLICY_LABELS = {
+    both: "both",
+    window: "window time",
+    primary: "primary only",
+    fallback: "fallback only",
+  };
+
+  /** Mirror of resolveAutoReplyPolicy for configs saved before `policy` existed. */
+  function autoReplyPolicyOf(autoReply) {
+    const policy = autoReply?.policy;
+    if (AUTO_REPLY_POLICIES.includes(policy)) return policy;
+    const role = autoReply?.role || "both";
+    if (role === "fallback") return "fallback";
+    if (role === "primary") return "primary";
+    if (autoReply?.type === "time_range") return "window";
+    if (autoReply?.type === "on_webhook_fail") return "fallback";
+    return "both";
+  }
+
+  /** Send the policy plus the legacy role/type older clients still read. */
+  function autoReplyPayload(input) {
+    const legacy = {
+      both: { role: "both", type: "always" },
+      window: { role: "both", type: "time_range" },
+      primary: { role: "primary", type: "always" },
+      fallback: { role: "fallback", type: "always" },
+    }[input.policy] || { role: "both", type: "always" };
+    return { ...input, ...legacy };
+  }
+
   const ROUTE_BADGES = {
     ai: "badge-success",
     static: "badge-info",
@@ -223,31 +254,22 @@
             </span>
           </label>
           <div id="ai-autoreply-settings" class="hidden">
-            <div class="form-row cols-2">
-              <div class="form-group">
-                <label for="ai-autoreply-type">Trigger Mode</label>
-                <select id="ai-autoreply-type" class="input">
-                  <option value="always">Always Reply</option>
-                  <option value="time_range">Outside Working Hours</option>
-                  <option value="on_webhook_fail">On Webhook Failure</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="ai-autoreply-role">Role When AI Routing Is On</label>
-                <select id="ai-autoreply-role" class="input">
-                  <option value="both">Both — primary when AI is off / out of window, fallback when AI or Webhook delivery fails</option>
-                  <option value="primary">Primary only — static answers first</option>
-                  <option value="fallback">Fallback only — static answers only when the AI or webhook delivery fails</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label for="ai-autoreply-policy">When Does the Static Reply Answer?</label>
+              <select id="ai-autoreply-policy" class="input">
+                <option value="both">Both — primary when AI is off / out of window, fallback when AI or Webhook delivery fails</option>
+                <option value="window">Window Time — only inside the hours below</option>
+                <option value="primary">Primary Only — static answers first, never as a fallback</option>
+                <option value="fallback">Fallback Only — only when the AI or Webhook delivery fails</option>
+              </select>
             </div>
             <div id="ai-autoreply-time-group" class="form-row cols-2 hidden">
               <div class="form-group">
-                <label for="ai-autoreply-start">Start Time</label>
+                <label for="ai-autoreply-start">Active From</label>
                 <input id="ai-autoreply-start" class="input" type="time" />
               </div>
               <div class="form-group">
-                <label for="ai-autoreply-end">End Time</label>
+                <label for="ai-autoreply-end">Active Until</label>
                 <input id="ai-autoreply-end" class="input" type="time" />
               </div>
             </div>
@@ -605,7 +627,7 @@
         this.syncAutoReplyUi();
         this.syncGroupReplyVisibility();
       });
-      document.getElementById("ai-autoreply-type")?.addEventListener("change", () => {
+      document.getElementById("ai-autoreply-policy")?.addEventListener("change", () => {
         this.syncAutoReplyUi();
       });
       document.getElementById("group-reply-mode")?.addEventListener("change", () => {
@@ -661,8 +683,7 @@
       const autoReply = data.autoReply || {};
       const autoReplyEnabled = document.getElementById("ai-autoreply-enabled");
       if (autoReplyEnabled) autoReplyEnabled.checked = Boolean(autoReply.enabled);
-      set("ai-autoreply-type", autoReply.type || "always");
-      set("ai-autoreply-role", autoReply.role || "both");
+      set("ai-autoreply-policy", autoReplyPolicyOf(autoReply));
       set("ai-autoreply-start", autoReply.timeStart || "18:00");
       set("ai-autoreply-end", autoReply.timeEnd || "08:00");
       set("ai-autoreply-msg", autoReply.message || "");
@@ -733,7 +754,10 @@
       }
 
       const modeHint = document.getElementById("ai-mode-hint");
-      if (modeHint) modeHint.textContent = MODE_HINTS[ai.mode || "window"] || "";
+      if (modeHint) {
+        modeHint.textContent =
+          MODE_HINTS[document.getElementById("ai-mode")?.value || "window"] || "";
+      }
       this.renderChain();
     },
 
@@ -791,11 +815,11 @@
     /** Static auto-reply fields follow the toggle and the trigger mode. */
     syncAutoReplyUi() {
       const enabled = Boolean(document.getElementById("ai-autoreply-enabled")?.checked);
-      const type = document.getElementById("ai-autoreply-type")?.value || "always";
+      const policy = document.getElementById("ai-autoreply-policy")?.value || "both";
       document.getElementById("ai-autoreply-settings")?.classList.toggle("hidden", !enabled);
       document
         .getElementById("ai-autoreply-time-group")
-        ?.classList.toggle("hidden", !enabled || type !== "time_range");
+        ?.classList.toggle("hidden", !enabled || policy !== "window");
     },
 
     /** Show the sender list only when the policy needs it. */
@@ -827,8 +851,9 @@
         aiText = "off";
       }
 
+      const staticPolicy = autoReplyPolicyOf(autoReply);
       const staticText = autoReply.enabled
-        ? `role ${autoReply.role || "both"} · trigger ${autoReply.type}`
+        ? `policy ${AUTO_REPLY_POLICY_LABELS[staticPolicy]}`
         : "not enabled";
 
       // The collapsed summary carries the live chain, so no static paragraph is
@@ -842,7 +867,9 @@
             : mode === "window"
               ? `AI ${routing.aiWindowStart}–${routing.aiWindowEnd}`
               : "AI off";
-        const staticShort = autoReply.enabled ? `static ${autoReply.role || "both"}` : "static off";
+        const staticShort = autoReply.enabled
+          ? `static ${AUTO_REPLY_POLICY_LABELS[autoReplyPolicyOf(autoReply)]}`
+          : "static off";
         summary.textContent = `${aiShort} → ${staticShort} → webhook events only`;
       }
 
@@ -970,14 +997,13 @@
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),
         },
-        autoReply: {
+        autoReply: autoReplyPayload({
           enabled: Boolean(document.getElementById("ai-autoreply-enabled")?.checked),
-          type: value("ai-autoreply-type") || "always",
-          role: value("ai-autoreply-role") || "both",
+          policy: value("ai-autoreply-policy") || "both",
           message: value("ai-autoreply-msg"),
           timeStart: value("ai-autoreply-start") || "18:00",
           timeEnd: value("ai-autoreply-end") || "08:00",
-        },
+        }),
         groupReply: {
           mode: value("group-reply-mode") || "mention",
           fallbackToStatic: Boolean(document.getElementById("group-reply-fallback")?.checked),

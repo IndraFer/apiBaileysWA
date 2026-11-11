@@ -1,5 +1,14 @@
 import type { AnyMessageContent } from "@whiskeysockets/baileys";
 
+/**
+ * One switch decides both "when" and "in what role" the static message runs:
+ * - "both"     primary when the AI is off / out of window, fallback on failure
+ * - "window"   same, but only inside the configured time range
+ * - "primary"  answers first, never as a failure fallback
+ * - "fallback" only when the AI or webhook delivery fails
+ */
+export type AutoReplyPolicy = "both" | "window" | "primary" | "fallback";
+
 export interface AutoReplyConfig {
   enabled: boolean;
   message: string;
@@ -13,6 +22,11 @@ export interface AutoReplyConfig {
    * - "both"     both of the above (default, backwards compatible)
    */
   role?: "primary" | "fallback" | "both";
+  /**
+   * Current selector. When present it wins over `role`/`type`, which stay for
+   * older stored configs and API clients.
+   */
+  policy?: AutoReplyPolicy;
 }
 
 /**

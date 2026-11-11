@@ -5,7 +5,7 @@
  * AUTO_REPLY_MESSAGE (already defaulted in config) wins; a hardcoded UI string
  * must never overwrite the operator's environment default.
  */
-import type { AutoReplyConfig } from "@/baileys/types";
+import type { AutoReplyConfig, AutoReplyPolicy } from "@/baileys/types";
 import config from "@/config";
 
 export function resolveAutoReplyConfig(override?: Partial<AutoReplyConfig>): AutoReplyConfig {
@@ -26,28 +26,72 @@ export function normalizeAutoReplyConfig(
   };
 }
 
-/**
- * Whether the static message should fire for the current moment.
- *
- * Shared by the primary path and the AI-failure fallback so both obey the same
- * trigger rules. `on_webhook_fail` is a failure path of its own: it fires when
- * webhook delivery failed, not when the AI failed, so the caller passes the
- * webhook outcome it actually observed.
- */
-export function staticTriggerMatches(
-  config: Pick<AutoReplyConfig, "type" | "timeStart" | "timeEnd">,
-  context: { webhookFailed: boolean; now?: Date },
-): boolean {
-  if (config.type === "always") return true;
-  if (config.type === "on_webhook_fail") return context.webhookFailed;
+const POLICIES: readonly AutoReplyPolicy[] = ["both", "window", "primary", "fallback"];
 
+/**
+ * Resolve the effective policy.
+ *
+ * New configs store `policy` directly. Older ones only have `role` and `type`,
+ * which used to describe the same decision through two overlapping selectors:
+ * `role=both` + `type=time_range` is "window", `role=both` + `type=on_webhook_fail`
+ * is "fallback", and so on.
+ */
+export function resolveAutoReplyPolicy(config?: Partial<AutoReplyConfig>): AutoReplyPolicy {
+  const explicit = config?.policy;
+  if (explicit && POLICIES.includes(explicit)) return explicit;
+
+  const role = config?.role ?? "both";
+  if (role === "fallback") return "fallback";
+  if (role === "primary") return "primary";
+  if (config?.type === "time_range") return "window";
+  if (config?.type === "on_webhook_fail") return "fallback";
+  return "both";
+}
+
+/** Keep `role`/`type` in sync so older clients and metrics stay meaningful. */
+export function policyToLegacy(policy: AutoReplyPolicy): {
+  role: "primary" | "fallback" | "both";
+  type: "always" | "time_range" | "on_webhook_fail";
+} {
+  switch (policy) {
+    case "window":
+      return { role: "both", type: "time_range" };
+    case "primary":
+      return { role: "primary", type: "always" };
+    case "fallback":
+      return { role: "fallback", type: "always" };
+    default:
+      return { role: "both", type: "always" };
+  }
+}
+
+/**
+ * True when the current time falls inside the configured range. The range may
+ * cross midnight (22:00 - 06:00), and is the *active* period for "window".
+ */
+export function staticWindowMatches(
+  config: Pick<AutoReplyConfig, "timeStart" | "timeEnd">,
+  now: Date = new Date(),
+): boolean {
   const { timeStart, timeEnd } = config;
   if (!timeStart || !timeEnd) return false;
 
-  const now = context.now ?? new Date();
   const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  // Normal range (08:00 - 17:00) or overnight range (22:00 - 06:00).
   return timeStart <= timeEnd
     ? current >= timeStart && current <= timeEnd
     : current >= timeStart || current <= timeEnd;
+}
+
+/** The AI is off or outside its window: may static answer as the primary? */
+export function primaryStaticAllowed(policy: AutoReplyPolicy, inWindow: boolean): boolean {
+  if (policy === "fallback") return false;
+  if (policy === "window") return inWindow;
+  return true;
+}
+
+/** The AI or webhook delivery failed: may static answer as the fallback? */
+export function fallbackStaticAllowed(policy: AutoReplyPolicy, inWindow: boolean): boolean {
+  if (policy === "primary") return false;
+  if (policy === "window") return inWindow;
+  return true;
 }

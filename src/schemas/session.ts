@@ -9,6 +9,7 @@ export const autoReplySchema = z
     message: z.string().max(4000).optional(),
     type: z.enum(["always", "time_range", "on_webhook_fail"]),
     role: z.enum(["primary", "fallback", "both"]).optional(),
+    policy: z.enum(["both", "window", "primary", "fallback"]).optional(),
     timeStart: z
       .string()
       .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid start time format (HH:mm)")
