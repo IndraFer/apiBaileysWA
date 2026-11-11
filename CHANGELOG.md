@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.11] - 2026-11-11
+
+### Fixed
+
+- merge the web search toggle description into one line
+
 ## [1.31.10] - 2026-11-11
 
 ### Added
