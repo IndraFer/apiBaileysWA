@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.34.1] - 2026-11-11
+
+### Added
+
+- persist legacy response config and fold Primary Only into Both
+
 ## [1.34.0] - 2026-11-11
 
 ### Added
