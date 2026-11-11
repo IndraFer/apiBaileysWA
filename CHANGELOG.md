@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.34.3] - 2026-11-11
+
+### Fixed
+
+- mask only the conversation's own numbers, not every long digit run
+
 ## [1.34.2] - 2026-11-11
 
 ### Added
