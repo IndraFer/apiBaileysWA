@@ -1165,6 +1165,7 @@ export class BaileysConnection {
       sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
       images: ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [],
       linkContext: await collectLinkContext(input.texts),
+      ownIdentities: this.ownIdentitiesFor(input.conversationId),
     });
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {
@@ -1194,6 +1195,22 @@ export class BaileysConnection {
   }
 
   /** Recent history, excluding the texts that are being answered now. */
+  /**
+   * Identities that must never reach the provider: the conversation's own number
+   * (plus its PN/LID alias) and the session's own number.
+   */
+  private ownIdentitiesFor(conversationId: string): string[] {
+    const values = new Set<string>([conversationId]);
+    const self = this.user as { id?: string; lid?: string } | null;
+    if (self?.id) values.add(self.id);
+    if (self?.lid) values.add(self.lid);
+
+    const alias = this.store.lidToPn.get(conversationId) ?? this.store.pnToLid.get(conversationId);
+    if (alias) values.add(alias);
+
+    return [...values].filter((value) => typeof value === "string" && value.length > 0);
+  }
+
   private buildHistory(
     conversationId: string,
     currentTexts: string[],

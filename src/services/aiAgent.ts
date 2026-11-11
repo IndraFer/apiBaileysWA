@@ -99,6 +99,11 @@ export interface AgentReplyRequest {
   images?: Array<{ mime: string; data: string }>;
   /** Untrusted title/description metadata for links in the current texts. */
   linkContext?: string;
+  /**
+   * Identities that must never reach the provider: the conversation's own
+   * number plus the session's own number. Empty means nothing is masked.
+   */
+  ownIdentities?: string[];
 }
 
 export type AgentReplyResult =
@@ -198,13 +203,49 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
   };
 }
 
+/** Digits of one identity; a device suffix (`:12@`) is stripped, not counted. */
+function identityDigits(value: string): string {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/:\d+(?=@)/, "");
+  const local = normalized.includes("@") ? (normalized.split("@")[0] ?? "") : normalized;
+  return local.replace(/\D/g, "");
+}
+
 /**
- * Remove the customer's own phone number before the text leaves the server.
- * Other numbers are kept: they may be a membership number the customer asks
- * about, and stripping them would break the lookup tools.
+ * Mask only the identities this conversation already belongs to: the customer's
+ * own number (PN and its LID alias) and the session's own number.
+ *
+ * Other numbers are left intact. A membership number, an order ID or a supplier
+ * phone number is information the customer asked about, and replacing it with a
+ * placeholder both hides the answer and teaches the model to repeat the
+ * placeholder back. Groups are skipped: a group JID is not a phone number.
  */
-export function redactOwnNumber(text: string): string {
-  return text.replace(/\+?\d{8,15}/g, (match) => (match.length >= 10 ? "[nomor]" : match));
+export function maskOwnNumbers(text: string, ownIdentities: string[] | undefined): string {
+  let output = String(text ?? "");
+  const seen = new Set<string>();
+
+  for (const identity of ownIdentities ?? []) {
+    const normalized = String(identity ?? "")
+      .trim()
+      .replace(/:\d+(?=@)/, "");
+    if (!normalized || normalized.endsWith("@g.us")) continue;
+    const digits = identityDigits(normalized);
+    if (digits.length < 6 || seen.has(digits)) continue;
+    seen.add(digits);
+
+    const pattern = new RegExp(`\\+?${digits}`, "g");
+    output = output.replace(pattern, (match, offset: number) => {
+      const before = output[offset - 1];
+      const after = output[offset + match.length];
+      // Never cut a longer digit run in half.
+      if (before && /\d/.test(before)) return match;
+      if (after && /\d/.test(after)) return match;
+      return "[nomor]";
+    });
+  }
+
+  return output;
 }
 
 /** Tool guidance appended to the system instruction (only when tools exist). */
@@ -364,10 +405,10 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
   if (system) messages.push({ role: "system", content: system });
 
   for (const item of req.history.slice(-12)) {
-    messages.push({ role: item.role, content: redactOwnNumber(item.content) });
+    messages.push({ role: item.role, content: maskOwnNumbers(item.content, req.ownIdentities) });
   }
 
-  const combined = req.texts.map((text) => redactOwnNumber(text)).join("\n");
+  const combined = req.texts.map((text) => maskOwnNumbers(text, req.ownIdentities)).join("\n");
   const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
   const textContent = wrapUserContent(`${combined}${linkContext}`);
   const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];

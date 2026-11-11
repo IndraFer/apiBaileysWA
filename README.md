@@ -166,6 +166,15 @@ automatic reply (OTP, login codes, verification notices).
 - OTP content is never written to the filter log; only the match reason and, in
   smart mode, the score are logged. The filter is disabled by default.
 
+#### Own-number masking
+
+Before a request leaves the server, only the identities that belong to the
+conversation are replaced with `[nomor]`: the customer's own number (PN and its
+LID alias) and the session's own number. Everything else is left intact, because
+an order ID, a membership number or a supplier phone number is usually the answer
+the customer asked for. Runs inside a longer digit string are never partially
+replaced, and group JIDs are not treated as phone numbers.
+
 #### Runtime date/time context
 
 Every OpenAI-compatible request carries a server-generated `<get_info>` block
