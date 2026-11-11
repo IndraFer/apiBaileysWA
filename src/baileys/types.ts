@@ -93,6 +93,22 @@ export interface AiSendMessageConfig {
 }
 
 export type OtpFilterSensitivity = "conservative" | "balanced" | "aggressive";
+
+/**
+ * Who may trigger an automatic reply in a group:
+ * - "all"     — any participant, in any group
+ * - "senders" — only listed participants, in any group
+ * - "mention" — only when the account is @mentioned or its message is quoted
+ */
+export type GroupReplyMode = "all" | "senders" | "mention";
+
+/** Per-session group auto-reply policy. Applies to both AI and static replies. */
+export interface GroupReplyConfig {
+  /** Default: "mention". */
+  mode?: GroupReplyMode;
+  /** Participants allowed in "senders" mode. Phone numbers or JIDs. */
+  senders?: string[];
+}
 export type OtpFilterDetectionMode = "keywords" | "smart";
 
 /** Optional deny-list/keyword filter for OTP and verification messages. */
@@ -199,6 +215,8 @@ export interface SessionOptions {
   routing?: RoutingConfig;
   /** Per-number AI agent settings */
   ai?: AiAgentConfig;
+  /** Group auto-reply policy (applies to AI and static replies). */
+  groupReply?: GroupReplyConfig;
 }
 
 export interface SessionMetadata {
@@ -215,6 +233,7 @@ export interface SessionMetadata {
   autoReply?: AutoReplyConfig;
   routing?: RoutingConfig;
   ai?: AiAgentConfig;
+  groupReply?: GroupReplyConfig;
 }
 
 export interface WebhookPayload {

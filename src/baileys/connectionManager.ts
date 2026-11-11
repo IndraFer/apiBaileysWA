@@ -51,6 +51,7 @@ class ConnectionManager {
           autoReply: metadata?.autoReply,
           routing: metadata?.routing,
           ai: metadata?.ai,
+          groupReply: metadata?.groupReply,
           isReconnect: true,
           onConnectionClose: () => {
             this.connections.delete(id);
@@ -157,6 +158,7 @@ class ConnectionManager {
       autoReply: metadata.autoReply,
       routing: metadata.routing,
       ai: metadata.ai,
+      groupReply: metadata.groupReply,
       isReconnect: true,
       onConnectionClose: () => {
         this.connections.delete(sessionId);

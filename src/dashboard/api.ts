@@ -15,7 +15,12 @@ import {
   resolveWebhookTarget,
 } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
-import type { AiAgentConfig, RoutingConfig, SessionMetadata } from "@/baileys/types";
+import type {
+  AiAgentConfig,
+  GroupReplyConfig,
+  RoutingConfig,
+  SessionMetadata,
+} from "@/baileys/types";
 import config from "@/config";
 import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
@@ -555,6 +560,10 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
       success: true,
       data: {
         routing: { ...config.routing, ...(options.routing ?? {}) },
+        groupReply: {
+          mode: options.groupReply?.mode ?? "mention",
+          senders: options.groupReply?.senders ?? [],
+        },
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,
@@ -644,6 +653,10 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     const current = session.getOptions();
 
     const routing: RoutingConfig = { ...(current.routing ?? {}), ...(parsed.data.routing ?? {}) };
+    const groupReply: GroupReplyConfig = {
+      ...(current.groupReply ?? {}),
+      ...(parsed.data.groupReply ?? {}),
+    };
     const {
       credentialsJson,
       apiKey,
@@ -692,14 +705,19 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       }
     }
 
-    session.updateOptions({ routing, ai });
-    await updateSessionMetadata(sessionId, { ...session.getSessionMetadata(), routing, ai });
+    session.updateOptions({ routing, ai, groupReply });
+    await updateSessionMetadata(sessionId, {
+      ...session.getSessionMetadata(),
+      routing,
+      ai,
+      groupReply,
+    });
 
     // Never log raw credentials — redactCredentials strips them by key name.
     logger.info(
       "[Dashboard] AI config updated for %s: %s",
       sessionId,
-      JSON.stringify(redactCredentials({ routing, ai })),
+      JSON.stringify(redactCredentials({ routing, ai, groupReply })),
     );
 
     const saved = readStoredCredentials(ai.credentials);
@@ -708,6 +726,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       message: "AI configuration updated",
       data: {
         routing,
+        groupReply,
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,

@@ -45,6 +45,7 @@ import {
 } from "@/services/aiSendTool";
 import { resolveAutoReplyConfig } from "@/services/autoReply";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import { resolveGroupReply, shouldReplyToGroupMessage } from "@/services/groupReply";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
 import { sendUnifiedMessage } from "@/services/messageSender";
@@ -343,6 +344,7 @@ export class BaileysConnection {
       autoReply: this.options.autoReply,
       routing: this.options.routing,
       ai: this.options.ai,
+      groupReply: this.options.groupReply,
     };
   }
 
@@ -732,8 +734,35 @@ export class BaileysConnection {
 
     // Only reply to incoming messages from others.
     const otpFilter = resolveOtpFilter(this.options.ai?.otpFilter);
+    const groupReply = resolveGroupReply(this.options.groupReply);
+    const groupContext = {
+      // A group member may mention either identity, so both must be known.
+      selfJids: [this.user?.id, (this.user as { lid?: string } | null)?.lid].filter(
+        (jid): jid is string => typeof jid === "string" && jid.length > 0,
+      ),
+      aliasOf: (identity: string) => {
+        const pn = this.store.lidToPn.get(identity);
+        const lid = this.store.pnToLid.get(identity);
+        return [pn, lid].filter((value): value is string => Boolean(value));
+      },
+    };
     const messages = data.messages
       .filter((m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid))
+      .filter((m) => {
+        const remoteJid = m.key.remoteJid;
+        // Direct chats are unaffected: this policy is group-only.
+        if (!remoteJid || !remoteJid.endsWith("@g.us")) return true;
+        const decision = shouldReplyToGroupMessage(m, groupReply, groupContext);
+        if (!decision.reply) {
+          logger.debug(
+            "[%s] Group auto-reply skipped for %s (group_reply:%s)",
+            this.sessionId,
+            remoteJid,
+            decision.reason,
+          );
+        }
+        return decision.reply;
+      })
       .filter((m) => {
         const match = matchOtpFilter(
           {

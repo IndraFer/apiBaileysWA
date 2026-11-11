@@ -129,6 +129,13 @@ export const aiVisionSchema = z
   })
   .strict();
 
+export const groupReplySchema = z
+  .object({
+    mode: z.enum(["all", "senders", "mention"]).optional(),
+    senders: z.array(z.string().trim().min(3).max(64)).max(200).optional(),
+  })
+  .strict();
+
 export const otpFilterSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -173,5 +180,6 @@ export const aiConfigPatchSchema = z
   .object({
     routing: routingConfigSchema.optional(),
     ai: aiConfigSchema.optional(),
+    groupReply: groupReplySchema.optional(),
   })
   .strict();

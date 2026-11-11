@@ -416,6 +416,27 @@
         </div>
 
         <div class="card">
+          <div class="card-header"><h3>Group Reply</h3></div>
+          <div class="form-group">
+            <label for="group-reply-mode">Reply Policy</label>
+            <select id="group-reply-mode" class="input">
+              <option value="mention" selected>Mention Only</option>
+              <option value="senders">Allowlisted Senders Only</option>
+              <option value="all">All Messages</option>
+            </select>
+            <small class="text-muted">Applies to AI and static replies in groups. Messages are still stored and webhooks still fire; this only controls automatic answers. Direct chats are not affected.</small>
+          </div>
+          <div id="group-reply-senders-wrap" class="hidden">
+            <div class="form-group">
+              <label for="group-reply-senders">Allowed Senders</label>
+              <textarea id="group-reply-senders" class="input" rows="4"
+                placeholder="628123456789&#10;628987654321@s.whatsapp.net"></textarea>
+              <small class="text-muted">One phone number or JID per line. These participants get an automatic reply in any group. Messages from everyone else are ignored.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-header"><h3>System Instruction</h3></div>
           <div class="form-group">
             <textarea id="ai-instruction" class="input" rows="18"
@@ -504,6 +525,9 @@
       document.getElementById("otp-detection-mode")?.addEventListener("change", () => {
         this.syncOtpFilterUi();
       });
+      document.getElementById("group-reply-mode")?.addEventListener("change", () => {
+        this.syncGroupReplyUi();
+      });
       document.getElementById("ai-send-scope")?.addEventListener("change", () => {
         this.syncSendMessageUi();
       });
@@ -568,8 +592,12 @@
       set("otp-ignored-senders", (otpFilter.ignoredSenders || []).join("\n"));
       set("otp-keywords", (otpFilter.keywords || []).join("\n"));
       set("otp-exclude-keywords", (otpFilter.excludeKeywords || []).join("\n"));
+      const groupReply = data.groupReply || {};
+      set("group-reply-mode", groupReply.mode || "mention");
+      set("group-reply-senders", (groupReply.senders || []).join("\n"));
       this.syncSendMessageUi();
       this.syncOtpFilterUi();
+      this.syncGroupReplyUi();
 
       const credentials = document.getElementById("ai-credentials");
       if (credentials) credentials.value = "";
@@ -622,6 +650,14 @@
       document
         .getElementById("otp-smart-settings")
         ?.classList.toggle("hidden", !enabled || mode !== "smart");
+    },
+
+    /** Show the sender list only when the policy needs it. */
+    syncGroupReplyUi() {
+      const mode = document.getElementById("group-reply-mode")?.value || "mention";
+      document
+        .getElementById("group-reply-senders-wrap")
+        ?.classList.toggle("hidden", mode !== "senders");
     },
 
     /** Show the responder chain that will actually run for this number. */
@@ -776,6 +812,13 @@
           },
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),
+        },
+        groupReply: {
+          mode: value("group-reply-mode") || "mention",
+          senders: value("group-reply-senders")
+            .split(/[\n,]+/)
+            .map((entry) => entry.trim())
+            .filter(Boolean),
         },
       };
 
