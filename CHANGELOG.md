@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.10] - 2026-11-11
+
+### Added
+
+- add configurable persona scope and always-on security rules
+
 ## [1.31.9] - 2026-11-11
 
 ### Added
