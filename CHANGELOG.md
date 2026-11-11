@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.8] - 2026-11-11
+
+### Added
+
+- add per-session group auto-reply policy
+
+### Changed
+
+- ignore .memorypedia local notes
+
 ## [1.31.7] - 2026-11-04
 
 ### Fixed
