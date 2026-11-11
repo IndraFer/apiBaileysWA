@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.31.9] - 2026-11-11
+
+### Added
+
+- add opt-in web_search tool backed by SearXNG
+
 ## [1.31.8] - 2026-11-11
 
 ### Added
