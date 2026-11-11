@@ -108,6 +108,12 @@ export interface GroupReplyConfig {
   mode?: GroupReplyMode;
   /** Participants allowed in "senders" mode. Phone numbers or JIDs. */
   senders?: string[];
+  /**
+   * Allow the static auto reply in a group when the AI cannot answer there
+   * (disabled, outside its window, or failed). Default false: a repeated fixed
+   * message in a group is easy to identify as a bot.
+   */
+  fallbackToStatic?: boolean;
 }
 export type OtpFilterDetectionMode = "keywords" | "smart";
 

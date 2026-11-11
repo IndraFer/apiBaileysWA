@@ -133,6 +133,7 @@ export const groupReplySchema = z
   .object({
     mode: z.enum(["all", "senders", "mention"]).optional(),
     senders: z.array(z.string().trim().min(3).max(64)).max(200).optional(),
+    fallbackToStatic: z.boolean().optional(),
   })
   .strict();
 

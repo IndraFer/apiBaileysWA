@@ -286,9 +286,14 @@ export class BaileysConnection {
         await this.sendMessage(conversationId, { text }, { quoted: lastMessage });
       },
       onFailure: async (conversationId, lastMessage) => {
-        // Groups are AI-only. A canned message after an AI failure is still a
-        // robot signature, so stay silent and let a human answer manually.
-        if (!isStaticReplyAllowed(conversationId)) {
+        // Groups are AI-only unless the operator explicitly opted into the
+        // static fallback for them.
+        const groupReply = resolveGroupReply(this.options.groupReply);
+        if (
+          !isStaticReplyAllowed(conversationId, {
+            fallbackToStatic: groupReply.fallbackToStatic,
+          })
+        ) {
           logger.debug(
             "[%s] Static fallback suppressed in group %s",
             this.sessionId,
@@ -813,9 +818,16 @@ export class BaileysConnection {
     if (autoRole !== "primary" && autoRole !== "both") return;
 
     // Groups are answered by the AI only; static never speaks there.
-    const staticMessages = messages.filter((m) => isStaticReplyAllowed(m.key.remoteJid));
+    const staticMessages = messages.filter((m) =>
+      isStaticReplyAllowed(m.key.remoteJid, {
+        fallbackToStatic: groupReply.fallbackToStatic,
+      }),
+    );
     if (staticMessages.length === 0) {
-      logger.debug("[%s] Static auto-reply skipped: group messages are AI-only", this.sessionId);
+      logger.debug(
+        "[%s] Static auto-reply skipped: group messages are AI-only (fallbackToStatic disabled)",
+        this.sessionId,
+      );
       return;
     }
 

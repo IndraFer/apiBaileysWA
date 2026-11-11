@@ -563,6 +563,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
         groupReply: {
           mode: options.groupReply?.mode ?? "mention",
           senders: options.groupReply?.senders ?? [],
+          fallbackToStatic: options.groupReply?.fallbackToStatic === true,
         },
         autoReply: resolveAutoReplyConfig(options.autoReply),
         ai: {

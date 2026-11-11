@@ -20,6 +20,7 @@ import type { GroupReplyConfig, GroupReplyMode } from "@/baileys/types";
 export interface ResolvedGroupReply {
   mode: GroupReplyMode;
   senders: string[];
+  fallbackToStatic: boolean;
 }
 
 /** Default mode. `mention` keeps the bot quiet unless it is addressed. */
@@ -31,7 +32,11 @@ export function resolveGroupReply(input?: GroupReplyConfig): ResolvedGroupReply 
   const mode = VALID_MODES.includes(input?.mode as GroupReplyMode)
     ? (input?.mode as GroupReplyMode)
     : DEFAULT_GROUP_REPLY_MODE;
-  return { mode, senders: uniqueValues(input?.senders) };
+  return {
+    mode,
+    senders: uniqueValues(input?.senders),
+    fallbackToStatic: input?.fallbackToStatic === true,
+  };
 }
 
 function uniqueValues(values: string[] | undefined): string[] {
@@ -198,16 +203,23 @@ export function shouldReplyInGroup(
 }
 
 /**
- * Static replies are never sent to a group.
+ * Decide whether the static reply may be used for one conversation.
  *
- * Groups have many participants and no shared context, so a fixed "we are
- * away" message reads as a robot signature and is the classic trigger for a
- * group report. The AI may still answer a group because its text varies and
- * responds to the actual question. When the AI fails in a group, silence is
- * cheaper than a canned message, so the static fallback stays silent too.
+ * Direct chats always allow it. Groups are AI-only by default: with many
+ * participants and no shared context, a fixed "we are away" message reads as a
+ * robot signature and is the classic trigger for a group report.
+ *
+ * An operator may opt in with `fallbackToStatic`, which is the deliberate way to
+ * bring the gateway into a group and still answer when the AI cannot (disabled,
+ * outside its window, or failed). The opt-in is off by default.
  */
-export function isStaticReplyAllowed(remoteJid: string | null | undefined): boolean {
-  return !String(remoteJid ?? "").endsWith("@g.us");
+export function isStaticReplyAllowed(
+  remoteJid: string | null | undefined,
+  options?: { fallbackToStatic?: boolean },
+): boolean {
+  const jid = String(remoteJid ?? "");
+  if (!jid.endsWith("@g.us")) return true;
+  return options?.fallbackToStatic === true;
 }
 
 /** Convenience wrapper: read the addressing facts out of a WAMessage. */

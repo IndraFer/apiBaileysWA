@@ -220,6 +220,21 @@ describe("static replies stay out of groups", () => {
     expect(isStaticReplyAllowed(undefined)).toBe(true);
   });
 
+  test("the explicit group opt-in allows the static fallback", () => {
+    expect(isStaticReplyAllowed(group, { fallbackToStatic: true })).toBe(true);
+    expect(isStaticReplyAllowed(group, { fallbackToStatic: false })).toBe(false);
+    // Direct chats are unaffected by the opt-in.
+    expect(isStaticReplyAllowed("628999999999@s.whatsapp.net", { fallbackToStatic: false })).toBe(
+      true,
+    );
+  });
+
+  test("resolveGroupReply defaults the opt-in to off", () => {
+    expect(resolveGroupReply({}).fallbackToStatic).toBe(false);
+    expect(resolveGroupReply({ fallbackToStatic: true }).fallbackToStatic).toBe(true);
+    expect(resolveGroupReply({ fallbackToStatic: "true" as never }).fallbackToStatic).toBe(false);
+  });
+
   test("group permission does not make static eligible", () => {
     // Even with the most permissive AI gate, the group is still closed to static.
     const permissive = resolveGroupReply({ mode: "all" });

@@ -214,54 +214,6 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Responder &amp; Schedule</h3></div>
-          <div class="form-row cols-2">
-            <div class="form-group">
-              <label for="ai-enabled">Enable AI for This Number</label>
-              <select id="ai-enabled" class="input">
-                <option value="false">No — static auto-reply</option>
-                <option value="true">Yes — AI agent</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="ai-mode">When May the AI Answer?</label>
-              <select id="ai-mode" class="input">
-                <option value="off">Off (static only)</option>
-                <option value="window">Inside the time window</option>
-                <option value="always">Always (full handle)</option>
-              </select>
-              <small class="text-muted" id="ai-mode-hint"></small>
-            </div>
-          </div>
-          <div class="form-row cols-6">
-            <div class="form-group">
-              <label for="ai-window-start">Start</label>
-              <input id="ai-window-start" class="input" placeholder="16:00" />
-            </div>
-            <div class="form-group">
-              <label for="ai-window-end">End</label>
-              <input id="ai-window-end" class="input" placeholder="08:00" />
-            </div>
-            <div class="form-group">
-              <label for="ai-timezone">Timezone</label>
-              <input id="ai-timezone" class="input" placeholder="Asia/Jakarta" />
-            </div>
-            <div class="form-group">
-              <label for="ai-batch-idle">Idle (Sec)</label>
-              <input id="ai-batch-idle" class="input" type="number" min="3" max="120" />
-            </div>
-            <div class="form-group">
-              <label for="ai-human-idle">Human Pause (Min)</label>
-              <input id="ai-human-idle" class="input" type="number" min="1" max="1440" />
-            </div>
-            <div class="form-group">
-              <label for="ai-handoff-pause">Handoff Pause (Min)</label>
-              <input id="ai-handoff-pause" class="input" type="number" min="1" max="1440" />
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
           <div class="card-header"><h3>Static Auto Reply</h3></div>
           <label class="toggle-row">
             <input type="checkbox" id="ai-autoreply-enabled" class="toggle-input" />
@@ -284,9 +236,9 @@
               <div class="form-group">
                 <label for="ai-autoreply-role">Role When AI Routing Is On</label>
                 <select id="ai-autoreply-role" class="input">
-                  <option value="both">Both</option>
-                  <option value="primary">Primary Only</option>
-                  <option value="fallback">Fallback Only</option>
+                  <option value="both">Both — primary when AI is off / out of window, fallback when AI fails</option>
+                  <option value="primary">Primary only — static answers first</option>
+                  <option value="fallback">Fallback only — static answers only when AI fails</option>
                 </select>
               </div>
             </div>
@@ -310,6 +262,55 @@
         </div>
 
         <div class="card">
+          <div class="card-header"><h3>Responder &amp; Schedule</h3></div>
+          <div class="form-group">
+            <label for="ai-enabled">Enable AI for This Number</label>
+            <select id="ai-enabled" class="input">
+              <option value="false">No — static auto-reply</option>
+              <option value="true">Yes — AI agent</option>
+            </select>
+            <small class="text-muted">Turning this off hides the AI configuration and leaves the static auto reply in charge of direct chats.</small>
+          </div>
+          <div id="ai-settings-body" class="hidden">
+            <div class="form-group">
+              <label for="ai-mode">When May the AI Answer?</label>
+              <select id="ai-mode" class="input">
+                <option value="off">Off (static only)</option>
+                <option value="window">Inside the time window</option>
+                <option value="always">Always (full handle)</option>
+              </select>
+              <small class="text-muted" id="ai-mode-hint"></small>
+            </div>
+            <div class="form-row cols-6">
+              <div class="form-group">
+                <label for="ai-window-start">Start</label>
+                <input id="ai-window-start" class="input" placeholder="16:00" />
+              </div>
+              <div class="form-group">
+                <label for="ai-window-end">End</label>
+                <input id="ai-window-end" class="input" placeholder="08:00" />
+              </div>
+              <div class="form-group">
+                <label for="ai-timezone">Timezone</label>
+                <input id="ai-timezone" class="input" placeholder="Asia/Jakarta" />
+              </div>
+              <div class="form-group">
+                <label for="ai-batch-idle">Idle (Sec)</label>
+                <input id="ai-batch-idle" class="input" type="number" min="3" max="120" />
+              </div>
+              <div class="form-group">
+                <label for="ai-human-idle">Human Pause (Min)</label>
+                <input id="ai-human-idle" class="input" type="number" min="1" max="1440" />
+              </div>
+              <div class="form-group">
+                <label for="ai-handoff-pause">Handoff Pause (Min)</label>
+                <input id="ai-handoff-pause" class="input" type="number" min="1" max="1440" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card ai-dependent">
           <div class="card-header"><h3>Model &amp; API Key</h3></div>
           <div class="form-row cols-2">
             <div class="form-group">
@@ -362,7 +363,7 @@
 
         </div>
 
-        <div class="card">
+        <div class="card ai-dependent">
           <div class="card-header"><h3>AI Capabilities</h3></div>
           <div class="u-mb-05">
             <label class="toggle-row">
@@ -472,7 +473,7 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>AI Group Reply</h3></div>
+          <div class="card-header"><h3>Group Reply</h3></div>
           <div class="form-group">
             <label for="group-reply-mode">Reply Policy</label>
             <select id="group-reply-mode" class="input">
@@ -480,8 +481,16 @@
               <option value="senders">Allowlisted Senders Only</option>
               <option value="all">All Messages</option>
             </select>
-            <small class="text-muted">Controls when the AI may answer in groups. Static auto reply is never sent to a group. Messages are still stored and webhooks still fire. Direct chats are not affected.</small>
+            <small class="text-muted">Decides which group messages are addressed to this number. Messages are still stored and webhooks still fire; this only controls automatic answers. Direct chats are not affected.</small>
           </div>
+          <label class="toggle-row">
+            <input type="checkbox" id="group-reply-fallback" class="toggle-input" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-copy">
+              <strong>Fallback to Static Reply in Groups</strong>
+              <small>Reply with the static auto reply when the AI cannot answer here: disabled, outside its window, or failed. Off by default. A fixed message repeated in a group is easy to identify as a bot and can be reported, so enable this only when you accept that risk.</small>
+            </span>
+          </label>
           <div id="group-reply-senders-wrap" class="hidden">
             <div class="form-group">
               <label for="group-reply-senders">Allowed Senders</label>
@@ -492,7 +501,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card ai-dependent">
           <div class="card-header"><h3>System Instruction</h3></div>
           <div class="form-group">
             <textarea id="ai-instruction" class="input" rows="18"
@@ -509,7 +518,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card ai-dependent">
           <div class="card-header"><h3>Knowledge Endpoints</h3></div>
           <div class="form-group">
             <div class="flex gap-1 u-between-center u-mb-05">
@@ -546,7 +555,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card ai-dependent">
           <div class="card-header">
             <h3>Routing Metrics</h3>
             <button class="btn btn-outline btn-sm" id="ai-reset-metrics">Reset</button>
@@ -573,6 +582,9 @@
       document
         .getElementById("ai-credentials-example")
         .addEventListener("click", () => this.showCredentialsExample());
+      document.getElementById("ai-enabled").addEventListener("change", () => {
+        this.syncAiVisibility();
+      });
       document.getElementById("ai-mode").addEventListener("change", (event) => {
         const hint = document.getElementById("ai-mode-hint");
         if (hint) hint.textContent = MODE_HINTS[event.target.value] || "";
@@ -651,6 +663,7 @@
       set("ai-autoreply-end", autoReply.timeEnd || "08:00");
       set("ai-autoreply-msg", autoReply.message || "");
       this.syncAutoReplyUi();
+      this.syncAiVisibility();
       const persona = ai.persona || {};
       set("ai-persona-scope", persona.scope === "strict" ? "strict" : "flexible");
       const webSearch = ai.webSearch || {};
@@ -690,6 +703,8 @@
       const groupReply = data.groupReply || {};
       set("group-reply-mode", groupReply.mode || "mention");
       set("group-reply-senders", (groupReply.senders || []).join("\n"));
+      const groupFallback = document.getElementById("group-reply-fallback");
+      if (groupFallback) groupFallback.checked = Boolean(groupReply.fallbackToStatic);
       this.syncSendMessageUi();
       this.syncOtpFilterUi();
       this.syncGroupReplyUi();
@@ -745,6 +760,15 @@
       document
         .getElementById("otp-smart-settings")
         ?.classList.toggle("hidden", !enabled || mode !== "smart");
+    },
+
+    /** Hide AI configuration while the AI is switched off for this number. */
+    syncAiVisibility() {
+      const enabled = (document.getElementById("ai-enabled")?.value || "false") === "true";
+      document.getElementById("ai-settings-body")?.classList.toggle("hidden", !enabled);
+      for (const card of document.querySelectorAll(".ai-dependent")) {
+        card.classList.toggle("hidden", !enabled);
+      }
     },
 
     /** Static auto-reply fields follow the toggle and the trigger mode. */
@@ -939,6 +963,7 @@
         },
         groupReply: {
           mode: value("group-reply-mode") || "mention",
+          fallbackToStatic: Boolean(document.getElementById("group-reply-fallback")?.checked),
           senders: value("group-reply-senders")
             .split(/[\n,]+/)
             .map((entry) => entry.trim())

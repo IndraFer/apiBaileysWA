@@ -161,6 +161,10 @@
           Toast.success("Session created");
           // Session-dependent menus appear as soon as a session exists.
           window.App?.refreshAvailability?.();
+          // Show the new row now, before pairing finishes. The list is reloaded
+          // again when the connection opens, and the QR/pairing modal is opened
+          // afterwards so a re-render cannot interfere with it.
+          await this.loadSessions();
           if (result.data?.pairingCode) this.showPairingCode(result.data.pairingCode);
           else
             this.showQR(sessionId, {
