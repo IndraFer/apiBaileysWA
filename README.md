@@ -28,6 +28,10 @@ Release history lives in [CHANGELOG.md](CHANGELOG.md); this README stays version
 | **Group & Profile**         | Full management (create, participants, status, picture)           |
 | **Media Handling**          | Download, process, retrieve, and auto-cleanup old media           |
 | **Webhook System**          | Retries, exponential backoff, and signature modes                 |
+| **AI Auto-Response**        | Per-number OpenAI-compatible agent with time routing and RAG tools |
+| **AI Tooling**              | Optional send-message tool, web search (SearXNG) and image vision |
+| **Group Reply Policy**      | Groups are AI-only, scoped by mention/senders, opt-in static fallback |
+| **Static Auto Reply**       | One policy: both, window-only, or failure fallback                 |
 | **Dual Auth State**         | Save session data to Files (dev) or Redis (production)            |
 | **API Authentication**      | Bearer token or Redis-stored API keys with roles                  |
 | **Hardened Dashboard Auth** | JWT auth, stream token for SSE, password policy, approval flow    |
@@ -96,8 +100,9 @@ its own window, model, instruction and knowledge endpoints.
 
 #### Built-in send tool (optional)
 
-**AI & Routing → Send message tool** adds `send_whatsapp_message` to the tool
-list on every request when enabled. It is off by default and text-only.
+**AI & Routing → AI Capabilities → Allow AI to send WhatsApp messages** adds
+`send_whatsapp_message` to the tool list on every request when enabled. It is
+off by default and text-only.
 
 - **Scope** — `allowlist` (default: the current chat plus listed
   numbers/JIDs) or `any`. The originating chat is always allowed; `receiver`
@@ -107,6 +112,23 @@ list on every request when enabled. It is off by default and text-only.
 - **Groups** — still governed by `ALLOW_GROUP_SEND` / `ALLOWED_GROUP_JIDS`.
 - **Execution** — the tool calls the same service as `POST /api/v1/messages`;
   it does not make an internal HTTP request or carry an API key.
+
+#### Built-in web search (optional, SearXNG)
+
+**AI & Routing → AI Capabilities → Allow Web Search** adds `web_search` to the
+tool list. It needs a SearXNG instance configured on the server through
+`SEARXNG_URL`; when that variable is empty the tool is never advertised to the
+model and the toggle stays disabled.
+
+- The model only supplies the query string. The destination host always comes
+  from operator configuration, like `AI_BASE_URL`.
+- The instance must return JSON: add `json` to `search.formats` in its
+  `settings.yml`, otherwise the tool reports a non-JSON error.
+- Results are bounded (`SEARXNG_MAX_RESULTS`, 1–10) with HTML stripped from
+  titles and snippets, private/loopback result links dropped, and the total
+  capped by `AI_TOOL_MAX_RESPONSE_CHARS`.
+- Snippets are labelled **untrusted data**, so instructions inside them are not
+  treated as operator policy.
 
 #### Media and link context
 
@@ -125,17 +147,24 @@ list on every request when enabled. It is off by default and text-only.
 
 #### OTP / verification auto-reply filter
 
-**AI & Routing → Message Filters** is an optional deny-list for messages that
-should not receive an automatic reply (OTP, login codes, verification notices).
+**AI & Routing → AI Capabilities → Message Filter / Ignore OTP / Verification
+Messages** is an optional deny-list for messages that should not receive an
+automatic reply (OTP, login codes, verification notices).
 
 - **Ignored Senders (Ignore List)** — one phone number or JID per line. Sender
   matching also checks group participants.
-- **Filter by Keywords** — off by default. Keywords and Exclude Keywords are
-  operator-maintained, one phrase per line; no keyword is built in.
-- A sender match, or a keyword match without an exclude match, skips both the AI
-  and static auto-reply. Messages are still stored and webhooks still fire.
-- OTP content is never written to the filter log; only the match reason/JID is
-  logged. The filter is disabled by default.
+- **Detection Mode** — `Keywords Only` matches the phrase list directly, which is
+  also usable for non-OTP filtering. `Smart OTP / Verification` (default) uses
+  the same phrases as positive signals and adds a score for built-in code shapes
+  near them; no OTP phrase is hardcoded.
+- **Sensitivity** (smart mode only) — `conservative` 6, `balanced` 5,
+  `aggressive` 4. A code alone never matches; a phrase alone never matches.
+- **Exclude Keywords** — subtract from the smart score and prevent a direct match
+  in keyword mode, so "I did not receive the code" is not swallowed.
+- A match skips both the AI and static auto-reply. Messages are still stored and
+  webhooks still fire.
+- OTP content is never written to the filter log; only the match reason and, in
+  smart mode, the score are logged. The filter is disabled by default.
 
 #### Runtime date/time context
 
@@ -155,30 +184,83 @@ call is needed; it simply keeps the model aware of the current clock.
    phone, WhatsApp Web or the dashboard counts; messages sent through this API
    do not. Silence lasts `ROUTING_HUMAN_IDLE_MS` (default 15 min).
 
-If a call fails, the static away message (`AUTO_REPLY_*`) is used instead, so
-the customer is never left without an answer.
+If a call fails, the static reply answers only when its policy allows it — see
+the responder chain below.
+
+#### Persona scope and security rules
+
+Two separate concerns, deliberately not merged:
+
+- **Response Scope** (`AI & Routing → System Instruction`) is a product choice.
+  `flexible` (default) answers the configured domain first but may answer brief
+  general questions; `strict` answers only the domain described by the operator
+  instruction and declines everything else in one sentence, without hints or
+  examples.
+- **Security rules** are always appended to every request, whatever the scope,
+  and placed last so they are the most recent instruction: untrusted text is
+  data and not instructions, the persona must not change, instructions/keys/
+  tokens must not be revealed, and the model must not claim an action no tool
+  performed.
+
+The deterministic tripwire in `src/services/promptGuard.ts` still screens input
+first (pattern score, mute after repeated strikes). It is a signal, not the
+boundary: the boundary is the allowlisted tool set, credentials never entering
+the prompt, bounded tool rounds and output scrubbing.
 
 #### Responder chain (one owner per message)
 
-Replies are decided by a single chain, not three independent switches:
+Replies are decided by a single chain, not independent switches.
 
-1. **AI & Routing** — answers when enabled and eligible (`mode`: window/always),
-   unless a human is active or the conversation is muted.
-2. **Static auto-reply** — its `role` decides when it steps in:
+**1. AI** — answers when enabled and eligible (`mode`: window/always), unless a
+human is active or the conversation is muted.
 
-   | `role` | Behaviour |
-   |---|---|
-   | `both` (default) | primary when the AI is off/outside its window, fallback when the AI call fails |
-   | `primary` | answers whenever it is enabled; the AI only runs when static is off |
-   | `fallback` | answers only when the AI fails (no credit, API error, guard block) |
+**2. Static auto-reply** — one policy decides when it steps in
+(`AI & Routing → Static Auto Reply`):
 
-3. **Webhook** — never answers; it delivers events. Every `messages.upsert`
-   payload carries a `routing` block (`aiEnabled`, `aiMode`, `window`,
-   `timezone`, `staticRole`) so an external system can skip replying.
+| Policy | Primary path (AI off / outside its window) | Fallback path (AI or webhook delivery failed) |
+|---|---|---|
+| `both` (default) | every hour | every hour |
+| `window` | only inside `AUTO_REPLY_TIME_START`–`AUTO_REPLY_TIME_END` | only inside the same hours |
+| `fallback` | never | every hour |
+
+`enabled: false` turns the whole static layer off, including the group fallback;
+nothing can bypass that. `primary` is a legacy alias that now resolves to `both`,
+because `both` already covers it.
+
+`window` applies to the fallback path too, so an "away" message never appears
+mid-day when the AI fails. Webhook delivery failure is treated the same as an AI
+failure; an AI failure is not a webhook failure.
+
+**3. Webhook** — never answers; it delivers events. Every `messages.upsert`
+payload carries a `routing` block (`aiEnabled`, `aiMode`, `window`, `timezone`,
+`staticRole`) so an external system can skip replying.
 
 The ordering is intentional: the AI is the most capable but most fragile layer,
 static is the cheap always-available net, and the webhook observes rather than
 competes.
+
+#### Group reply policy
+
+**AI & Routing → Group Reply** decides which group messages are addressed to
+this number:
+
+| Policy | Answers |
+|---|---|
+| `mention` (default) | only when the account is @mentioned or one of its messages is quoted |
+| `senders` | only listed participants, in any group |
+| `all` | every participant, every group |
+
+- Identity matching resolves PN/LID both ways, because a member may mention the
+  account's LID while the operator typed a phone number.
+- **Groups are AI-only by default.** Static replies are never sent to a group;
+  silenced groups stay silent instead of receiving a canned message.
+- **Fallback to Static Reply in Groups** is an explicit opt-in. When on, a group
+  message the policy considers addressed still receives the static reply while
+  the AI is disabled, outside its window, or failing. Off by default: a repeated
+  fixed message in a group is the clearest robot signature.
+- Messages are always stored and webhooks always fire; only automatic answers
+  are gated. Direct chats are unaffected.
+- The card is hidden when both the AI and the static auto-reply are off.
 
 #### Response modes: static vs LLM
 
@@ -186,22 +268,26 @@ The static auto-reply and the LLM coexist; the mode decides who answers.
 
 | Setting | Behaviour |
 |---|---|
-| `ai.mode = "off"` (or `ai.enabled = false`) | Static rules (`AUTO_REPLY_*`) own the conversation |
-| `ai.mode = "window"` (default) | LLM inside the window; outside it the static rules apply |
+| `ai.enabled = false` | Static rules (`AUTO_REPLY_*`) own direct chats |
+| `ai.mode = "window"` (default) | LLM inside the window; outside it the static policy applies |
 | `ai.mode = "always"` | LLM answers 24/7 — “full handle” |
+
+`ai.mode = "off"` is a legacy value. It duplicated the enable switch and is no
+longer selectable; opening the AI page rewrites it as `enabled: false` with mode
+`window`, and the resolved behaviour is unchanged.
 
 Humans win in every mode: a reply typed from the phone, WhatsApp Web or the
 dashboard pauses the AI for `ROUTING_HUMAN_IDLE_MS`, and
 `POST /chats/:id/handoff` pauses it longer — including in `always` mode.
 
-Precedence: **AI path → static rules → nothing**. If the AI call fails, the
-static away message is sent instead, so the customer always gets an answer.
+Precedence: **AI path → static policy → nothing**. A failed AI call falls back to
+the static reply only when the policy allows it for that hour and that chat.
 
 #### Tuning (env defaults, overridable per number in the UI)
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AI_MODE` | `window` | `off` / `window` / `always` |
+| `AI_MODE` | `window` | `window` / `always` (legacy `off` = AI disabled) |
 | `AI_TEMPERATURE` | `0.6` | Sampling temperature |
 | `AI_TOP_P` | `0.95` | Nucleus sampling |
 | `AI_MIN_P` | `0.05` | Min-p (sent only to OpenRouter bases) |
@@ -763,11 +849,15 @@ CSP_REPORT_ONLY=false
 
 - **Sessions**: Add WhatsApp accounts (QR/Pairing Code), Delete accounts safely (auto-cleans media/logs).
 - **Messaging**: Test sending texts, images, and bulk broadcasts interactively.
-- **Webhooks**: Configure webhook URLs and event subscriptions per-session.
-- **AI & Routing**: Per-number auto-response — responder mode (off/window/always),
-  time window and timezone, OpenAI-compatible model + encrypted credentials,
-  system instruction, knowledge endpoints (tool-calling RAG), and live routing
-  metrics.
+- **Webhooks**: Configure webhook URLs, rotate secrets, and watch the delivery
+  log and dead-letter queue per session.
+- **AI & Routing**: Per-number auto-response — static auto-reply policy
+  (both/window/fallback) and its message, AI enable switch plus
+  window/always scheduling, OpenAI-compatible model with encrypted credentials,
+  AI capabilities (send tool, web search, vision, OTP filter), group reply
+  policy, persona scope, system instruction, knowledge endpoints
+  (tool-calling RAG), and live routing metrics. Cards that need the AI are
+  hidden while it is switched off.
 - **Events**: Real-time SSE (Server-Sent Events) live log for WhatsApp events.
 - **Admin & users**: Add users, approve registrations, change roles, scope
   sessions, and revoke sessions/credentials when deleting a user.
@@ -1348,14 +1438,17 @@ baileys-wa-api/
 │   │   ├── connectionManager.ts    # Multi-session manager
 │   │   ├── types.ts                # Type definitions
 │   │   ├── authState/
-│   │   │   ├── index.ts            # Auth state factory
+│   │   │   ├── index.ts            # Auth state factory + session metadata
 │   │   │   ├── file.ts             # File-based auth
-│   │   │   └── redis.ts            # Redis-based auth
+│   │   │   ├── redis.ts            # Redis-based auth
+│   │   │   ├── backendRecord.ts    # Sticky backend marker
+│   │   │   └── metadataSecrets.ts  # Encrypted metadata secrets
 │   │   ├── store/
-│   │   │   └── memoryStore.ts      # In-memory message store
+│   │   │   └── memoryStore.ts      # In-memory store + LID/PN room merge
 │   │   └── helpers/
 │   │       ├── downloadMedia.ts    # Media download utilities
-│   │       └── shouldIgnoreJid.ts  # JID filtering
+│   │       ├── shouldIgnoreJid.ts  # JID filtering
+│   │       └── visionMedia.ts      # Bounded image download for vision
 │   ├── dashboard/
 │   │   ├── api.ts                  # Dashboard backend APIs (stats/events/webhooks)
 │   │   ├── auth.ts                 # Dashboard auth + users/roles/approval
@@ -1373,7 +1466,8 @@ baileys-wa-api/
 │   │       ├── components/
 │   │       │   ├── modal.js
 │   │       │   └── toast.js
-│   │       └── pages/              # overview/sessions/chatrooms/groups/webhooks/events/settings
+│   │       └── pages/              # overview/sessions/chatRooms/ai/api/messaging/
+│   │                               # webhooks/events/settings
 │   ├── lib/
 │   │   ├── logger.ts               # Pino logger
 │   │   ├── redis.ts                # Redis client helpers
@@ -1395,10 +1489,31 @@ baileys-wa-api/
 │   │   ├── chat.ts                 # Chat schemas
 │   │   ├── group.ts                # Group schemas
 │   │   └── session.ts              # Session schemas
-│   ├── services/
+│   ├── services/                   # Response + delivery layer
+│   │   ├── aiAgent.ts              # OpenAI-compatible driver, tool loop
+│   │   ├── aiHistory.ts            # Bounded conversation history
+│   │   ├── aiMetrics.ts            # Per-session routing metrics
+│   │   ├── aiSendTool.ts           # Optional send_whatsapp_message tool
+│   │   ├── webSearch.ts            # Optional web_search (SearXNG)
+│   │   ├── persona.ts              # Response scope + security block
+│   │   ├── groupReply.ts           # Group scope and static gating
+│   │   ├── autoReply.ts            # Static reply policy helpers
+│   │   ├── conversationRouter.ts   # Debounce, handoff, responder chain
+│   │   ├── routing.ts              # Time window evaluation
+│   │   ├── otpFilter.ts            # OTP/verification deny-list
+│   │   ├── promptGuard.ts          # Injection tripwire + scrubbing
+│   │   ├── ragTools.ts             # Knowledge-endpoint tool calling
+│   │   ├── inboundMedia.ts         # Media descriptors for prompts
+│   │   ├── linkPreview.ts          # Bounded, SSRF-checked link context
+│   │   ├── messageSender.ts        # Unified send path
 │   │   ├── broadcastQueue.ts       # Broadcast queue with delays
-│   │   └── mediaCleanup.ts         # Media file cleanup
-│   │   └── webhookLog.ts           # Webhook delivery log storage
+│   │   ├── mediaCleanup.ts         # Media file cleanup
+│   │   ├── apiKeys.ts              # Scoped API keys (file + Redis)
+│   │   ├── apiAuditLog.ts          # Audit log (JSONL, pruned)
+│   │   ├── loginGuard.ts           # Dashboard brute-force lockout
+│   │   ├── webhookQueue.ts         # Retry, backoff, signature
+│   │   ├── webhookLog.ts           # Webhook delivery log storage
+│   │   └── webhookDeadLetter.ts    # Failed delivery retention
 │   └── utils/
 │       ├── asyncSleep.ts           # Async sleep utilities
 │       ├── phone.ts                # Phone/JID formatting
@@ -1480,6 +1595,72 @@ baileys-wa-api/
 | `HUMANIZE_GLOBAL_PACING_MIN_MS`           | `0`                              | Min random gap between ANY outbound actions within a session (ms); `0` = off (legacy) |
 | `HUMANIZE_GLOBAL_PACING_MAX_MS`           | `0`                              | Max random gap between ANY outbound actions within a session (ms); `0` = off (legacy) |
 | `HUMANIZE_DELAY_DISTRIBUTION`             | `uniform`                        | Delay pattern for humanize read/think gaps: `uniform` (random min–max, legacy) or `human` (short gaps + occasional longer pauses) |
+
+### Login, limits and send guards
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTH_MAX_FAILURES` | `10` | Failed dashboard logins before the account/IP is locked |
+| `AUTH_FAILURE_WINDOW_MS` | `900000` | Window in which failures are counted |
+| `AUTH_LOCK_MS` | `900000` | Lock duration after the threshold |
+| `RATE_LIMIT_API_KEY` | `60` | Requests per minute per API key |
+| `SEND_TIMEOUT_MS` | `30000` | Timeout for one outbound send |
+| `MAX_CONCURRENT_SENDS` | `5` | Concurrent sends per process |
+| `MAX_MESSAGES_PER_CHAT` | `50` | Messages kept per chat in memory/snapshot |
+| `MAX_SESSIONS` | `50` | Maximum concurrent WhatsApp sessions |
+| `MAX_SESSIONS_PER_USER` | `3` | Session quota for non-admin users (`0` = unlimited) |
+| `MAX_SESSIONS_PER_MANAGER` | `5` | Session quota for managers (`0` = unlimited) |
+
+### Auth-state backend
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTH_STATE_BACKEND` | `auto` | `auto` / `file` / `redis`; the first successful start records the backend in `data/auth-state-backend.json` and later starts stick to it |
+| `AUTH_STATE_SWITCH_CONFIRM` | — | One-shot confirmation required to move an existing installation to a different backend. Sessions are not migrated; re-link by QR |
+
+### CSP and dashboard assets
+
+| Variable | Default | Description |
+|---|---|---|
+| `CSP_REPORT_ONLY` | `false` | `true` = report only; violations are logged and posted to `/dashboard/csp-report` but not blocked |
+| `CSP_CDN` | `true` | Allow the pinned CDN origins; `false` = same-origin only |
+| `DOCS_ASSETS` | `cdn` | Swagger UI assets: `cdn` (pinned + SRI) or `local` (offline) |
+| `CSP_EXTRA_SCRIPT_SRC` | — | Extra origin per directive (`_STYLE_`, `_IMG_`, `_FONT_`, `_CONNECT_`) |
+
+### Built-in web search (SearXNG)
+
+| Variable | Default | Description |
+|---|---|---|
+| `SEARXNG_URL` | — | Base URL, e.g. `http://127.0.0.1:8080`. Empty disables `web_search` entirely |
+| `SEARXNG_TIMEOUT_MS` | `8000` | Per-query timeout |
+| `SEARXNG_MAX_RESULTS` | `5` | Results kept per query (1–10) |
+| `SEARXNG_LANGUAGE` | — | SearXNG language code; empty uses the instance default |
+| `SEARXNG_SAFESEARCH` | `1` | `0` none, `1` moderate, `2` strict |
+
+### Outbound guards and group sending
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBHOOK_BLOCK_INTERNAL` | `false` | Refuse webhook targets that resolve to private/loopback addresses |
+| `MEDIA_BLOCK_INTERNAL` | `true` | Refuse media downloads from private/loopback addresses |
+| `AI_TOOL_BLOCK_INTERNAL` | `false` | Refuse configured knowledge-endpoint URLs pointing at private hosts |
+| `WEBHOOK_RETRYABLE_STATUSES` | `408,425,429,500,502,503,504` | Statuses that trigger a retry |
+| `IGNORE_GROUP_MESSAGES` | `false` | Global switch that drops every group message before any policy runs |
+| `ALLOW_GROUP_SEND` | `false` | Allow outbound group sends through the API/tools |
+| `ALLOWED_GROUP_JIDS` | — | Comma-separated group allowlist when group sending is on |
+
+### Audit log
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUDIT_LOG_ENABLED` | `true` | Write the REST API audit log |
+| `AUDIT_LOG_BODY` | `false` | Store request bodies (off keeps payloads out of the log) |
+| `AUDIT_LOG_RETENTION_DAYS` | `7` | Entries older than this are pruned |
+| `AUDIT_LOG_MAX_ENTRIES` | `5000` | Hard cap on retained entries |
+
+> `.env.example` is the authoritative, complete list. The tables above cover the
+> settings that change behaviour most often; AI and routing defaults are listed
+> in the AI section.
 
 ### CORS & reverse-proxy notes
 
