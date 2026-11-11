@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-11-11
+
+### Added
+
+- remove internal identifiers deterministically and hide the removal
+
 ## [1.34.7] - 2026-11-11
 
 ### Changed
