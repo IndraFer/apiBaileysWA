@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isStaticReplyAllowed,
   readGroupAddressing,
   resolveGroupReply,
   shouldReplyInGroup,
@@ -207,5 +208,27 @@ describe("group reply policy", () => {
       context,
     );
     expect(decision).toEqual({ reply: true, reason: "mentioned" });
+  });
+});
+
+describe("static replies stay out of groups", () => {
+  test("only direct chats may receive a static reply", () => {
+    expect(isStaticReplyAllowed("628999999999@s.whatsapp.net")).toBe(true);
+    expect(isStaticReplyAllowed("120363000000000000@lid")).toBe(true);
+    expect(isStaticReplyAllowed(group)).toBe(false);
+    expect(isStaticReplyAllowed(null)).toBe(true);
+    expect(isStaticReplyAllowed(undefined)).toBe(true);
+  });
+
+  test("group permission does not make static eligible", () => {
+    // Even with the most permissive AI gate, the group is still closed to static.
+    const permissive = resolveGroupReply({ mode: "all" });
+    const decision = shouldReplyInGroup(
+      { participant: "628999999999@s.whatsapp.net", mentioned: [], quotedParticipant: null },
+      permissive,
+      context,
+    );
+    expect(decision.reply).toBe(true);
+    expect(isStaticReplyAllowed(group)).toBe(false);
   });
 });

@@ -195,5 +195,7 @@ export const aiConfigPatchSchema = z
     routing: routingConfigSchema.optional(),
     ai: aiConfigSchema.optional(),
     groupReply: groupReplySchema.optional(),
+    // Kept accepted here so the AI page can save one atomic response config.
+    autoReply: autoReplySchema.optional(),
   })
   .strict();

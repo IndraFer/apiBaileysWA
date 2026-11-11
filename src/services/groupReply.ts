@@ -197,6 +197,19 @@ export function shouldReplyInGroup(
   return { reply: false, reason: "not_addressed" };
 }
 
+/**
+ * Static replies are never sent to a group.
+ *
+ * Groups have many participants and no shared context, so a fixed "we are
+ * away" message reads as a robot signature and is the classic trigger for a
+ * group report. The AI may still answer a group because its text varies and
+ * responds to the actual question. When the AI fails in a group, silence is
+ * cheaper than a canned message, so the static fallback stays silent too.
+ */
+export function isStaticReplyAllowed(remoteJid: string | null | undefined): boolean {
+  return !String(remoteJid ?? "").endsWith("@g.us");
+}
+
 /** Convenience wrapper: read the addressing facts out of a WAMessage. */
 export function shouldReplyToGroupMessage(
   message: MessageLike | null | undefined,

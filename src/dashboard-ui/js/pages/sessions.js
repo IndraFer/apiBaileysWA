@@ -131,75 +131,17 @@
             <input type="text" id="session-phone" placeholder="+6281234567890" />
           </div>
 
-					<div class="u-section-divider">
-						<h4 class="u-fs-09-mb-1">Auto Reply Configuration</h4>
-						<div class="form-group">
-							<label class="checkbox-label"><input type="checkbox" id="session-autoreply-enabled" /> Enable Auto Reply for this session</label>
-							<small class="text-muted u-block-mt-035">
-								Static reply only. The AI responder is configured on the
-								<a href="#ai">AI &amp; Routing</a> page and takes priority when enabled.
-							</small>
-						</div>
-						<div id="autoreply-settings" class="hidden u-indent-block">
-							<div class="form-group">
-								<label for="session-autoreply-type">Trigger Mode</label>
-								<select id="session-autoreply-type">
-									<option value="always">Always Reply</option>
-									<option value="time_range">Outside Working Hours</option>
-									<option value="on_webhook_fail">On Webhook Failure</option>
-								</select>
-							</div>
-							<div class="form-group">
-								<label for="session-autoreply-role">Role when AI Routing is on</label>
-								<select id="session-autoreply-role">
-									<option value="both">Both — primary when AI is off / out of window, fallback when AI fails</option>
-									<option value="primary">Primary only — static answers first</option>
-									<option value="fallback">Fallback only — static answers only when AI fails</option>
-								</select>
-								<small class="text-muted u-block-mt-035">
-									AI &amp; Routing overrides this whenever it is enabled and eligible.
-								</small>
-							</div>
-							<div id="autoreply-time-group" class="u-time-range">
-								<div class="u-flex-1">
-									<label class="u-fs-08">Start Time</label>
-									<input type="time" id="session-autoreply-start" value="18:00" />
-								</div>
-								<div class="u-flex-1">
-									<label class="u-fs-08">End Time</label>
-									<input type="time" id="session-autoreply-end" value="08:00" />
-								</div>
-							</div>
-							<div class="form-group">
-								<label for="session-autoreply-msg">Auto Reply Message</label>
-								<textarea id="session-autoreply-msg" rows="3" placeholder="Hello, we&#39;re currently away.&#10;We&#39;ll reply to your message soon."></textarea>
-							</div>
-						</div>
-					</div>
-
           <button type="submit" class="btn btn-primary btn-full">Create Session</button>
         </form>
       `,
       );
 
       const pairingToggle = document.getElementById("session-pairing");
-      const autoReplyToggle = document.getElementById("session-autoreply-enabled");
-      const autoReplyType = document.getElementById("session-autoreply-type");
 
       pairingToggle.addEventListener("change", (e) => {
         document
           .getElementById("pairing-phone-group")
           .classList.toggle("hidden", !e.target.checked);
-      });
-
-      autoReplyToggle.addEventListener("change", (e) => {
-        document.getElementById("autoreply-settings").classList.toggle("hidden", !e.target.checked);
-      });
-
-      autoReplyType.addEventListener("change", (e) => {
-        document
-          .getElementById("autoreply-time-group")
-          ?.classList.toggle("is-open", e.target.value === "time_range");
       });
 
       document.getElementById("new-session-form").addEventListener("submit", async (e) => {
@@ -213,17 +155,6 @@
           freshAuth: document.getElementById("session-fresh-auth").checked,
           phoneNumber: document.getElementById("session-phone").value.trim(),
         };
-
-        if (autoReplyToggle.checked) {
-          body.autoReply = {
-            enabled: true,
-            type: autoReplyType.value,
-            role: document.getElementById("session-autoreply-role").value,
-            message: document.getElementById("session-autoreply-msg").value.trim(),
-            timeStart: document.getElementById("session-autoreply-start").value,
-            timeEnd: document.getElementById("session-autoreply-end").value,
-          };
-        }
 
         const result = await API.post(`/sessions/${sessionId}`, body);
         if (result.success) {
@@ -382,7 +313,6 @@
       const session = result.data?.find((s) => (s.sessionId || s.id) === sessionId);
       if (!session) return Toast.error("Session data not found");
 
-      const ar = session.autoReply || {};
       const secretHint = session.hasWebhookSecret
         ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep`
         : "Optional secret key";
@@ -403,97 +333,18 @@
 						</div>
 					</div>
 
-					<div class="u-section-divider">
-						<h4 class="u-fs-09-mb-1">Auto Reply Configuration</h4>
-						<div class="form-group">
-							<label class="checkbox-label"><input type="checkbox" id="update-autoreply-enabled" ${ar.enabled ? "checked" : ""} /> Enable Auto Reply</label>
-							<small class="text-muted u-block-mt-035">
-								Static fallback. The AI responder takes priority when enabled on the
-								<a href="#ai">AI &amp; Routing</a> page.
-							</small>
-						</div>
-						<div id="update-autoreply-settings" class="${ar.enabled ? "" : "hidden"} u-indent-block">
-							<div class="form-group">
-								<label for="update-autoreply-type">Trigger Mode</label>
-								<select id="update-autoreply-type">
-									<option value="always" ${ar.type === "always" ? "selected" : ""}>Always Reply</option>
-									<option value="time_range" ${ar.type === "time_range" ? "selected" : ""}>Outside Working Hours</option>
-									<option value="on_webhook_fail" ${ar.type === "on_webhook_fail" ? "selected" : ""}>On Webhook Failure</option>
-								</select>
-							</div>
-							<div class="form-group">
-								<label for="update-autoreply-role">Role when AI Routing is on</label>
-								<select id="update-autoreply-role">
-									<option value="both" ${(ar.role || "both") === "both" ? "selected" : ""}>Both — primary when AI is off / out of window, fallback when AI fails</option>
-									<option value="primary" ${ar.role === "primary" ? "selected" : ""}>Primary only — static answers first</option>
-									<option value="fallback" ${ar.role === "fallback" ? "selected" : ""}>Fallback only — static answers only when AI fails</option>
-								</select>
-								<small class="text-muted u-block-mt-035">
-									AI &amp; Routing overrides this whenever it is enabled and eligible.
-								</small>
-							</div>
-							<div id="update-autoreply-time-group" class="u-time-range ${ar.type === "time_range" ? "is-open" : ""}">
-								<div class="u-flex-1">
-									<label class="u-fs-08">Start Time</label>
-									<input type="time" id="update-autoreply-start" value="${escapeHtml(ar.timeStart || "18:00")}" />
-								</div>
-								<div class="u-flex-1">
-									<label class="u-fs-08">End Time</label>
-									<input type="time" id="update-autoreply-end" value="${escapeHtml(ar.timeEnd || "08:00")}" />
-								</div>
-							</div>
-							<div class="form-group">
-								<label for="update-autoreply-msg">Auto Reply Message</label>
-								<textarea id="update-autoreply-msg" rows="3" placeholder="Hello, we&#39;re currently away.&#10;We&#39;ll reply to your message soon.">${ar.message || ""}</textarea>
-							</div>
-						</div>
-					</div>
-
           <button type="submit" class="btn btn-primary btn-full">Save Settings</button>
         </form>
       `,
       );
 
       window.initPasswordToggles?.(document.getElementById("modal-body"));
-      const autoReplyToggle = document.getElementById("update-autoreply-enabled");
-      const autoReplyType = document.getElementById("update-autoreply-type");
-
-      autoReplyToggle.addEventListener("change", (e) => {
-        document
-          .getElementById("update-autoreply-settings")
-          .classList.toggle("hidden", !e.target.checked);
-      });
-
-      autoReplyType.addEventListener("change", (e) => {
-        document
-          .getElementById("update-autoreply-time-group")
-          ?.classList.toggle("is-open", e.target.value === "time_range");
-      });
-
       document.getElementById("update-session-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const body = {
           webhookUrl: document.getElementById("update-webhook").value.trim(),
           webhookSecret: document.getElementById("update-secret").value.trim(),
         };
-
-        if (autoReplyToggle.checked) {
-          body.autoReply = {
-            enabled: true,
-            type: autoReplyType.value,
-            role: document.getElementById("update-autoreply-role").value,
-            message: document.getElementById("update-autoreply-msg").value.trim(),
-            timeStart: document.getElementById("update-autoreply-start").value,
-            timeEnd: document.getElementById("update-autoreply-end").value,
-          };
-        } else {
-          body.autoReply = {
-            enabled: false,
-            message: "",
-            type: "always",
-            role: document.getElementById("update-autoreply-role").value,
-          };
-        }
 
         const result = await API.patch(`/sessions/${sessionId}/settings`, body);
         if (result.success) {

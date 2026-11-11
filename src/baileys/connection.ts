@@ -45,7 +45,11 @@ import {
 } from "@/services/aiSendTool";
 import { resolveAutoReplyConfig } from "@/services/autoReply";
 import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
-import { resolveGroupReply, shouldReplyToGroupMessage } from "@/services/groupReply";
+import {
+  isStaticReplyAllowed,
+  resolveGroupReply,
+  shouldReplyToGroupMessage,
+} from "@/services/groupReply";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
 import { sendUnifiedMessage } from "@/services/messageSender";
@@ -282,6 +286,16 @@ export class BaileysConnection {
         await this.sendMessage(conversationId, { text }, { quoted: lastMessage });
       },
       onFailure: async (conversationId, lastMessage) => {
+        // Groups are AI-only. A canned message after an AI failure is still a
+        // robot signature, so stay silent and let a human answer manually.
+        if (!isStaticReplyAllowed(conversationId)) {
+          logger.debug(
+            "[%s] Static fallback suppressed in group %s",
+            this.sessionId,
+            conversationId,
+          );
+          return;
+        }
         const autoReply = resolveAutoReplyConfig(this.options.autoReply);
         const role = autoReply.role ?? "both";
         // Static answers a failed AI call only when it plays the fallback role.
@@ -798,6 +812,13 @@ export class BaileysConnection {
     // "fallback" means static never competes as the primary responder.
     if (autoRole !== "primary" && autoRole !== "both") return;
 
+    // Groups are answered by the AI only; static never speaks there.
+    const staticMessages = messages.filter((m) => isStaticReplyAllowed(m.key.remoteJid));
+    if (staticMessages.length === 0) {
+      logger.debug("[%s] Static auto-reply skipped: group messages are AI-only", this.sessionId);
+      return;
+    }
+
     let shouldReply = false;
     if (autoReply.type === "always") {
       shouldReply = true;
@@ -820,7 +841,7 @@ export class BaileysConnection {
     }
 
     if (shouldReply) {
-      for (const m of messages) {
+      for (const m of staticMessages) {
         try {
           const remoteJid = m.key.remoteJid;
           if (!remoteJid) continue;

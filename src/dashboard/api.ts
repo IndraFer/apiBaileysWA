@@ -45,7 +45,7 @@ import {
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
-import { normalizeAutoReplyConfig } from "@/services/autoReply";
+import { normalizeAutoReplyConfig, resolveAutoReplyConfig } from "@/services/autoReply";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -564,6 +564,7 @@ dashboardApi.get("/sessions/:sessionId/ai-config", (c) => {
           mode: options.groupReply?.mode ?? "mention",
           senders: options.groupReply?.senders ?? [],
         },
+        autoReply: resolveAutoReplyConfig(options.autoReply),
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,
@@ -665,6 +666,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       ...(current.groupReply ?? {}),
       ...(parsed.data.groupReply ?? {}),
     };
+    const autoReply = parsed.data.autoReply
+      ? normalizeAutoReplyConfig({ ...(current.autoReply ?? {}), ...parsed.data.autoReply })
+      : current.autoReply;
     const {
       credentialsJson,
       apiKey,
@@ -721,19 +725,20 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       }
     }
 
-    session.updateOptions({ routing, ai, groupReply });
+    session.updateOptions({ routing, ai, groupReply, autoReply });
     await updateSessionMetadata(sessionId, {
       ...session.getSessionMetadata(),
       routing,
       ai,
       groupReply,
+      autoReply,
     });
 
     // Never log raw credentials — redactCredentials strips them by key name.
     logger.info(
       "[Dashboard] AI config updated for %s: %s",
       sessionId,
-      JSON.stringify(redactCredentials({ routing, ai, groupReply })),
+      JSON.stringify(redactCredentials({ routing, ai, groupReply, autoReply })),
     );
 
     const saved = readStoredCredentials(ai.credentials);
@@ -743,6 +748,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       data: {
         routing,
         groupReply,
+        autoReply: resolveAutoReplyConfig(autoReply),
         ai: {
           enabled: ai.enabled ?? false,
           mode: ai.mode ?? config.ai.mode,

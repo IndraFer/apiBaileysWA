@@ -262,6 +262,54 @@
         </div>
 
         <div class="card">
+          <div class="card-header"><h3>Static Auto Reply</h3></div>
+          <label class="toggle-row">
+            <input type="checkbox" id="ai-autoreply-enabled" class="toggle-input" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-copy">
+              <strong>Enable Static Auto Reply</strong>
+              <small>A fixed message used when the AI is off, out of its window, or fails. Direct chats only.</small>
+            </span>
+          </label>
+          <div id="ai-autoreply-settings" class="hidden">
+            <div class="form-row cols-2">
+              <div class="form-group">
+                <label for="ai-autoreply-type">Trigger Mode</label>
+                <select id="ai-autoreply-type" class="input">
+                  <option value="always">Always Reply</option>
+                  <option value="time_range">Outside Working Hours</option>
+                  <option value="on_webhook_fail">On Webhook Failure</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ai-autoreply-role">Role When AI Routing Is On</label>
+                <select id="ai-autoreply-role" class="input">
+                  <option value="both">Both</option>
+                  <option value="primary">Primary Only</option>
+                  <option value="fallback">Fallback Only</option>
+                </select>
+              </div>
+            </div>
+            <div id="ai-autoreply-time-group" class="form-row cols-2 hidden">
+              <div class="form-group">
+                <label for="ai-autoreply-start">Start Time</label>
+                <input id="ai-autoreply-start" class="input" type="time" />
+              </div>
+              <div class="form-group">
+                <label for="ai-autoreply-end">End Time</label>
+                <input id="ai-autoreply-end" class="input" type="time" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="ai-autoreply-msg">Auto Reply Message</label>
+              <textarea id="ai-autoreply-msg" class="input" rows="3"
+                placeholder="Hello, we&#39;re currently away.&#10;We&#39;ll reply to your message soon."></textarea>
+              <small class="text-muted">Blank uses the server default. Groups are answered by the AI only; this message is never sent to a group.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-header"><h3>Model &amp; API Key</h3></div>
           <div class="form-row cols-2">
             <div class="form-group">
@@ -424,7 +472,7 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Group Reply</h3></div>
+          <div class="card-header"><h3>AI Group Reply</h3></div>
           <div class="form-group">
             <label for="group-reply-mode">Reply Policy</label>
             <select id="group-reply-mode" class="input">
@@ -432,7 +480,7 @@
               <option value="senders">Allowlisted Senders Only</option>
               <option value="all">All Messages</option>
             </select>
-            <small class="text-muted">Applies to AI and static replies in groups. Messages are still stored and webhooks still fire; this only controls automatic answers. Direct chats are not affected.</small>
+            <small class="text-muted">Controls when the AI may answer in groups. Static auto reply is never sent to a group. Messages are still stored and webhooks still fire. Direct chats are not affected.</small>
           </div>
           <div id="group-reply-senders-wrap" class="hidden">
             <div class="form-group">
@@ -541,6 +589,12 @@
       document.getElementById("otp-detection-mode")?.addEventListener("change", () => {
         this.syncOtpFilterUi();
       });
+      document.getElementById("ai-autoreply-enabled")?.addEventListener("change", () => {
+        this.syncAutoReplyUi();
+      });
+      document.getElementById("ai-autoreply-type")?.addEventListener("change", () => {
+        this.syncAutoReplyUi();
+      });
       document.getElementById("group-reply-mode")?.addEventListener("change", () => {
         this.syncGroupReplyUi();
       });
@@ -588,6 +642,15 @@
       set("ai-endpoints", JSON.stringify(ai.ragEndpoints || [], null, 2));
 
       const sendMessage = ai.sendMessage || {};
+      const autoReply = data.autoReply || {};
+      const autoReplyEnabled = document.getElementById("ai-autoreply-enabled");
+      if (autoReplyEnabled) autoReplyEnabled.checked = Boolean(autoReply.enabled);
+      set("ai-autoreply-type", autoReply.type || "always");
+      set("ai-autoreply-role", autoReply.role || "both");
+      set("ai-autoreply-start", autoReply.timeStart || "18:00");
+      set("ai-autoreply-end", autoReply.timeEnd || "08:00");
+      set("ai-autoreply-msg", autoReply.message || "");
+      this.syncAutoReplyUi();
       const persona = ai.persona || {};
       set("ai-persona-scope", persona.scope === "strict" ? "strict" : "flexible");
       const webSearch = ai.webSearch || {};
@@ -684,6 +747,16 @@
         ?.classList.toggle("hidden", !enabled || mode !== "smart");
     },
 
+    /** Static auto-reply fields follow the toggle and the trigger mode. */
+    syncAutoReplyUi() {
+      const enabled = Boolean(document.getElementById("ai-autoreply-enabled")?.checked);
+      const type = document.getElementById("ai-autoreply-type")?.value || "always";
+      document.getElementById("ai-autoreply-settings")?.classList.toggle("hidden", !enabled);
+      document
+        .getElementById("ai-autoreply-time-group")
+        ?.classList.toggle("hidden", !enabled || type !== "time_range");
+    },
+
     /** Show the sender list only when the policy needs it. */
     syncGroupReplyUi() {
       const mode = document.getElementById("group-reply-mode")?.value || "mention";
@@ -699,7 +772,7 @@
       const ai = state.config?.ai ?? {};
       const routing = state.config?.routing ?? {};
       const session = state.sessions.find((item) => item.sessionId === state.sessionId);
-      const autoReply = session?.autoReply ?? {};
+      const autoReply = state.config?.autoReply ?? session?.autoReply ?? {};
       const mode = ai.mode ?? "window";
 
       let aiText;
@@ -855,6 +928,14 @@
           },
           ...(apiKey ? { apiKey } : {}),
           ...(credentialsJson ? { credentialsJson } : {}),
+        },
+        autoReply: {
+          enabled: Boolean(document.getElementById("ai-autoreply-enabled")?.checked),
+          type: value("ai-autoreply-type") || "always",
+          role: value("ai-autoreply-role") || "both",
+          message: value("ai-autoreply-msg"),
+          timeStart: value("ai-autoreply-start") || "18:00",
+          timeEnd: value("ai-autoreply-end") || "08:00",
         },
         groupReply: {
           mode: value("group-reply-mode") || "mention",
