@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import config from "@/config";
 import {
+  canonicalizeAutoReply,
   fallbackStaticAllowed,
   normalizeAutoReplyConfig,
   policyToLegacy,
@@ -75,6 +76,37 @@ describe("auto reply policy", () => {
     expect(fallbackStaticAllowed("fallback", false)).toBe(true);
     expect(fallbackStaticAllowed("window", true)).toBe(true);
     expect(fallbackStaticAllowed("window", false)).toBe(false);
+  });
+
+  test("legacy configs are canonicalised so every session stores one shape", () => {
+    const base = { enabled: true, message: "hi", type: "always" as const };
+
+    // role "primary" was folded into "both".
+    expect(canonicalizeAutoReply({ ...base, role: "primary" })).toEqual({
+      ...base,
+      role: "both",
+      policy: "both",
+    });
+    expect(canonicalizeAutoReply({ ...base, role: "primary", policy: "primary" })).toEqual({
+      ...base,
+      role: "both",
+      policy: "both",
+    });
+
+    // role/type that disagree with the stored policy are corrected.
+    expect(canonicalizeAutoReply({ ...base, policy: "window" })).toEqual({
+      ...base,
+      role: "both",
+      type: "time_range",
+      policy: "window",
+    });
+
+    // Already canonical: no write.
+    expect(canonicalizeAutoReply({ ...base, role: "both", policy: "both" })).toBeNull();
+    expect(
+      canonicalizeAutoReply({ ...base, role: "both", type: "time_range", policy: "window" }),
+    ).toBeNull();
+    expect(canonicalizeAutoReply(undefined)).toBeNull();
   });
 
   test("policy writes consistent legacy fields", () => {

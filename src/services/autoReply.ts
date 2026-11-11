@@ -98,3 +98,20 @@ export function fallbackStaticAllowed(policy: AutoReplyPolicy, inWindow: boolean
   if (policy === "window") return inWindow;
   return true;
 }
+
+/**
+ * Rewrite a stored config to the canonical trio (policy + matching role/type).
+ *
+ * Older configs can carry `role: "primary"` or an explicit `policy: "primary"`,
+ * and some carry role/type that no longer agree with the policy. Returns null
+ * when nothing needs to change, so callers can skip a write.
+ */
+export function canonicalizeAutoReply(config?: AutoReplyConfig): AutoReplyConfig | null {
+  if (!config) return null;
+  const policy = resolveAutoReplyPolicy(config);
+  const legacy = policyToLegacy(policy);
+  if (config.policy === policy && config.role === legacy.role && config.type === legacy.type) {
+    return null;
+  }
+  return { ...config, policy, ...legacy };
+}

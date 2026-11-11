@@ -46,10 +46,9 @@ import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
 import {
+  canonicalizeAutoReply,
   normalizeAutoReplyConfig,
-  policyToLegacy,
   resolveAutoReplyConfig,
-  resolveAutoReplyPolicy,
 } from "@/services/autoReply";
 import {
   clearDeadLetters,
@@ -570,9 +569,12 @@ dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
       ai = { ...ai, enabled: false, mode: "window" };
       migrated = true;
     }
-    if (autoReply && !autoReply.policy) {
-      const policy = resolveAutoReplyPolicy(autoReply);
-      autoReply = { ...autoReply, policy, ...policyToLegacy(policy) };
+    // Same treatment for the static reply: a legacy role or an explicit
+    // "primary" policy is written back as the canonical policy plus the
+    // matching role/type, so every session stores one shape.
+    const canonical = canonicalizeAutoReply(autoReply);
+    if (canonical) {
+      autoReply = canonical;
       migrated = true;
     }
     if (migrated) {
