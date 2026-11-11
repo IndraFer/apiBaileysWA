@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.34.7] - 2026-11-11
+
+### Changed
+
+- stop masking numbers and enforce identifiers by prompt rule
+
 ## [1.34.6] - 2026-11-11
 
 ### Fixed
