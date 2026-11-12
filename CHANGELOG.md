@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.6] - 2026-11-12
+
+### Fixed
+
+- no sender name on direct bubbles, matching WhatsApp
+
 ## [1.44.5] - 2026-11-12
 
 ### Fixed
