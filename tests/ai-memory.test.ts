@@ -298,6 +298,8 @@ describe("retrieval", () => {
     const context = await retrieveRelevant(sessionId, scope, "forklift bekasi masih ada?");
     expect(context).toContain("forklift");
     expect(context).not.toContain("terima kasih");
+    // Each hit carries a readable local timestamp, not just a date.
+    expect(context).toMatch(/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]/);
   });
 
   test("returns an empty block when nothing matches", async () => {

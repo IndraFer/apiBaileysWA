@@ -353,7 +353,12 @@ on.
 - **Memory Retrieval**: a toggle in `AI Capabilities`, before Allow Web Search.
   It pulls older messages matching the current question into a
   "possibly outdated" block. Local keyword scan, no embeddings, bounded by a
-  short timeout so a slow disk can never delay a reply.
+  short timeout (`AI_MEMORY_RETRIEVE_TIMEOUT_MS`, default 200 ms) so a slow disk
+  can never delay a reply. Each hit carries its local timestamp
+  (`[2026-11-10 14:32]`) so an old line is obviously old.
+- **Viewer**: the chat ⋯ menu has **View Memory**, which shows the per-chat
+  summary, facts, pinned notes and counters. Group chats list the digest plus
+  every member scope, so a leaking fact would be visible immediately.
 
 **Deletion follows the chat.** Clearing a chat, deleting it, exiting and
 deleting a group, deleting a session, or using **End Chat** removes the matching

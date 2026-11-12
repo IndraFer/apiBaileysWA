@@ -355,14 +355,23 @@ export async function retrieveRelevant(
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const snippet = entry.message.text.trim().slice(0, 200);
-    const day = new Date(entry.message.ts).toISOString().slice(0, 10);
-    const line = `- ${day}: "${snippet}"`;
+    // Full local timestamp, so a months-old line is obviously old when read.
+    const stamp = formatStamp(entry.message.ts);
+    const line = `- [${stamp}] "${snippet}"`;
     if (used + line.length + 1 > config.aiMemory.retrieveMaxChars) break;
     used += line.length + 1;
     lines.push(line);
   }
 
   return lines.join("\n");
+}
+
+/** Local `YYYY-MM-DD HH:mm`, the form a human reads at a glance. */
+function formatStamp(ts: number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return "unknown time";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
@@ -674,6 +683,70 @@ export async function forgetSession(sessionId: string): Promise<void> {
   await rm(sessionDir(sessionId), { recursive: true, force: true });
 }
 
+/** Participant scopes that exist on disk for one group. */
+async function participantScopesOnDisk(
+  sessionId: string,
+  conversationId: string,
+): Promise<MemoryScope[]> {
+  const prefix = `gp_${shortHash(conversationId)}_`;
+  let names: string[] = [];
+  try {
+    names = await readdir(sessionDir(sessionId));
+  } catch {
+    return [];
+  }
+
+  const scopes: MemoryScope[] = [];
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
+    try {
+      const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
+      const parsed = JSON.parse(raw) as ConversationMemory;
+      if (parsed?.scope?.participantId) scopes.push(parsed.scope);
+    } catch {
+      // Broken file: skip rather than fail the whole view.
+    }
+  }
+  return scopes;
+}
+
+/** Structured memory for the dashboard viewer (no raw transcript). */
+export async function inspectConversation(
+  sessionId: string,
+  conversationId: string,
+  isGroup: boolean,
+): Promise<
+  Array<{
+    scope: MemoryScope;
+    summary: string;
+    facts: Array<{ key: string; value: string }>;
+    pinned: string[];
+    updatedAt: number;
+    messages: number;
+    summarizedMessages: number;
+  }>
+> {
+  const scopes: MemoryScope[] = isGroup
+    ? [{ kind: "group-digest", conversationId }]
+    : [{ kind: "dm", conversationId }];
+  if (isGroup) scopes.push(...(await participantScopesOnDisk(sessionId, conversationId)));
+
+  const result = [];
+  for (const scope of scopes) {
+    const memory = await loadMemory(sessionId, scope);
+    result.push({
+      scope,
+      summary: memory.summary,
+      facts: Object.entries(memory.facts).map(([key, fact]) => ({ key, value: fact.value })),
+      pinned: memory.pinned.map((entry) => entry.text),
+      updatedAt: memory.updatedAt,
+      messages: (await readLog(sessionId, scope, config.aiMemory.retrieveScanLimit)).length,
+      summarizedMessages: memory.stats.summarizedMessages,
+    });
+  }
+  return result;
+}
+
 /** Bundle one conversation for download (dashboard only). */
 export async function exportConversation(
   sessionId: string,
@@ -690,26 +763,9 @@ export async function exportConversation(
     ? [{ kind: "group-digest", conversationId }]
     : [{ kind: "dm", conversationId }];
 
-  // Every participant scope that has a file on disk.
   if (isGroup) {
-    const prefix = `gp_${shortHash(conversationId)}_`;
-    let names: string[] = [];
-    try {
-      names = await readdir(sessionDir(sessionId));
-    } catch {
-      names = [];
-    }
-    for (const name of new Set(names.filter((n) => n.startsWith(prefix) && n.endsWith(".json")))) {
-      const key = name.slice(0, -".json".length);
-      // The hash alone identifies the file; read the JSON to recover the scope.
-      try {
-        const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
-        const parsed = JSON.parse(raw) as ConversationMemory;
-        if (parsed?.scope?.participantId) scopes.push(parsed.scope);
-      } catch {
-        void key;
-      }
-    }
+    // Every participant scope that has a file on disk.
+    scopes.push(...(await participantScopesOnDisk(sessionId, conversationId)));
   }
 
   const entries = [];

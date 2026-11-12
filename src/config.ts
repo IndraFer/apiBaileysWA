@@ -422,7 +422,7 @@ const config = {
     retrieveTopK: clampNumber(AI_MEMORY_RETRIEVE_TOP_K, 0, 10, 3),
     retrieveMaxChars: clampNumber(AI_MEMORY_RETRIEVE_MAX_CHARS, 0, 4000, 800),
     retrieveScanLimit: clampNumber(AI_MEMORY_RETRIEVE_SCAN_LIMIT, 100, 20000, 2000),
-    retrieveTimeoutMs: clampNumber(AI_MEMORY_RETRIEVE_TIMEOUT_MS, 10, 2000, 80),
+    retrieveTimeoutMs: clampNumber(AI_MEMORY_RETRIEVE_TIMEOUT_MS, 10, 2000, 200),
     participantSummaryEvery: clampNumber(AI_MEMORY_PARTICIPANT_SUMMARY_EVERY, 5, 200, 12),
     digestIdleMs: clampNumber(AI_MEMORY_GROUP_DIGEST_IDLE_MS, 60_000, 86_400_000, 900_000),
     digestMinMessages: clampNumber(AI_MEMORY_GROUP_DIGEST_MIN_MESSAGES, 5, 1000, 50),

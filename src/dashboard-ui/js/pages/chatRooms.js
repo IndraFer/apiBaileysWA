@@ -327,6 +327,11 @@
       },
       { separator: true },
       {
+        action: "memory",
+        label: "View Memory",
+        icon: '<path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>',
+      },
+      {
         action: "export",
         label: "Export Memory",
         icon: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -426,6 +431,11 @@
 
     if (action === "read") {
       await page.markRoomAsRead(jid, true, true);
+      return;
+    }
+
+    if (action === "memory") {
+      await page.showMemory(jid);
       return;
     }
 
@@ -1493,6 +1503,72 @@
           Toast.success("Group created");
           await this.loadChatList(true, true);
         });
+    },
+
+    /** Read-only view of what the assistant remembers for this chat. */
+    async showMemory(jid) {
+      Modal.show(
+        "Assistant Memory",
+        '<div id="memory-modal-body" class="text-sm text-muted">Loading memory...</div>',
+      );
+      const body = document.getElementById("memory-modal-body");
+      if (!body) return;
+
+      const result = await API.get(
+        `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/memory`,
+      );
+      if (!result.success) {
+        UI.setHtml(
+          body,
+          `<div class="text-sm text-danger">${escapeHtml(result.message || "Failed to load memory")}</div>`,
+        );
+        return;
+      }
+
+      const scopes = result.data?.scopes || [];
+      const populated = scopes.filter((entry) => entry.summary || entry.facts.length > 0);
+      if (!populated.length) {
+        UI.setHtml(body, '<div class="text-sm text-muted">Nothing stored yet for this chat.</div>');
+        return;
+      }
+
+      UI.setHtml(
+        body,
+        populated
+          .map((entry) => {
+            const who =
+              entry.scope.kind === "dm"
+                ? "Direct chat"
+                : entry.scope.kind === "group-digest"
+                  ? "Group digest"
+                  : `Member ${jidPhoneOnly(String(entry.scope.participantId || ""))}`;
+            const facts = entry.facts.length
+              ? `<ul class="memory-facts">${entry.facts
+                  .map(
+                    (fact) =>
+                      `<li><span class="memory-key">${escapeHtml(fact.key)}</span> ${escapeHtml(fact.value)}</li>`,
+                  )
+                  .join("")}</ul>`
+              : '<div class="text-muted text-xs">No facts stored.</div>';
+            const pinned = entry.pinned.length
+              ? `<div class="memory-pinned">Pinned: ${entry.pinned.map((p) => escapeHtml(p)).join(" · ")}</div>`
+              : "";
+            return `<div class="memory-block">
+              <div class="memory-block-head">
+                <strong>${escapeHtml(who)}</strong>
+                <span class="text-muted text-xs">${entry.messages} messages · ${entry.summarizedMessages} summarised</span>
+              </div>
+              ${
+                entry.summary
+                  ? `<div class="memory-summary">${escapeHtml(entry.summary)}</div>`
+                  : '<div class="text-muted text-xs">No summary yet.</div>'
+              }
+              ${facts}
+              ${pinned}
+            </div>`;
+          })
+          .join(""),
+      );
     },
 
     async showGroupMembers(jid) {

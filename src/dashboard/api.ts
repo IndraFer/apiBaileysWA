@@ -42,7 +42,12 @@ import {
   readStoredCredentials,
   serializeCredentials,
 } from "@/services/aiAgent";
-import { exportConversation, forgetConversation, forgetSession } from "@/services/aiMemory";
+import {
+  exportConversation,
+  forgetConversation,
+  forgetSession,
+  inspectConversation,
+} from "@/services/aiMemory";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
@@ -1524,6 +1529,26 @@ dashboardApi.post("/sessions/:sessionId/chats/end", async (c) => {
   try {
     await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
     return c.json({ success: true, message: "Chat ended; memory cleared", data: { jid } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/sessions/:sessionId/chats/:jid/memory
+ * Structured memory for the dashboard viewer: summary, facts and counters.
+ */
+dashboardApi.get("/sessions/:sessionId/chats/:jid/memory", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const scopes = await inspectConversation(sessionId, jid, jid.endsWith("@g.us"));
+    return c.json({ success: true, data: { scopes } });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

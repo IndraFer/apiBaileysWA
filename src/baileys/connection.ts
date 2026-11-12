@@ -845,7 +845,11 @@ export class BaileysConnection {
     await this.recordGroupDigest(data.messages);
     await this.recordMemory(messages);
 
-    if (this.enqueueForAi(messages, routing)) return;
+    if (this.enqueueForAi(messages, routing)) {
+      // The model call can take seconds; show activity instead of silence.
+      void this.signalAiWorking(messages[messages.length - 1]);
+      return;
+    }
 
     if (!autoReply.enabled) return;
 
@@ -1280,6 +1284,27 @@ export class BaileysConnection {
   private stopDigestSweep(): void {
     if (this.digestTimer) clearInterval(this.digestTimer);
     this.digestTimer = null;
+  }
+
+  /**
+   * Show "composing" while the reply is being generated. Read receipts are
+   * already handled earlier when auto-read is enabled; this only removes the
+   * silent gap between receiving a message and sending the answer.
+   */
+  private async signalAiWorking(message: WAMessage | undefined): Promise<void> {
+    const jid = message?.key.remoteJid;
+    if (!jid) return;
+    if (!(this.options.simulateTyping ?? config.simulation.typingBeforeSend)) return;
+
+    try {
+      if (this.options.autoMarkOnline ?? config.simulation.autoMarkOnline) {
+        await this.sendPresenceUpdate("available", jid);
+      }
+      await this.safeSocket().presenceSubscribe(jid);
+      await this.sendPresenceUpdate("composing", jid);
+    } catch (error) {
+      logger.debug("[%s] Typing signal skipped: %s", this.sessionId, errorToString(error));
+    }
   }
 
   /** True when the group digest is enabled for this session. */
