@@ -1930,15 +1930,6 @@ details[open] > summary::before {
   text-decoration: underline;
 }
 
-/* Direct chats: the name is a label, not a shortcut. */
-.msg-sender-name {
-  display: block;
-  margin: 0 0 0.15rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
 .msg-quote {
   display: flex;
   flex-direction: column;

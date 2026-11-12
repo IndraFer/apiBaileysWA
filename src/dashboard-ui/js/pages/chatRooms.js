@@ -1918,19 +1918,16 @@
               }
             }
 
-            const sender = !fromMe ? bubbleSenderName(msg, jid) : null;
-            // Only a group bubble is a shortcut to that member's direct chat. In
-            // a DM the message is already in that person's conversation, so the
-            // label is plain text even if the room JID and sender JID differ
-            // (a legacy LID room against a PN canonical room, for example).
+            // Direct chats show no sender name, exactly like WhatsApp: the room
+            // is the person. A group bubble names its author, and that name is a
+            // shortcut to that member's own conversation.
             const groupRoom = isGroupJid(jid) || selectedMode === "groups";
+            const sender = groupRoom && !fromMe ? bubbleSenderName(msg, jid) : null;
             const senderIsShortcut =
-              groupRoom && Boolean(sender?.jid) && normalizeJid(sender.jid) !== normalizeJid(jid);
+              Boolean(sender?.jid) && normalizeJid(sender.jid) !== normalizeJid(jid);
             const senderLine =
-              sender && sender.label
-                ? senderIsShortcut
-                  ? `<button type="button" class="msg-sender" data-sender-jid="${escapeHtml(sender.jid)}" title="Open this contact">${escapeHtml(sender.label)}</button>`
-                  : `<span class="msg-sender-name">${escapeHtml(sender.label)}</span>`
+              sender?.label && senderIsShortcut
+                ? `<button type="button" class="msg-sender" data-sender-jid="${escapeHtml(sender.jid)}" title="Open this contact">${escapeHtml(sender.label)}</button>`
                 : "";
 
             // Quoted reply: show who was answered and a short excerpt.
