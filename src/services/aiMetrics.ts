@@ -9,6 +9,7 @@
  * Hourly buckets use the routing timezone, so "AI vs human per hour" matches the
  * business window rather than the server clock.
  */
+import { recordDailyDecision, recordDailyUsage } from "@/services/metricsHistory";
 import { timeInZone } from "@/services/routing";
 
 export type AiRoute = "ai" | "static" | "human" | "paused" | "failed" | "blocked" | "muted";
@@ -141,6 +142,13 @@ export function recordDecision(input: Omit<AiDecision, "at"> & { at?: number }):
   const perHourly = sessionHourly(decision.sessionId);
   const hour = currentHour();
 
+  // Daily history mirrors the routing outcome, not the raw conversation.
+  if (decision.route === "ai") recordDailyDecision(decision.sessionId, "ai");
+  else if (decision.route === "static") recordDailyDecision(decision.sessionId, "static");
+  else if (decision.route === "human" || decision.route === "paused") {
+    recordDailyDecision(decision.sessionId, "skipped");
+  } else if (decision.route === "failed") recordDailyDecision(decision.sessionId, "failed");
+
   switch (decision.route) {
     case "ai":
       counters.aiReplies += 1;
@@ -200,6 +208,7 @@ export function recordUsage(
   latency.maxMs = Math.max(latency.maxMs, elapsed);
 
   if (sessionId) {
+    recordDailyUsage(sessionId, { tokensIn: prompt, tokensOut: completion, latencyMs: elapsed });
     const perSession = sessionCounters(sessionId);
     perSession.tokensIn += prompt;
     perSession.tokensOut += completion;

@@ -171,6 +171,9 @@ const {
   AI_MEMORY_RAW_RETENTION_DAYS,
   AI_MEMORY_RAW_MAX_BYTES,
   AI_MEMORY_RAW_MAX_MESSAGES,
+  // Daily metric history for the overview dashboard (file-based).
+  METRICS_HISTORY_ENABLED,
+  METRICS_HISTORY_RETENTION_DAYS,
 } = process.env;
 
 /**
@@ -403,6 +406,15 @@ const config = {
     maxResults: Math.min(Math.max(SEARXNG_MAX_RESULTS ? Number(SEARXNG_MAX_RESULTS) : 5, 1), 10),
     language: (SEARXNG_LANGUAGE ?? "").trim(),
     safeSearch: SEARXNG_SAFESEARCH ?? "1",
+  },
+  /**
+   * Daily metric history. One line per day per session in data/metrics, so the
+   * overview can show a trend without a database. Retention is explicit and
+   * pruning happens on every flush.
+   */
+  metricsHistory: {
+    enabled: METRICS_HISTORY_ENABLED !== "false",
+    retentionDays: clampNumber(METRICS_HISTORY_RETENTION_DAYS, 7, 365, 30),
   },
   /**
    * Conversation memory: rolling summary + facts, derived from an append-only

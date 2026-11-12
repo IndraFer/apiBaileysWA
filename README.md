@@ -40,6 +40,35 @@ Release history lives in [CHANGELOG.md](CHANGELOG.md); this README stays version
 
 ---
 
+### Overview dashboard
+
+The first dashboard page is an analytics view, not a status table:
+
+- **KPIs**: sessions connected, AI replies, skipped routing decisions, average
+  latency, failures.
+- **Routing Decisions** (donut): AI, static, skipped, failed. "Skipped" counts
+  inbound messages the router declined to answer (human-owned chat, AI off,
+  outside its window) — it is **not** a count of messages a human sent.
+- **Hourly Activity** (stacked bars): the 24 in-memory buckets.
+- **Daily Trend** (line): persisted daily totals, 7 or 30 days.
+- **Top Sessions** (horizontal bars) and **Recent Decisions** (table).
+- **Health**: webhook delivery rate, dead letters, memory scopes, Redis — hidden
+  for assistants, who have no integrations to monitor.
+
+Data honesty: in-process counters are labelled "since restart", because they reset
+with the process. The daily series is persisted to `data/metrics/daily.jsonl` with
+one line per day per session, pruned to `METRICS_HISTORY_RETENTION_DAYS` (30) on
+every write, so the file cannot grow without bound. No scheduler: the rollover is
+lazy, flushed by the first metric of a new day.
+
+Live updates: a 20s poll plus the existing event stream, both coalesced. A hidden
+tab stops both; returning to the tab refreshes at most once every few seconds, so
+rapid tab switching cannot spam the API.
+
+Charts use Chart.js from jsdelivr, pinned with SRI, like DOMPurify. When
+`CSP_CDN=false` the script is blocked and the page falls back to the numeric
+cards instead of breaking.
+
 ## 🚀 Quick Start
 
 ### 1. Prerequisite (Choose One Runtime)

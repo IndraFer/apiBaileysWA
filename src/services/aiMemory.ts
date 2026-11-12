@@ -1063,6 +1063,16 @@ export async function sweepGroupDigests(
   }
 }
 
+/** Cheap count for the dashboard: file names only, no JSON parsing. */
+export async function countMemoryScopes(sessionId: string): Promise<number> {
+  try {
+    const names = await readdir(sessionDir(sessionId));
+    return names.filter((name) => name.endsWith(".json")).length;
+  } catch {
+    return 0;
+  }
+}
+
 export interface MemoryListItem {
   kind: string;
   conversationId: string;

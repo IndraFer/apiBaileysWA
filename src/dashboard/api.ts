@@ -43,6 +43,7 @@ import {
   serializeCredentials,
 } from "@/services/aiAgent";
 import {
+  countMemoryScopes,
   exportConversation,
   forgetConversation,
   forgetSession,
@@ -58,6 +59,7 @@ import {
   resolveAutoReplyConfig,
 } from "@/services/autoReply";
 import { applyBackup, buildBackup } from "@/services/dataMigration";
+import { readDailyHistory } from "@/services/metricsHistory";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -292,6 +294,127 @@ dashboardApi.get("/stats", (c) => {
         : {
             infoRestricted: true,
           }),
+    },
+  });
+});
+
+/**
+ * GET /dashboard/api/overview
+ *
+ * One request for the whole dashboard: KPIs, routing composition, the last 24
+ * hours and the daily trend. Everything is scoped to the sessions the caller can
+ * access. Counters are "since restart"; the daily series is persisted.
+ */
+dashboardApi.get("/overview", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+
+  const role = getDashboardRole(c);
+  const sessionId = c.req.query("sessionId") || undefined;
+  if (sessionId) {
+    const sessionDenied = requireSessionAccess(c, sessionId);
+    if (sessionDenied) return sessionDenied;
+  }
+  const days = Math.min(Math.max(Number(c.req.query("days") || "7"), 1), 30);
+
+  const visible = connectionManager
+    .listSessions()
+    .filter((entry) => hasSessionAccess(c, String(entry.sessionId || "")));
+  const visibleIds = new Set(visible.map((entry) => String(entry.sessionId || "")));
+
+  const metrics = getAiMetrics(sessionId);
+  const routing = {
+    ai: metrics.counters.aiReplies,
+    static: metrics.counters.staticReplies,
+    // "skipped" means the router declined to answer, not that a human replied.
+    skipped: metrics.counters.humanSkips + metrics.counters.pausedSkips,
+    failed: metrics.counters.failures,
+    blocked: metrics.counters.blocked + metrics.counters.muted,
+  };
+
+  const topSessions = Object.entries(metrics.bySession)
+    .filter(([id]) => !sessionId || id === sessionId)
+    .filter(([id]) => visibleIds.has(id) || id === sessionId)
+    .map(([id, value]) => ({
+      sessionId: id,
+      ai: value.ai,
+      skipped: value.human + value.paused,
+      failures: value.failures,
+    }))
+    .sort((a, b) => b.ai + b.skipped - (a.ai + a.skipped))
+    .slice(0, 5);
+
+  // Operational widgets that only make sense for roles that own integrations.
+  let health: {
+    webhookOk: number;
+    webhookFailed: number;
+    deadLetters: number;
+    memoryScopes: number;
+    redis: boolean;
+  } | null = null;
+  if (role !== "assistant") {
+    const logs = getWebhookLogs(200, sessionId);
+    const ok = logs.filter(
+      (entry) => entry.status === "success" || entry.status === "test-success",
+    );
+    const failed = logs.filter(
+      (entry) =>
+        entry.status === "http-error" ||
+        entry.status === "network-error" ||
+        entry.status === "test-fail",
+    );
+    const scopeIds = sessionId ? [sessionId] : [...visibleIds];
+    let scopes = 0;
+    for (const id of scopeIds) scopes += await countMemoryScopes(id);
+    health = {
+      webhookOk: ok.length,
+      webhookFailed: failed.length,
+      deadLetters: getDeadLetters(500, sessionId).length,
+      memoryScopes: scopes,
+      redis: config.redis.enabled,
+    };
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      meta: {
+        generatedAt: Date.now(),
+        since: metrics.since,
+        days,
+        sessionId: sessionId ?? null,
+        role,
+      },
+      kpis: {
+        sessions: visible.length,
+        connected: visible.filter((entry) => entry.connected).length,
+        disconnected: visible.filter((entry) => !entry.connected).length,
+        uptimeSeconds: process.uptime(),
+        aiReplies: metrics.counters.aiReplies,
+        staticReplies: metrics.counters.staticReplies,
+        skipped: routing.skipped,
+        failures: metrics.counters.failures,
+        avgLatencyMs: metrics.latency.avgMs,
+        tokensIn: metrics.counters.tokensIn,
+        tokensOut: metrics.counters.tokensOut,
+      },
+      routing,
+      hourly: metrics.hourly.map((bucket) => ({
+        hour: bucket.hour,
+        ai: bucket.ai,
+        skipped: bucket.human,
+      })),
+      daily: readDailyHistory(days, sessionId),
+      topSessions,
+      health,
+      recent: metrics.recent.slice(0, 8).map((entry) => ({
+        at: entry.at,
+        sessionId: entry.sessionId,
+        conversationId: entry.conversationId,
+        route: entry.route,
+        reason: entry.reason ?? "",
+        latencyMs: entry.latencyMs ?? null,
+      })),
     },
   });
 });

@@ -47,7 +47,11 @@
   };
 
   const pages = {
-    overview: { title: "Overview", render: () => OverviewPage.render() },
+    overview: {
+      title: "Overview",
+      render: () => OverviewPage.render(),
+      destroy: () => OverviewPage.destroy?.(),
+    },
     sessions: {
       title: "Sessions",
       requires: "viewSessions",
