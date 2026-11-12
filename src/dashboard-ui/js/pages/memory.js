@@ -4,7 +4,7 @@
     sessionId: "",
     query: "",
     page: 1,
-    limit: 20,
+    limit: 25,
     total: 0,
     items: [],
     loading: false,
@@ -72,10 +72,18 @@
             </div>
           </div>
           <div id="memory-results"><div class="empty-state"><p class="text-muted">Loading…</p></div></div>
-          <div class="flex gap-1 u-between-center u-mt-05">
-            <button class="btn btn-outline btn-sm" id="memory-prev" type="button">Previous</button>
-            <span class="text-muted text-xs" id="memory-page"></span>
-            <button class="btn btn-outline btn-sm" id="memory-next" type="button">Next</button>
+          <div class="memory-footer">
+            <label class="memory-page-size">
+              Show
+              <select id="memory-page-size" class="input">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              items per page
+            </label>
+            <div class="memory-pager" id="memory-pager"></div>
           </div>
         </div>
         `,
@@ -96,18 +104,23 @@
         debounce = setTimeout(() => void this.load(), 250);
       });
 
-      document.getElementById("memory-prev")?.addEventListener("click", () => {
-        if (state.page > 1) {
-          state.page -= 1;
+      const sizeSelect = document.getElementById("memory-page-size");
+      if (sizeSelect) {
+        sizeSelect.value = String(state.limit);
+        sizeSelect.addEventListener("change", (event) => {
+          state.limit = Number(event.target.value) || 20;
+          state.page = 1;
           void this.load();
-        }
-      });
+        });
+      }
 
-      document.getElementById("memory-next")?.addEventListener("click", () => {
-        if (state.page * state.limit < state.total) {
-          state.page += 1;
-          void this.load();
-        }
+      document.getElementById("memory-pager")?.addEventListener("click", (event) => {
+        const button = event.target instanceof Element ? event.target.closest("[data-page]") : null;
+        if (!button) return;
+        const next = Number(button.getAttribute("data-page"));
+        if (!Number.isFinite(next) || next === state.page) return;
+        state.page = next;
+        void this.load();
       });
 
       await this.load();
@@ -143,6 +156,53 @@
       }
     },
 
+    /** Page numbers with ellipsis, so a long list stays one row. */
+    pageNumbers(current, totalPages) {
+      if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, index) => index + 1);
+      }
+
+      const pages = [1];
+      const from = Math.max(2, current - 1);
+      const to = Math.min(totalPages - 1, current + 1);
+      if (from > 2) pages.push("…");
+      for (let page = from; page <= to; page += 1) pages.push(page);
+      if (to < totalPages - 1) pages.push("…");
+      pages.push(totalPages);
+      return pages;
+    },
+
+    renderPager() {
+      const pager = document.getElementById("memory-pager");
+      if (!pager) return;
+
+      const totalPages = Math.max(1, Math.ceil(state.total / state.limit));
+      if (state.page > totalPages) state.page = totalPages;
+
+      const button = (label, page, options = {}) =>
+        `<button type="button" class="memory-page-btn${options.active ? " is-active" : ""}" data-page="${page}" ${
+          options.disabled ? "disabled" : ""
+        }>${label}</button>`;
+
+      const parts = [
+        button("First", 1, { disabled: state.page === 1 }),
+        button("Prev", state.page - 1, { disabled: state.page === 1 }),
+      ];
+      for (const entry of this.pageNumbers(state.page, totalPages)) {
+        parts.push(
+          entry === "…"
+            ? '<span class="memory-page-gap">…</span>'
+            : button(String(entry), entry, { active: entry === state.page }),
+        );
+      }
+      parts.push(
+        button("Next", state.page + 1, { disabled: state.page >= totalPages }),
+        button("Last", totalPages, { disabled: state.page >= totalPages }),
+      );
+
+      pager.innerHTML = parts.join("");
+    },
+
     renderResults() {
       const results = document.getElementById("memory-results");
       if (!results) return;
@@ -150,16 +210,7 @@
       const count = document.getElementById("memory-count");
       if (count) count.textContent = `${state.total} scope(s)`;
 
-      const pageInfo = document.getElementById("memory-page");
-      if (pageInfo) {
-        const pages = Math.max(1, Math.ceil(state.total / state.limit));
-        pageInfo.textContent = `Page ${state.page} of ${pages}`;
-      }
-
-      const prev = document.getElementById("memory-prev");
-      const next = document.getElementById("memory-next");
-      if (prev) prev.disabled = state.page <= 1;
-      if (next) next.disabled = state.page * state.limit >= state.total;
+      this.renderPager();
 
       if (state.items.length === 0) {
         UI.setHtml(

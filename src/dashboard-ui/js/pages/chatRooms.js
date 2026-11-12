@@ -1879,8 +1879,27 @@
               sender && sender.label
                 ? senderIsShortcut
                   ? `<button type="button" class="msg-sender" data-sender-jid="${escapeHtml(sender.jid)}" title="Open this contact">${escapeHtml(sender.label)}</button>`
-                  : `<span class="msg-sender msg-sender-static">${escapeHtml(sender.label)}</span>`
+                  : `<span class="msg-sender-name">${escapeHtml(sender.label)}</span>`
                 : "";
+
+            // Quoted reply: show who was answered and a short excerpt.
+            const quoted = msg?.quoted;
+            const quotedBlock =
+              quoted && (quoted.text || quoted.label)
+                ? `<div class="msg-quote">
+                    <span class="msg-quote-name">${escapeHtml(quoted.label || "Quoted message")}</span>
+                    ${quoted.text ? `<span class="msg-quote-text">${escapeHtml(quoted.text)}</span>` : ""}
+                  </div>`
+                : "";
+
+            // Mentions resolved on the server; fall back to the raw JID form.
+            const mentionChips =
+              Array.isArray(msg?.mentions) && msg.mentions.length > 0
+                ? msg.mentions
+                : (Array.isArray(mentioned) ? mentioned : []).map((value) => ({
+                    jid: String(value),
+                    label: jidPhoneOnly(String(value)),
+                  }));
             const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
             const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
 
@@ -1888,13 +1907,13 @@
               <div class="${bubbleWrap}"${dataMessageKey}>
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
                   ${senderLine}
+                  ${quotedBlock}
                   <div class="msg-text">${renderTextWithMarkdown(payload.text || "(empty)")}</div>
                   ${
-                    Array.isArray(mentioned) && mentioned.length > 0
-                      ? `<div class="msg-mentions">Mentions: ${mentioned
+                    mentionChips.length > 0
+                      ? `<div class="msg-mentions">Mentions: ${mentionChips
                           .map(
-                            (m) =>
-                              `<span class="msg-mention-chip">${escapeHtml(jidPhoneOnly(String(m)))}</span>`,
+                            (m) => `<span class="msg-mention-chip">${escapeHtml(m.label)}</span>`,
                           )
                           .join("")}</div>`
                       : ""

@@ -175,26 +175,31 @@
             <strong>not</strong> included: create them again on the target machine.
             Secrets inside the archive are plaintext, so treat it like an .env file.
           </p>
-          <div class="form-group">
+          <div class="migration-inline">
             <label class="checkbox-label"><input type="checkbox" id="migration-include-media" /> Include media files</label>
           </div>
-          <div class="flex gap-2 u-flex-wrap">
+          <div class="flex gap-2 u-flex-wrap u-mt-05">
             <button class="btn btn-outline" id="btn-backup-export" type="button">Download Backup</button>
           </div>
           <div class="u-section-divider"></div>
-          <div class="form-group">
-            <label for="migration-file">Restore archive (.zip)</label>
-            <input class="input" type="file" id="migration-file" accept=".zip,application/zip" />
+          <div class="form-row cols-3 migration-restore">
+            <div class="form-group">
+              <label for="migration-file">Restore Archive (.zip)</label>
+              <input class="input" type="file" id="migration-file" accept=".zip,application/zip" />
+            </div>
+            <div class="form-group">
+              <label for="migration-strategy">If Session Exists</label>
+              <select class="input" id="migration-strategy">
+                <option value="skip">Skip it (default)</option>
+                <option value="replace">Replace it (must be offline)</option>
+              </select>
+            </div>
+            <div class="form-group migration-restore-action">
+              <label>&nbsp;</label>
+              <button class="btn btn-primary btn-full" id="btn-backup-import" type="button">Restore Backup</button>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="migration-strategy">When a session already exists</label>
-            <select class="input" id="migration-strategy">
-              <option value="skip">Skip it (safe, default)</option>
-              <option value="replace">Replace it (session must be disconnected)</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" id="btn-backup-import" type="button">Restore Backup</button>
-          <small class="text-muted u-block-mt-035" id="migration-status"></small>
+          <small class="text-muted" id="migration-status"></small>
         </div>`
             : ""
         }

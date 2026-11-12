@@ -1320,17 +1320,68 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
   try {
     const session = connectionManager.getSession(sessionId);
     const store = session.getStore();
-    // Attach a display identity per message so group bubbles can show the
-    // sender the same way the chat list and header do.
+
+    /** Plain text out of any message content, including a quoted payload. */
+    const contentText = (content: unknown): string => {
+      const c = content as Record<string, Record<string, unknown> | undefined> | null;
+      const text =
+        (c?.conversation as string | undefined) ||
+        (c?.extendedTextMessage?.text as string | undefined) ||
+        (c?.imageMessage?.caption as string | undefined) ||
+        (c?.videoMessage?.caption as string | undefined) ||
+        (c?.documentMessage?.caption as string | undefined) ||
+        (
+          (c?.documentWithCaptionMessage?.message as Record<string, unknown> | undefined)
+            ?.documentMessage as Record<string, unknown> | undefined
+        )?.caption;
+      return typeof text === "string" ? text.trim() : "";
+    };
+
+    const contextOf = (content: unknown): Record<string, unknown> | null => {
+      if (!content || typeof content !== "object") return null;
+      for (const value of Object.values(content as Record<string, unknown>)) {
+        const ctx = (value as { contextInfo?: unknown } | null)?.contextInfo;
+        if (ctx && typeof ctx === "object") return ctx as Record<string, unknown>;
+      }
+      return null;
+    };
+
+    const labelFor = (value: string): string => {
+      const identity = store.identityFor(value);
+      return identity.name || identity.phone || value.replace(/@.*$/, "");
+    };
+
+    // Attach display identities so bubbles can show senders, quoted replies and
+    // resolved mentions the same way the chat list does.
     const messages = store.loadMessages(jid, limit).map((message) => {
       const senderJid = message.key.participant || message.key.remoteJid || "";
-      if (!senderJid) return message;
-      const identity = store.identityFor(senderJid);
+      const context = contextOf(message.message);
+      const quotedContent = context?.quotedMessage;
+      const quotedJid = typeof context?.participant === "string" ? context.participant : "";
+
+      const mentioned = Array.isArray(context?.mentionedJid)
+        ? (context.mentionedJid as unknown[])
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => ({ jid: value, label: labelFor(value) }))
+        : [];
+
+      const quoted =
+        quotedContent && typeof quotedContent === "object"
+          ? {
+              jid: quotedJid,
+              label: quotedJid ? labelFor(quotedJid) : "",
+              text: contentText(quotedContent).slice(0, 300),
+            }
+          : null;
+
+      const identity = senderJid ? store.identityFor(senderJid) : { name: "", phone: "" };
       return {
         ...message,
         senderJid,
         senderName: identity.name,
         senderPhone: identity.phone,
+        mentions: mentioned,
+        quoted,
       };
     });
     return c.json({ success: true, data: messages });
