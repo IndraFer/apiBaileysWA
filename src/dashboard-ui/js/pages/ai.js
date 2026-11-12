@@ -419,6 +419,28 @@
                 <small>Adds <code>send_whatsapp_message</code> to every request. Plain text only; off by default.</small>
               </span>
             </label>
+            <div id="ai-send-settings" class="hidden">
+              <div class="form-row cols-2">
+                <div class="form-group">
+                  <label for="ai-send-scope">Recipient Scope</label>
+                  <select id="ai-send-scope" class="input">
+                    <option value="allowlist">Allowlist (plus current chat)</option>
+                    <option value="any">Any recipient</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="ai-send-max">Max Sends per Hour</label>
+                  <input id="ai-send-max" class="input" type="number" min="1" max="200" step="1" value="10" />
+                </div>
+              </div>
+              <div class="form-group" id="ai-send-allowlist-wrap">
+                <label for="ai-send-allowlist">Allowed Recipients</label>
+                <textarea id="ai-send-allowlist" class="input" rows="4"
+                  placeholder="628123456789&#10;628987654321"></textarea>
+                <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
+              </div>
+              <small class="text-muted" id="ai-send-scope-hint"></small>
+            </div>
             <label class="toggle-row">
               <input type="checkbox" id="ai-vision-enabled" class="toggle-input" />
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -427,37 +449,15 @@
                 <small>Downloads inbound images in memory for a vision request. Off by default; videos and audio are not processed.</small>
               </span>
             </label>
-          </div>
-          <div id="ai-send-settings" class="hidden">
-            <div class="form-row cols-2">
+            <div id="ai-vision-settings" class="hidden">
               <div class="form-group">
-                <label for="ai-send-scope">Recipient Scope</label>
-                <select id="ai-send-scope" class="input">
-                  <option value="allowlist">Allowlist (plus current chat)</option>
-                  <option value="any">Any recipient</option>
-                </select>
+                <label for="ai-vision-model">Vision Model (Optional)</label>
+                <input id="ai-vision-model" class="input" type="text" maxlength="128"
+                  placeholder="Leave empty to use the main model" />
+                <small class="text-muted">
+                  Uses the same base URL and API key. Leave empty only if the main model supports image inputs.
+                </small>
               </div>
-              <div class="form-group">
-                <label for="ai-send-max">Max Sends per Hour</label>
-                <input id="ai-send-max" class="input" type="number" min="1" max="200" step="1" value="10" />
-              </div>
-            </div>
-            <div class="form-group" id="ai-send-allowlist-wrap">
-              <label for="ai-send-allowlist">Allowed Recipients</label>
-              <textarea id="ai-send-allowlist" class="input" rows="4"
-                placeholder="628123456789&#10;628987654321"></textarea>
-              <small class="text-muted">One phone number or JID per line. Only used with the allowlist scope.</small>
-            </div>
-            <small class="text-muted" id="ai-send-scope-hint"></small>
-          </div>
-          <div id="ai-vision-settings" class="hidden">
-            <div class="form-group">
-              <label for="ai-vision-model">Vision Model (Optional)</label>
-              <input id="ai-vision-model" class="input" type="text" maxlength="128"
-                placeholder="Leave empty to use the main model" />
-              <small class="text-muted">
-                Uses the same base URL and API key. Leave empty only if the main model supports image inputs.
-              </small>
             </div>
           </div>
           <label class="toggle-row">
