@@ -200,14 +200,72 @@ export async function appendMessage(
   const target = logFile(sessionId, scope);
   try {
     const info = await stat(target);
-    if (info.size > config.aiMemory.rawMaxBytes) {
-      await rename(target, `${target}.1`);
-    }
+    // Compact instead of rotating: a leftover .1 file would grow forever and
+    // make the log unbounded, which is what makes retrieval slow and stale.
+    if (info.size > config.aiMemory.rawMaxBytes) await compactLog(sessionId, scope);
   } catch {
-    // No log yet: nothing to rotate.
+    // No log yet: nothing to compact.
   }
 
   await appendFile(target, `${JSON.stringify(message)}\n`, "utf8");
+}
+
+/**
+ * Keep the log inside two hard bounds: a maximum age and a maximum line count.
+ * Bounded input is what keeps keyword retrieval both fast and relevant; without
+ * it the file grows until an index becomes mandatory.
+ */
+async function compactLog(sessionId: string, scope: MemoryScope): Promise<void> {
+  const target = logFile(sessionId, scope);
+  let raw: string;
+  try {
+    raw = await readFile(target, "utf8");
+  } catch {
+    return;
+  }
+
+  const cutoff = Date.now() - config.aiMemory.rawRetentionDays * 24 * 60 * 60 * 1000;
+  const kept: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line) as MemoryMessage;
+      if (typeof parsed.ts === "number" && parsed.ts < cutoff) continue;
+      kept.push(line);
+    } catch {
+      // Drop a torn line rather than keep an unreadable one.
+    }
+  }
+
+  const trimmed = kept.slice(-config.aiMemory.rawMaxMessages);
+
+  // Compaction trims the raw transcript; the summary and facts live in the JSON
+  // file and are untouched. Warn when a line is dropped before it ever reached a
+  // summary, because that content is gone for good.
+  const memory = await loadMemory(sessionId, scope);
+  let unsummarized = 0;
+  for (const line of kept.slice(0, kept.length - trimmed.length)) {
+    try {
+      const parsed = JSON.parse(line) as MemoryMessage;
+      if (typeof parsed.ts === "number" && parsed.ts > memory.summaryUntil) unsummarized += 1;
+    } catch {
+      // Torn line, already being dropped.
+    }
+  }
+  if (unsummarized > 0) {
+    logger.warn(
+      "[aiMemory] compacted %d unsummarized message(s) out of %s",
+      unsummarized,
+      scopeKey(scope),
+    );
+  }
+
+  const temp = `${target}.tmp`;
+  await writeFile(temp, trimmed.length > 0 ? `${trimmed.join("\n")}\n` : "", {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await rename(temp, target);
 }
 
 /** Bounded read of the raw log; used by summarisation and retrieval. */
@@ -518,7 +576,7 @@ export async function summarizeScope(
   sessionId: string,
   scope: MemoryScope,
   ai: ResolvedAiConfig,
-  options?: { force?: boolean },
+  options?: { force?: boolean; model?: string },
 ): Promise<boolean> {
   if (!config.aiMemory.enabled) return false;
   if (!ai.apiKey || !ai.baseUrl || !ai.model) return false;
@@ -542,7 +600,7 @@ export async function summarizeScope(
   const result = await requestPlainCompletion(ai, {
     system: SYSTEM_PROMPT,
     user,
-    model: config.aiMemory.model || undefined,
+    model: options?.model || config.aiMemory.model || undefined,
     maxTokens: 700,
     timeoutMs: config.aiMemory.summaryTimeoutMs,
   });
@@ -584,13 +642,14 @@ export function observeConversation(
   sessionId: string,
   scope: MemoryScope,
   ai: ResolvedAiConfig,
+  model?: string,
 ): void {
   if (!config.aiMemory.enabled) return;
 
   const key = `${sessionId}:${scopeKey(scope)}`;
   if (inflight.has(key)) return;
 
-  const task = summarizeScope(sessionId, scope, ai)
+  const task = summarizeScope(sessionId, scope, ai, { model })
     .then(() => undefined)
     .catch((error) => {
       logger.debug("[aiMemory] observe failed: %s", errorToString(error));
@@ -609,6 +668,7 @@ export async function seedFromHistory(
   scope: MemoryScope,
   ai: ResolvedAiConfig,
   history: Array<{ id: string; role: "user" | "assistant"; text: string; ts: number }>,
+  model?: string,
 ): Promise<void> {
   if (!config.aiMemory.enabled) return;
   const memory = await loadMemory(sessionId, scope);
@@ -628,7 +688,7 @@ export async function seedFromHistory(
     }).catch(() => undefined);
   }
 
-  await summarizeScope(sessionId, scope, ai, { force: true });
+  await summarizeScope(sessionId, scope, ai, { force: true, model });
 }
 
 function shortHash(value: string, length = 8): string {
@@ -846,6 +906,7 @@ export async function runGroupDigest(
   conversationId: string,
   ai: ResolvedAiConfig,
   now = Date.now(),
+  model?: string,
 ): Promise<boolean> {
   if (!config.aiMemory.enabled) return false;
   if (!ai.apiKey || !ai.baseUrl || !ai.model) return false;
@@ -873,7 +934,7 @@ export async function runGroupDigest(
   const result = await requestPlainCompletion(ai, {
     system: DIGEST_PROMPT,
     user: `<obrolan_grup>\n${transcript}\n</obrolan_grup>`,
-    model: config.aiMemory.model || undefined,
+    model: model || config.aiMemory.model || undefined,
     maxTokens: 700,
     timeoutMs: config.aiMemory.summaryTimeoutMs,
   });
@@ -917,7 +978,7 @@ function asStringList(value: unknown): string[] {
 export async function sweepGroupDigests(
   sessionId: string,
   ai: ResolvedAiConfig,
-  overrides?: { idleMs?: number; minMessages?: number; maxPerDay?: number },
+  overrides?: { idleMs?: number; minMessages?: number; maxPerDay?: number; model?: string },
   now = Date.now(),
 ): Promise<void> {
   if (!config.aiMemory.enabled) return;
@@ -978,7 +1039,7 @@ export async function sweepGroupDigests(
         continue;
       }
 
-      const changed = await runGroupDigest(sessionId, conversationId, ai, now);
+      const changed = await runGroupDigest(sessionId, conversationId, ai, now, overrides?.model);
       if (changed) {
         logger.debug("[aiMemory] digest updated for %s", conversationId);
       }
@@ -986,4 +1047,81 @@ export async function sweepGroupDigests(
       logger.debug("[aiMemory] digest failed for %s: %s", conversationId, errorToString(error));
     }
   }
+}
+
+export interface MemoryListItem {
+  kind: string;
+  conversationId: string;
+  participantId: string | null;
+  summary: string;
+  facts: Array<{ key: string; value: string }>;
+  messages: number;
+  updatedAt: number;
+}
+
+/**
+ * Paginated, searchable list of every stored scope for one session. Reads the
+ * small JSON files only — the raw logs are not opened, so a page render stays
+ * cheap even with hundreds of scopes.
+ */
+export async function listMemoryScopes(
+  sessionId: string,
+  options: { query?: string; page?: number; limit?: number } = {},
+): Promise<{ items: MemoryListItem[]; total: number; page: number; limit: number }> {
+  const page = Math.max(1, options.page ?? 1);
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+  const query = String(options.query ?? "")
+    .trim()
+    .toLowerCase();
+
+  let names: string[] = [];
+  try {
+    names = await readdir(sessionDir(sessionId));
+  } catch {
+    return { items: [], total: 0, page, limit };
+  }
+
+  const items: MemoryListItem[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
+      const memory = JSON.parse(raw) as ConversationMemory;
+      if (!memory?.scope) continue;
+
+      const facts = Object.entries(memory.facts ?? {}).map(([key, fact]) => ({
+        key,
+        value: fact.value,
+      }));
+      const item: MemoryListItem = {
+        kind: memory.scope.kind,
+        conversationId: memory.scope.conversationId,
+        participantId: memory.scope.participantId ?? null,
+        summary: memory.summary ?? "",
+        facts,
+        messages: memory.stats?.summarizedMessages ?? 0,
+        updatedAt: memory.updatedAt ?? 0,
+      };
+
+      if (query) {
+        const haystack = [
+          item.summary,
+          item.conversationId,
+          item.participantId ?? "",
+          ...facts.map((fact) => `${fact.key} ${fact.value}`),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) continue;
+      }
+
+      items.push(item);
+    } catch {
+      // Skip a broken file instead of failing the page.
+    }
+  }
+
+  items.sort((a, b) => b.updatedAt - a.updatedAt);
+  const start = (page - 1) * limit;
+  return { items: items.slice(start, start + limit), total: items.length, page, limit };
 }

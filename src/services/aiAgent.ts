@@ -67,6 +67,7 @@ export interface ResolvedAiConfig {
   sendMessage: ResolvedSendMessageConfig;
   persona: { scope: "strict" | "flexible" };
   retrieval: { enabled: boolean };
+  memory: { model: string };
   webSearch: { enabled: boolean };
   vision: { enabled: boolean; model: string };
 }
@@ -195,6 +196,10 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
     },
     persona: resolvePersona(stored.persona),
     retrieval: { enabled: stored.retrieval?.enabled !== false },
+    memory: {
+      model:
+        typeof stored.memory?.model === "string" ? stored.memory.model.trim().slice(0, 128) : "",
+    },
     webSearch: {
       enabled: stored.webSearch?.enabled ?? false,
     },

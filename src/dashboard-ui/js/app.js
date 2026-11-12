@@ -86,6 +86,14 @@
       needsSession: true,
       render: () => AiPage.render(),
     },
+    memory: {
+      title: "Memory",
+      requires: "viewMemory",
+      roles: ["admin", "assistant"],
+      needsSession: true,
+      render: () => MemoryPage.render(),
+      destroy: () => MemoryPage.destroy?.(),
+    },
     api: {
       title: "REST API",
       requires: "manageApiKeys",

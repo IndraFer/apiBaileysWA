@@ -338,9 +338,21 @@ on.
   a failure keeps the previous summary. A broken memory file cannot stop a reply.
 - **Summary model**: `AI_MEMORY_MODEL` selects one; empty uses the main model,
   the same pattern as the vision model.
+- **Bounded, not growing**: the raw log is compacted when it passes
+  `AI_MEMORY_RAW_MAX_BYTES` (4 MB). Compaction rewrites the file with only the
+  newest `AI_MEMORY_RAW_MAX_MESSAGES` (2000) lines that are younger than
+  `AI_MEMORY_RAW_RETENTION_DAYS` (180). Nothing is renamed to `.1`, so there is
+  one file per scope and retrieval input stays small enough for a plain JSON
+  scan — no SQLite index needed.
+- **What compaction keeps**: the summary, the facts and the pinned notes live in
+  the `.json` file and are never touched. Only the raw transcript shrinks, and
+  that is the part retrieval and future summaries read from. If a line is dropped
+  before it ever reached a summary, the pair is logged as a warning: that content
+  is gone.
 - **Not encrypted**: `data/ai-memory/` holds plaintext transcripts so search and
-  export stay simple. The directory is created with mode `700`; protect it like
-  any other data directory.
+  export stay simple. The path is fixed (not env-configurable) so a wrong setting
+  cannot scatter folders. The directory is created with mode `700`; protect it
+  like any other data directory.
 - **Groups**: opt-in per session in `AI & Routing → Group Reply & Memory`.
   **Group Memory Conversations** keeps a summary and facts per member, for the
   messages that reach the bot (mention, allowlisted sender, or every message
@@ -356,9 +368,12 @@ on.
   short timeout (`AI_MEMORY_RETRIEVE_TIMEOUT_MS`, default 200 ms) so a slow disk
   can never delay a reply. Each hit carries its local timestamp
   (`[2026-11-10 14:32]`) so an old line is obviously old.
-- **Viewer**: the chat ⋯ menu has **View Memory**, which shows the per-chat
-  summary, facts, pinned notes and counters. Group chats list the digest plus
-  every member scope, so a leaking fact would be visible immediately.
+- **Viewer**: the chat ⋯ menu has **View Memory** for one conversation, and the
+  **Memory** page lists every stored scope for a session with search and
+  pagination. Both show summary, facts and counters; group entries include the
+  digest plus every member scope, so a leaking fact would be visible immediately.
+  The Memory page is available to `admin` and `assistant`; managers keep their
+  existing scope and do not get it.
 
 **Deletion follows the chat.** Clearing a chat, deleting it, exiting and
 deleting a group, deleting a session, or using **End Chat** removes the matching

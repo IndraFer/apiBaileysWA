@@ -309,3 +309,39 @@ describe("retrieval", () => {
     expect(await retrieveRelevant(sessionId, scope, "voucher diskon")).toBe("");
   });
 });
+
+describe("log bounds", () => {
+  test("compaction trims the oldest lines and leaves no side file", async () => {
+    const originalBytes = config.aiMemory.rawMaxBytes;
+    const originalMax = config.aiMemory.rawMaxMessages;
+    config.aiMemory.rawMaxBytes = 400;
+    config.aiMemory.rawMaxMessages = 3;
+
+    const sessionId = "bounded-1";
+    const scope: MemoryScope = { kind: "dm", conversationId: "628555111@s.whatsapp.net" };
+    try {
+      for (let index = 0; index < 12; index += 1) {
+        await appendMessage(sessionId, scope, {
+          id: `b${index}`,
+          role: "user",
+          text: `pesan ${index} ${"x".repeat(30)}`,
+          ts: 1_700_000_000_000 + index,
+        });
+      }
+
+      const messages = await readLog(sessionId, scope, 100);
+      expect(messages.length).toBeLessThanOrEqual(3);
+      // The newest message must survive; the oldest is gone.
+      expect(messages.at(-1)?.id).toBe("b11");
+      expect(messages.some((m) => m.id === "b0")).toBe(false);
+
+      // No rotation side file: bounded means one file, not a growing chain.
+      const { readdirSync } = await import("node:fs");
+      const files = readdirSync(join(tempRoot, sessionId));
+      expect(files.some((name) => name.includes(".1"))).toBe(false);
+    } finally {
+      config.aiMemory.rawMaxBytes = originalBytes;
+      config.aiMemory.rawMaxMessages = originalMax;
+    }
+  });
+});

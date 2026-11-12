@@ -148,7 +148,6 @@ const {
   SEARXNG_SAFESEARCH,
   // Conversation memory (off by default).
   AI_MEMORY_ENABLED,
-  AI_MEMORY_DIR,
   AI_MEMORY_MODEL,
   AI_MEMORY_SUMMARY_EVERY,
   AI_MEMORY_SUMMARY_MAX_MESSAGES,
@@ -170,6 +169,7 @@ const {
   AI_MEMORY_CACHE_MAX_SCOPES,
   AI_MEMORY_RAW_RETENTION_DAYS,
   AI_MEMORY_RAW_MAX_BYTES,
+  AI_MEMORY_RAW_MAX_MESSAGES,
 } = process.env;
 
 /**
@@ -409,7 +409,8 @@ const config = {
    */
   aiMemory: {
     enabled: AI_MEMORY_ENABLED === "true",
-    dir: (AI_MEMORY_DIR ?? "").trim() || "data/ai-memory",
+    // Fixed on purpose: a misconfigured path must not scatter memory folders.
+    dir: "data/ai-memory",
     /** Empty means "use the main AI model", like the vision model setting. */
     model: (AI_MEMORY_MODEL ?? "").trim(),
     summaryEvery: clampNumber(AI_MEMORY_SUMMARY_EVERY, 5, 200, 20),
@@ -432,7 +433,9 @@ const config = {
     seedMinMessages: clampNumber(AI_MEMORY_SEED_MIN_MESSAGES, 5, 500, 30),
     cacheMaxScopes: clampNumber(AI_MEMORY_CACHE_MAX_SCOPES, 10, 5000, 200),
     rawRetentionDays: clampNumber(AI_MEMORY_RAW_RETENTION_DAYS, 1, 3650, 180),
-    rawMaxBytes: clampNumber(AI_MEMORY_RAW_MAX_BYTES, 1_000_000, 500_000_000, 20_971_520),
+    rawMaxBytes: clampNumber(AI_MEMORY_RAW_MAX_BYTES, 200_000, 50_000_000, 4_194_304),
+    /** Hard cap on lines kept per scope; retrieval never needs more. */
+    rawMaxMessages: clampNumber(AI_MEMORY_RAW_MAX_MESSAGES, 100, 50_000, 2000),
   },
   ai: {
     /** "openai" calls an OpenAI-compatible API directly, "webhook" posts to a gateway. */

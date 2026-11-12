@@ -181,6 +181,11 @@ export interface AiPersonaConfig {
   scope?: AiPersonaScope;
 }
 
+/** Per-session memory settings. Empty model means AI_MEMORY_MODEL, then the main model. */
+export interface AiMemorySettings {
+  model?: string;
+}
+
 /** Keyword retrieval over stored memory; needs AI_MEMORY_ENABLED. */
 export interface AiRetrievalConfig {
   enabled?: boolean;
@@ -237,6 +242,8 @@ export interface AiAgentConfig {
   persona?: AiPersonaConfig;
   /** Keyword retrieval over conversation memory (default on when memory runs). */
   retrieval?: AiRetrievalConfig;
+  /** Memory summarisation model (empty = env model, then main model). */
+  memory?: AiMemorySettings;
   /** Optional built-in web search tool (default off, requires SEARXNG_URL). */
   webSearch?: AiWebSearchConfig;
   /** Optional image understanding (default off). */

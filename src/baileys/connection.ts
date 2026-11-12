@@ -1236,7 +1236,7 @@ export class BaileysConnection {
         text: result.text,
         ts: Date.now(),
       }).catch(() => undefined);
-      observeConversation(this.sessionId, memoryScope, ai);
+      observeConversation(this.sessionId, memoryScope, ai, ai.memory.model || undefined);
     }
 
     return { ok: true, text: result.text };
@@ -1272,6 +1272,7 @@ export class BaileysConnection {
             idleMs: memory?.digestIdleMs,
             minMessages: memory?.digestMinMessages,
             maxPerDay: memory?.digestMaxPerDay,
+            model: ai.memory.model || undefined,
           },
           Date.now(),
         ).catch(() => undefined);
@@ -1362,7 +1363,7 @@ export class BaileysConnection {
         }))
         .filter((entry) => entry.text.length > 0);
       if (history.length === 0) return;
-      await seedFromHistory(this.sessionId, scope, ai, history);
+      await seedFromHistory(this.sessionId, scope, ai, history, ai.memory.model || undefined);
     } catch (error) {
       logger.debug("[%s] memory seed skipped: %s", this.sessionId, errorToString(error));
     }

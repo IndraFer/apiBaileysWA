@@ -157,6 +157,12 @@ export const aiPersonaSchema = z
   })
   .strict();
 
+export const aiMemorySettingsSchema = z
+  .object({
+    model: z.string().max(128).optional(),
+  })
+  .strict();
+
 export const aiRetrievalSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -205,6 +211,7 @@ export const aiConfigSchema = z
     sendMessage: aiSendMessageSchema.optional(),
     persona: aiPersonaSchema.optional(),
     retrieval: aiRetrievalSchema.optional(),
+    memory: aiMemorySettingsSchema.optional(),
     webSearch: aiWebSearchSchema.optional(),
     vision: aiVisionSchema.optional(),
     otpFilter: otpFilterSchema.optional(),

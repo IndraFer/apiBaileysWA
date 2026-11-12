@@ -129,6 +129,7 @@ describe("generateAgentReply runtime integration", () => {
       credentials: {},
       persona: { scope: "flexible" },
       retrieval: { enabled: false },
+      memory: { model: "" },
       webSearch: { enabled: false },
       sendMessage: {
         enabled: true,

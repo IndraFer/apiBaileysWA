@@ -397,6 +397,12 @@
                 <small>Recalls older messages that match the current question. Needs conversation memory on the server. Local keyword scan only, bounded by a short timeout.</small>
               </span>
             </label>
+            <div class="form-group">
+              <label for="ai-memory-model">Memory Summary Model (Optional)</label>
+              <input id="ai-memory-model" class="input" type="text" maxlength="128"
+                placeholder="Leave empty to use the server default" />
+              <small class="text-muted">Used only for conversation summaries. Empty falls back to AI_MEMORY_MODEL, then the main model.</small>
+            </div>
             <label class="toggle-row">
               <input type="checkbox" id="ai-web-search-enabled" class="toggle-input" />
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -792,6 +798,7 @@
         groupMemory.digestMinMessages ?? digestDefaults.digestMinMessages ?? 50,
       );
       set("group-digest-max", groupMemory.digestMaxPerDay ?? digestDefaults.digestMaxPerDay ?? 0);
+      set("ai-memory-model", ai.memory?.model || "");
       const retrievalEnabled = document.getElementById("ai-retrieval-enabled");
       if (retrievalEnabled) {
         retrievalEnabled.checked = ai.retrieval?.enabled !== false;

@@ -47,6 +47,7 @@ import {
   forgetConversation,
   forgetSession,
   inspectConversation,
+  listMemoryScopes,
 } from "@/services/aiMemory";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
@@ -85,6 +86,7 @@ type DashboardCapability =
   | "viewEvents"
   | "viewSessions"
   | "viewGroups"
+  | "viewMemory"
   | "viewChats"
   | "sendOutbound"
   | "replyIncoming"
@@ -107,6 +109,7 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "replyIncoming",
     "manageGroups",
     "viewGroups",
+    "viewMemory",
     "manageEvents",
   ]),
   manager: new Set([
@@ -130,6 +133,7 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "sendOutbound",
     "viewGroups",
     "viewSettings",
+    "viewMemory",
   ]),
 };
 
@@ -655,6 +659,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
           retrieval: {
             enabled: ai.retrieval?.enabled !== false,
           },
+          memory: {
+            model: ai.memory?.model ?? "",
+          },
           webSearch: {
             enabled: ai.webSearch?.enabled ?? false,
           },
@@ -742,6 +749,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       sendMessage: sendMessagePatch,
       persona: personaPatch,
       retrieval: retrievalPatch,
+      memory: memoryPatch,
       webSearch: webSearchPatch,
       vision: visionPatch,
       otpFilter: otpFilterPatch,
@@ -757,6 +765,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     }
     if (retrievalPatch) {
       ai.retrieval = { ...(current.ai?.retrieval ?? {}), ...retrievalPatch };
+    }
+    if (memoryPatch) {
+      ai.memory = { ...(current.ai?.memory ?? {}), ...memoryPatch };
     }
     if (webSearchPatch) {
       ai.webSearch = { ...(current.ai?.webSearch ?? {}), ...webSearchPatch };
@@ -843,6 +854,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
             scope: ai.persona?.scope === "strict" ? "strict" : "flexible",
           },
           retrieval: { enabled: ai.retrieval?.enabled !== false },
+          memory: { model: ai.memory?.model ?? "" },
           webSearch: { enabled: ai.webSearch?.enabled ?? false },
         },
       },
@@ -1529,6 +1541,29 @@ dashboardApi.post("/sessions/:sessionId/chats/end", async (c) => {
   try {
     await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
     return c.json({ success: true, message: "Chat ended; memory cleared", data: { jid } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/sessions/:sessionId/memory
+ * Paginated, searchable list of stored memory scopes for the Memory page.
+ */
+dashboardApi.get("/sessions/:sessionId/memory", async (c) => {
+  const denied = requireCapability(c, "viewMemory");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const query = c.req.query("query") ?? "";
+  const page = Number(c.req.query("page") || "1");
+  const limit = Number(c.req.query("limit") || "20");
+
+  try {
+    const result = await listMemoryScopes(sessionId, { query, page, limit });
+    return c.json({ success: true, data: result });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
