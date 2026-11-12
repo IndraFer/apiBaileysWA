@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-11-12
+
+### Changed
+
+- correct the memory deletion claim
+
 ## [1.36.0] - 2026-11-12
 
 ### Added
