@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.3] - 2026-11-12
+
+### Fixed
+
+- tiered layout for the restore row
+
 ## [1.44.2] - 2026-11-12
 
 ### Fixed
