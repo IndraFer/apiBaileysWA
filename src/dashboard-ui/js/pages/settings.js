@@ -89,6 +89,7 @@
         ],
         ["AI & Routing", perm("allow"), perm("allow"), perm("deny")],
         ["Memory", perm("allow"), perm("allow"), perm("deny")],
+        ["Data Migrations", perm("allow"), perm("deny"), perm("deny")],
         ["Webhooks", perm("allow"), perm("allow"), perm("deny")],
         ["REST API", perm("allow"), perm("allow"), perm("deny")],
         ["Events", perm("allow"), perm("allow"), perm("deny")],
@@ -165,6 +166,39 @@
           <div class="u-p-1"><div class="skeleton skeleton-text u-skeleton-200"></div><div class="skeleton skeleton-text u-skeleton-150"></div></div>
         </div>
 
+        ${
+          user.role === "admin"
+            ? `<div class="card mb-2" id="migration-card">
+          <div class="card-header"><h3>Data Migrations</h3></div>
+          <p class="text-muted text-sm">
+            Backup sessions, memory and API keys as a zip. Dashboard user accounts are
+            <strong>not</strong> included: create them again on the target machine.
+            Secrets inside the archive are plaintext, so treat it like an .env file.
+          </p>
+          <div class="form-group">
+            <label class="checkbox-label"><input type="checkbox" id="migration-include-media" /> Include media files</label>
+          </div>
+          <div class="flex gap-2 u-flex-wrap">
+            <button class="btn btn-outline" id="btn-backup-export" type="button">Download Backup</button>
+          </div>
+          <div class="u-section-divider"></div>
+          <div class="form-group">
+            <label for="migration-file">Restore archive (.zip)</label>
+            <input class="input" type="file" id="migration-file" accept=".zip,application/zip" />
+          </div>
+          <div class="form-group">
+            <label for="migration-strategy">When a session already exists</label>
+            <select class="input" id="migration-strategy">
+              <option value="skip">Skip it (safe, default)</option>
+              <option value="replace">Replace it (session must be disconnected)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-backup-import" type="button">Restore Backup</button>
+          <small class="text-muted u-block-mt-035" id="migration-status"></small>
+        </div>`
+            : ""
+        }
+
         <div class="card" id="about-card">
           <div class="card-header"><h3>About</h3></div>
           <div class="u-p-1s"><div class="skeleton skeleton-text u-skeleton-200"></div><div class="skeleton skeleton-text u-skeleton-150"></div></div>
@@ -176,6 +210,91 @@
         healthBtn.addEventListener("click", () => this.showHealthCheck());
       }
       document.getElementById("btn-openapi").addEventListener("click", () => this.showOpenAPI());
+
+      document.getElementById("btn-backup-export")?.addEventListener("click", async () => {
+        const includeMedia = Boolean(document.getElementById("migration-include-media")?.checked);
+        const status = document.getElementById("migration-status");
+        if (status) status.textContent = "Building backup…";
+        try {
+          const response = await fetch(`/dashboard/api/data/export?media=${includeMedia}`, {
+            credentials: "same-origin",
+          });
+          if (!response.ok) {
+            Toast.error("Backup failed");
+            if (status) status.textContent = "Backup failed.";
+            return;
+          }
+          const blob = await response.blob();
+          const disposition = response.headers.get("content-disposition") || "";
+          const match = /filename="([^"]+)"/.exec(disposition);
+          const href = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = href;
+          link.download = match?.[1] || "backup.zip";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(href);
+          const sessions = response.headers.get("x-backup-sessions") || "0";
+          const unreadable = response.headers.get("x-backup-unreadable") || "0";
+          Toast.success(`Backup downloaded (${sessions} session(s))`);
+          if (status) {
+            status.textContent =
+              Number(unreadable) > 0
+                ? `Backup downloaded, but ${unreadable} secret(s) could not be decrypted on this machine.`
+                : "Backup downloaded. Dashboard users are not included.";
+          }
+        } catch {
+          Toast.error("Backup failed");
+          if (status) status.textContent = "Backup failed.";
+        }
+      });
+
+      document.getElementById("btn-backup-import")?.addEventListener("click", async () => {
+        const input = document.getElementById("migration-file");
+        const file = input?.files?.[0];
+        const status = document.getElementById("migration-status");
+        if (!file) {
+          Toast.warning("Choose a .zip backup first");
+          return;
+        }
+        const strategy = document.getElementById("migration-strategy")?.value || "skip";
+        const confirmed = await window.Modal.confirm(
+          "Restore Backup",
+          strategy === "replace"
+            ? "Existing sessions in the archive will be <strong>replaced</strong>. Make sure they are disconnected. Continue?"
+            : "Sessions that already exist will be skipped. Continue?",
+          { confirmText: "Restore", cancelText: "Cancel", variant: "danger" },
+        );
+        if (!confirmed) return;
+
+        if (status) status.textContent = "Importing…";
+        const form = new FormData();
+        form.append("file", file);
+        try {
+          const response = await fetch(`/dashboard/api/data/import?strategy=${strategy}`, {
+            method: "POST",
+            credentials: "same-origin",
+            body: form,
+          });
+          const result = await response.json().catch(() => ({ success: false }));
+          if (!result.success) {
+            Toast.error(result.message || "Restore failed");
+            if (status) status.textContent = result.message || "Restore failed.";
+            return;
+          }
+          const data = result.data || {};
+          Toast.success("Backup restored");
+          if (status) {
+            status.textContent = `Imported ${data.imported?.length ?? 0}, replaced ${data.replaced?.length ?? 0}, skipped ${data.skipped?.length ?? 0}. Dashboard users must be created again.`;
+          }
+          if (input) input.value = "";
+          window.App?.refreshAvailability?.();
+        } catch {
+          Toast.error("Restore failed");
+          if (status) status.textContent = "Restore failed.";
+        }
+      });
 
       // Password logic
       document

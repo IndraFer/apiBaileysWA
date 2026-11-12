@@ -57,6 +57,7 @@ import {
   normalizeAutoReplyConfig,
   resolveAutoReplyConfig,
 } from "@/services/autoReply";
+import { applyBackup, buildBackup } from "@/services/dataMigration";
 import {
   clearDeadLetters,
   type DeadLetterEntry,
@@ -87,6 +88,7 @@ type DashboardCapability =
   | "viewSessions"
   | "viewGroups"
   | "viewMemory"
+  | "manageData"
   | "viewChats"
   | "sendOutbound"
   | "replyIncoming"
@@ -110,6 +112,7 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "manageGroups",
     "viewGroups",
     "viewMemory",
+    "manageData",
     "manageEvents",
   ]),
   manager: new Set([
@@ -1541,6 +1544,90 @@ dashboardApi.post("/sessions/:sessionId/chats/end", async (c) => {
   try {
     await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
     return c.json({ success: true, message: "Chat ended; memory cleared", data: { jid } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/data/export
+ * Download a backup archive. Admin only: it contains session credentials and
+ * plaintext secrets.
+ */
+dashboardApi.get("/data/export", (c) => {
+  const denied = requireCapability(c, "manageData");
+  if (denied) return denied;
+
+  const includeMedia = c.req.query("media") === "true";
+  try {
+    const { zip, filename, manifest } = buildBackup({ includeMedia });
+    logger.info(
+      "[Dashboard] Backup exported by %s: %d session(s), media=%s",
+      getDashboardUserPayload(c).username,
+      manifest.sessions.length,
+      includeMedia,
+    );
+    return new Response(zip as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+        "X-Backup-Sessions": String(manifest.sessions.length),
+        "X-Backup-Unreadable": String(manifest.unreadable.length),
+      },
+    });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * POST /dashboard/api/data/import
+ * Restore a backup archive. Strategy is skip (default) or replace.
+ */
+dashboardApi.post("/data/import", async (c) => {
+  const denied = requireCapability(c, "manageData");
+  if (denied) return denied;
+
+  let bytes: Uint8Array;
+  try {
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return c.json({ success: false, message: "Attach a .zip backup as 'file'" }, 400);
+    }
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch {
+    return c.json({ success: false, message: "Could not read the uploaded file" }, 400);
+  }
+
+  const rawStrategy = String(c.req.query("strategy") || "skip");
+  const strategy = rawStrategy === "replace" ? "replace" : "skip";
+
+  try {
+    const report = applyBackup(bytes, strategy, (sessionId) =>
+      Boolean(connectionManager.getSessionStatus(sessionId).connected),
+    );
+    const reload = await connectionManager.loadSessions(report.imported);
+
+    logger.info(
+      "[Dashboard] Backup imported by %s: %d imported, %d replaced, %d skipped",
+      getDashboardUserPayload(c).username,
+      report.imported.length,
+      report.replaced.length,
+      report.skipped.length,
+    );
+
+    return c.json({
+      success: true,
+      message: "Backup imported",
+      data: {
+        ...report,
+        loaded: reload.loaded,
+        failedToLoad: reload.failed,
+        dashboardUsers: "not-included",
+      },
+    });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

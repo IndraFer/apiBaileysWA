@@ -20,6 +20,29 @@ class ConnectionManager {
   /**
    * Reconnect all saved sessions on startup.
    */
+  /**
+   * Bring specific sessions online without a process restart. Existing
+   * connections are closed first, so a replaced auth state is read fresh.
+   */
+  async loadSessions(ids: string[]): Promise<{ loaded: string[]; failed: string[] }> {
+    const loaded: string[] = [];
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        if (this.connections.get(id)?.isConnected) {
+          failed.push(id);
+          continue;
+        }
+        await this.reconnectSession(id);
+        loaded.push(id);
+      } catch (error) {
+        logger.error("Failed to load imported session %s: %s", id, errorToString(error));
+        failed.push(id);
+      }
+    }
+    return { loaded, failed };
+  }
+
   async reconnectSavedSessions(): Promise<void> {
     const saved = await getSavedSessionsWithMetadata<SessionMetadata>();
 

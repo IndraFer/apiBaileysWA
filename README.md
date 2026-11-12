@@ -1769,6 +1769,30 @@ baileys-wa-api/
 > settings that change behaviour most often; AI and routing defaults are listed
 > in the AI section.
 
+### Data migrations
+
+**Settings → Data Migrations** (admin only) exports and restores a zip of the
+file-based state: session auth, session snapshots, `data/ai-memory/`,
+`data/api-keys.json`, and optionally `media/`.
+
+- **Not included, on purpose**: `.env` (this machine's keys) and
+  `data/dashboard-users.json` (password hashes, admin accounts). The manifest
+  states both, and a restore creates dashboard users from scratch.
+- **Secrets are decrypted on export and re-encrypted on import**, because they
+  are bound to `CONFIG_ENC_KEY`. A value that cannot be decrypted on the source
+  is listed in the manifest as `unreadable` instead of disappearing silently.
+- **The archive therefore holds plaintext secrets** (provider keys, webhook
+  secrets). Treat it like an `.env` file and delete it after restoring.
+- **Collisions**: `skip` (default) leaves existing sessions alone; `replace`
+  overwrites them and is refused while that session is connected. A connected
+  session is never overwritten.
+- **No restart needed**: imported sessions are loaded after the restore, and
+  replaced ones are recreated from the restored auth state.
+- **One credential set belongs to one running instance.** Copying a session to a
+  second machine and running both means two processes sharing one linked-device
+  identity; pair the second number separately instead.
+- Archive name: `<YYYYMMDD-HHMMSS>-<host>-Backup.zip`, so backups sort by time.
+
 ### CORS & reverse-proxy notes
 
 - **`CORS_ORIGIN=*`** (default) is safe for a token-based public API: CORS only controls which browser origins may *read responses*, it is **not** authentication — requests still need `AUTH_GLOBAL_TOKEN` / API keys. Restrict it (comma-separated origins) when a browser dashboard on another domain must talk to this API, or when you never want other sites to read responses.
