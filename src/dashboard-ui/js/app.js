@@ -18,6 +18,7 @@
       "viewEvents",
       "manageEvents",
       "sendBulk",
+      "viewMemory",
     ]),
     manager: new Set([
       "viewSessions",
@@ -33,6 +34,7 @@
       "viewSettings",
       "viewEvents",
       "sendBulk",
+      "viewMemory",
     ]),
     assistant: new Set([
       "viewSessions",
