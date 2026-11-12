@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.2] - 2026-11-12
+
+### Fixed
+
+- three KPI cards per row
+
 ## [1.45.1] - 2026-11-12
 
 ### Fixed
