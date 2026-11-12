@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.5] - 2026-11-12
+
+### Fixed
+
+- resolve a LID room from its PN participant
+
 ## [1.44.4] - 2026-11-12
 
 ### Added
