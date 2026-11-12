@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.40.0] - 2026-11-12
+
+### Added
+
+- group participant memory and periodic group digest
+
 ## [1.39.0] - 2026-11-12
 
 ### Added
