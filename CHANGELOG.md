@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.3] - 2026-11-12
+
+### Fixed
+
+- send-tool and vision panels sit under their own toggles
+
 ## [1.45.2] - 2026-11-12
 
 ### Fixed
