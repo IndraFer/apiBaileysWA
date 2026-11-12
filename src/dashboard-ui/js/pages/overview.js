@@ -78,7 +78,7 @@
       UI.setHtml(
         document.getElementById("page-content"),
         `
-        <div class="stats-grid" id="dash-kpis">
+        <div class="stats-grid cols-3" id="dash-kpis">
           ${Array.from({ length: 6 })
             .map(
               () =>
