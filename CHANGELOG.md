@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-11-12
+
+### Added
+
+- digest covers the whole group, configurable, plus memory retrieval
+
 ## [1.40.0] - 2026-11-12
 
 ### Added
