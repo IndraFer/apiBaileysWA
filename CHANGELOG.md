@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-11-12
+
+### Added
+
+- per-session behaviour flags, group member management, chat sync
+
 ## [1.37.0] - 2026-11-12
 
 ### Fixed
