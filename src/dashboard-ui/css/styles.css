@@ -2766,12 +2766,18 @@ details[open] > summary::before {
 
 /* Memory page pager. */
 .memory-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+.memory-footer-label {
+  justify-self: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .memory-page-size {
@@ -2791,9 +2797,33 @@ details[open] > summary::before {
 .memory-pager {
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 0.25rem;
-  margin-left: auto;
   flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.memory-page-size {
+  justify-self: start;
+}
+
+/* Small screens: stack the three zones, each centred, nothing clipped. */
+@media (max-width: 720px) {
+  .memory-footer {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    row-gap: 0.5rem;
+  }
+
+  .memory-page-size,
+  .memory-footer-label,
+  .memory-pager {
+    justify-self: center;
+  }
+
+  .memory-pager {
+    justify-content: center;
+  }
 }
 
 .memory-page-btn {
@@ -2836,16 +2866,25 @@ details[open] > summary::before {
 
 .migration-restore {
   align-items: end;
+  /* The file field takes the leftover space; the select and button stay compact. */
+  grid-template-columns: minmax(0, 1fr) 13rem auto;
 }
 
 .migration-restore .form-group {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .migration-restore-action .btn {
-  width: 100%;
+  white-space: nowrap;
 }
 
 .migration-restore input[type="file"] {
   padding: 0.3rem;
+}
+
+@media (max-width: 720px) {
+  .migration-restore {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

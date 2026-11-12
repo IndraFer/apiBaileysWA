@@ -182,7 +182,7 @@
             <button class="btn btn-outline" id="btn-backup-export" type="button">Download Backup</button>
           </div>
           <div class="u-section-divider"></div>
-          <div class="form-row cols-3 migration-restore">
+          <div class="form-row migration-restore">
             <div class="form-group">
               <label for="migration-file">Restore Archive (.zip)</label>
               <input class="input" type="file" id="migration-file" accept=".zip,application/zip" />
@@ -196,7 +196,7 @@
             </div>
             <div class="form-group migration-restore-action">
               <label>&nbsp;</label>
-              <button class="btn btn-primary btn-full" id="btn-backup-import" type="button">Restore Backup</button>
+              <button class="btn btn-primary" id="btn-backup-import" type="button">Restore Backup</button>
             </div>
           </div>
           <small class="text-muted" id="migration-status"></small>

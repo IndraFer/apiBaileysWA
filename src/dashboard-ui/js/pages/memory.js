@@ -83,6 +83,7 @@
               </select>
               items per page
             </label>
+            <span class="memory-footer-label" id="memory-page"></span>
             <div class="memory-pager" id="memory-pager"></div>
           </div>
         </div>
@@ -178,6 +179,9 @@
 
       const totalPages = Math.max(1, Math.ceil(state.total / state.limit));
       if (state.page > totalPages) state.page = totalPages;
+
+      const label = document.getElementById("memory-page");
+      if (label) label.textContent = `Page ${state.page} of ${totalPages}`;
 
       const button = (label, page, options = {}) =>
         `<button type="button" class="memory-page-btn${options.active ? " is-active" : ""}" data-page="${page}" ${
