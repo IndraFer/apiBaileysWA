@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-11-12
+
+### Added
+
+- readable retrieval timestamps, activity signal, memory viewer
+
 ## [1.41.0] - 2026-11-12
 
 ### Added
