@@ -2867,7 +2867,7 @@ details[open] > summary::before {
 .migration-restore {
   align-items: end;
   /* The file field takes the leftover space; the select and button stay compact. */
-  grid-template-columns: minmax(0, 1fr) 13rem auto;
+  grid-template-columns: minmax(0, 1fr) 16rem auto;
 }
 
 .migration-restore .form-group {
@@ -2883,8 +2883,34 @@ details[open] > summary::before {
   padding: 0.3rem;
 }
 
-@media (max-width: 720px) {
+/* Medium: archive and strategy stay side by side, the button moves to its own
+   row aligned right. */
+@media (max-width: 900px) {
+  .migration-restore {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .migration-restore-action {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .migration-restore-action label {
+    display: none;
+  }
+}
+
+/* Small: everything stacks, full width. */
+@media (max-width: 520px) {
   .migration-restore {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .migration-restore-action {
+    justify-self: stretch;
+  }
+
+  .migration-restore-action .btn {
+    width: 100%;
   }
 }
