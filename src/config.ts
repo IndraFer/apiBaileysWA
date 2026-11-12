@@ -146,6 +146,25 @@ const {
   SEARXNG_MAX_RESULTS,
   SEARXNG_LANGUAGE,
   SEARXNG_SAFESEARCH,
+  // Conversation memory (off by default).
+  AI_MEMORY_ENABLED,
+  AI_MEMORY_DIR,
+  AI_MEMORY_MODEL,
+  AI_MEMORY_SUMMARY_EVERY,
+  AI_MEMORY_SUMMARY_MAX_MESSAGES,
+  AI_MEMORY_SUMMARY_MAX_CHARS,
+  AI_MEMORY_SUMMARY_TIMEOUT_MS,
+  AI_MEMORY_FACTS_MAX_CHARS,
+  AI_MEMORY_FACTS_MAX_KEYS,
+  AI_MEMORY_FACTS_TTL_DAYS,
+  AI_MEMORY_RETRIEVE_TOP_K,
+  AI_MEMORY_RETRIEVE_MAX_CHARS,
+  AI_MEMORY_RETRIEVE_SCAN_LIMIT,
+  AI_MEMORY_RETRIEVE_TIMEOUT_MS,
+  AI_MEMORY_SEED_MIN_MESSAGES,
+  AI_MEMORY_CACHE_MAX_SCOPES,
+  AI_MEMORY_RAW_RETENTION_DAYS,
+  AI_MEMORY_RAW_MAX_BYTES,
 } = process.env;
 
 /**
@@ -157,6 +176,14 @@ const {
  * - An explicit 0 is preserved — several knobs treat 0 as "off/legacy" and
  *   must be reachable via env (previous truthiness parsing silently ignored 0).
  */
+/** Integer env value clamped into [min, max], with a default for blanks. */
+function clampNumber(raw: string | undefined, min: number, max: number, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.round(parsed), min), max);
+}
+
 function rangePair(
   minRaw: string | undefined,
   maxRaw: string | undefined,
@@ -370,6 +397,31 @@ const config = {
     maxResults: Math.min(Math.max(SEARXNG_MAX_RESULTS ? Number(SEARXNG_MAX_RESULTS) : 5, 1), 10),
     language: (SEARXNG_LANGUAGE ?? "").trim(),
     safeSearch: SEARXNG_SAFESEARCH ?? "1",
+  },
+  /**
+   * Conversation memory: rolling summary + facts, derived from an append-only
+   * JSONL log. Off by default, never on the reply's critical path.
+   */
+  aiMemory: {
+    enabled: AI_MEMORY_ENABLED === "true",
+    dir: (AI_MEMORY_DIR ?? "").trim() || "data/ai-memory",
+    /** Empty means "use the main AI model", like the vision model setting. */
+    model: (AI_MEMORY_MODEL ?? "").trim(),
+    summaryEvery: clampNumber(AI_MEMORY_SUMMARY_EVERY, 5, 200, 20),
+    summaryMaxMessages: clampNumber(AI_MEMORY_SUMMARY_MAX_MESSAGES, 5, 200, 40),
+    summaryMaxChars: clampNumber(AI_MEMORY_SUMMARY_MAX_CHARS, 200, 4000, 1200),
+    summaryTimeoutMs: clampNumber(AI_MEMORY_SUMMARY_TIMEOUT_MS, 2000, 120000, 30000),
+    factsMaxChars: clampNumber(AI_MEMORY_FACTS_MAX_CHARS, 100, 2000, 400),
+    factsMaxKeys: clampNumber(AI_MEMORY_FACTS_MAX_KEYS, 1, 200, 20),
+    factsTtlDays: clampNumber(AI_MEMORY_FACTS_TTL_DAYS, 1, 365, 7),
+    retrieveTopK: clampNumber(AI_MEMORY_RETRIEVE_TOP_K, 0, 10, 3),
+    retrieveMaxChars: clampNumber(AI_MEMORY_RETRIEVE_MAX_CHARS, 0, 4000, 800),
+    retrieveScanLimit: clampNumber(AI_MEMORY_RETRIEVE_SCAN_LIMIT, 100, 20000, 2000),
+    retrieveTimeoutMs: clampNumber(AI_MEMORY_RETRIEVE_TIMEOUT_MS, 10, 2000, 80),
+    seedMinMessages: clampNumber(AI_MEMORY_SEED_MIN_MESSAGES, 5, 500, 30),
+    cacheMaxScopes: clampNumber(AI_MEMORY_CACHE_MAX_SCOPES, 10, 5000, 200),
+    rawRetentionDays: clampNumber(AI_MEMORY_RAW_RETENTION_DAYS, 1, 3650, 180),
+    rawMaxBytes: clampNumber(AI_MEMORY_RAW_MAX_BYTES, 1_000_000, 500_000_000, 20_971_520),
   },
   ai: {
     /** "openai" calls an OpenAI-compatible API directly, "webhook" posts to a gateway. */

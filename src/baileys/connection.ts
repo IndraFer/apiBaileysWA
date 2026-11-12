@@ -37,6 +37,12 @@ import { isPrivateAddress } from "@/lib/urlGuard";
 import { activeWebhookSecrets } from "@/lib/webhookSecrets";
 import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
 import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
+import {
+  appendMessage,
+  buildMemoryBlock,
+  type MemoryScope,
+  observeConversation,
+} from "@/services/aiMemory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import {
   consumeSendQuota,
@@ -826,6 +832,8 @@ export class BaileysConnection {
     if (messages.length === 0) return;
     if (!autoReply.enabled && !ai.enabled) return;
 
+    await this.recordMemory(messages);
+
     if (this.enqueueForAi(messages, routing)) return;
 
     if (!autoReply.enabled) return;
@@ -1155,10 +1163,19 @@ export class BaileysConnection {
     }
 
     const routingCfg = resolveRoutingConfig(this.options.routing);
+    const memoryScope = this.memoryScopeFor(input.conversationId);
+    const memoryBlock = memoryScope
+      ? await buildMemoryBlock({
+          sessionId: this.sessionId,
+          conversationId: input.conversationId,
+          isGroup: false,
+        })
+      : "";
     const result = await generateAgentReply({
       sessionId: this.sessionId,
       conversationId: input.conversationId,
       texts: input.texts,
+      memoryBlock,
       history: this.buildHistory(input.conversationId, input.texts),
       ai,
       timezone: routingCfg.timezone,
@@ -1190,7 +1207,46 @@ export class BaileysConnection {
       input.conversationId,
       result.toolsUsed.length > 0 ? result.toolsUsed.join(",") : "none",
     );
+
+    if (memoryScope && result.text) {
+      await appendMessage(this.sessionId, memoryScope, {
+        id: `${Date.now()}-assistant`,
+        role: "assistant",
+        text: result.text,
+        ts: Date.now(),
+      }).catch(() => undefined);
+      observeConversation(this.sessionId, memoryScope, ai);
+    }
+
     return { ok: true, text: result.text };
+  }
+
+  /**
+   * Memory scope for a conversation. Groups are handled by a later stage, so
+   * only direct chats are recorded for now.
+   */
+  private memoryScopeFor(conversationId: string): MemoryScope | null {
+    if (!config.aiMemory.enabled) return null;
+    if (conversationId.endsWith("@g.us")) return null;
+    return { kind: "dm", conversationId };
+  }
+
+  /** Append accepted inbound texts once per event, before the AI runs. */
+  private async recordMemory(messages: WAMessage[]): Promise<void> {
+    const scope = this.memoryScopeFor(messages[0]?.key.remoteJid ?? "");
+    if (!scope) return;
+
+    const now = Date.now();
+    for (const [index, message] of messages.entries()) {
+      const text = extractMessageText(message);
+      if (!text) continue;
+      await appendMessage(this.sessionId, scope, {
+        id: message.key.id ?? `${now}-${index}`,
+        role: "user",
+        text,
+        ts: now + index,
+      }).catch(() => undefined);
+    }
   }
 
   /** Recent history, excluding the texts that are being answered now. */

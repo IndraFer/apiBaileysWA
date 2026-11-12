@@ -89,6 +89,11 @@ export interface AgentReplyRequest {
   /** Inbound texts, in arrival order (already batched by the caller). */
   texts: string[];
   history: AgentHistoryMessage[];
+  /**
+   * Labelled, low-authority memory block. It is placed in the user turn before
+   * the customer text, never as a system message.
+   */
+  memoryBlock?: string;
   ai: ResolvedAiConfig;
   /** Session timezone for the runtime date/time block. */
   timezone?: string;
@@ -236,6 +241,43 @@ interface ChatCompletionResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
+/**
+ * One plain completion for background jobs (conversation memory). Reuses the
+ * same provider, credentials and retry policy as the agent, without tools.
+ */
+export async function requestPlainCompletion(
+  ai: ResolvedAiConfig,
+  input: {
+    system: string;
+    user: string;
+    model?: string;
+    maxTokens?: number;
+    timeoutMs?: number;
+  },
+): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const endpoint = `${ai.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const outcome = await postCompletion(
+    endpoint,
+    {
+      model: input.model?.trim() || ai.model,
+      messages: [
+        { role: "system", content: input.system },
+        { role: "user", content: input.user },
+      ],
+      temperature: 0.2,
+      max_tokens: input.maxTokens ?? 700,
+      stream: false,
+    },
+    ai.apiKey,
+    input.timeoutMs ?? ai.timeoutMs,
+  );
+
+  if (!outcome.ok) return { ok: false, error: outcome.error ?? "provider error" };
+  const text = (outcome.body?.choices?.[0]?.message?.content ?? "").trim();
+  if (!text) return { ok: false, error: "provider returned an empty reply" };
+  return { ok: true, text };
+}
+
 /** Parse a Retry-After header (seconds or HTTP-date) into milliseconds. */
 function parseRetryAfter(header: string | null): number | undefined {
   if (!header) return undefined;
@@ -364,7 +406,9 @@ export async function generateAgentReply(req: AgentReplyRequest): Promise<AgentR
 
   const combined = req.texts.map((text) => maskInternalIds(text, req.sessionId)).join("\n");
   const linkContext = req.linkContext ? `\n\n${req.linkContext}` : "";
-  const textContent = wrapUserContent(`${combined}${linkContext}`);
+  const textContent = [req.memoryBlock, wrapUserContent(`${combined}${linkContext}`)]
+    .filter(Boolean)
+    .join("\n\n");
   const images = ai.vision.enabled ? (req.images ?? []).slice(0, 2) : [];
   let userContent: ChatContent = textContent;
   if (images.length > 0) {

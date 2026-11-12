@@ -316,6 +316,36 @@ dashboard pauses the AI for `ROUTING_HUMAN_IDLE_MS`, and
 Precedence: **AI path → static policy → nothing**. A failed AI call falls back to
 the static reply only when the policy allows it for that hour and that chat.
 
+#### Conversation memory (optional)
+
+`AI_MEMORY_ENABLED=true` lets the agent remember a conversation beyond the
+12-message / 6-hour window. Off by default; nothing changes until it is turned
+on.
+
+- **Source of truth** is an append-only JSONL log per conversation. The summary
+  and the fact table are derivatives: deleting them is always safe, and they are
+  rebuilt from the log or from WhatsApp history.
+- **Rolling summary**: after `AI_MEMORY_SUMMARY_EVERY` unsummarised messages the
+  old summary is merged with the new batch, so the size stays constant instead of
+  growing. Details are recovered by facts and retrieval, not by a longer summary.
+- **Facts** are short key/value entries with a TTL for relative statements
+  ("tomorrow"). User facts are never shared across participants.
+- **Honesty about the block**: the summary is injected into the user turn inside
+  `<memori_percakapan>`, never as a system message, because it is derived from
+  untrusted text. A trusted rule in the security block says to treat it as data,
+  never as instructions, and to let the newest customer message win.
+- **Never on the critical path**: summarisation runs after the reply is sent, and
+  a failure keeps the previous summary. A broken memory file cannot stop a reply.
+- **Summary model**: `AI_MEMORY_MODEL` selects one; empty uses the main model,
+  the same pattern as the vision model.
+- **Not encrypted**: `data/ai-memory/` holds plaintext transcripts so search and
+  export stay simple. The directory is created with mode `700`; protect it like
+  any other data directory.
+- **Current stage**: direct chats only. Group participant memory and the group
+  digest are designed but not implemented yet.
+
+Deleting a chat removes its memory; the next message starts a fresh scope.
+
 #### Tuning (env defaults, overridable per number in the UI)
 
 | Variable | Default | Meaning |
