@@ -6,7 +6,6 @@
 
   const state = {
     days: 7,
-    data: null,
     charts: {},
     timer: null,
     stream: null,
@@ -14,6 +13,32 @@
     loading: false,
     onVisibility: null,
   };
+
+  const ICONS = {
+    chat: '<path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/>',
+    check:
+      '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    warning:
+      '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    bolt: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/>',
+  };
+
+  function icon(name) {
+    return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.chat}</svg>`;
+  }
+
+  function statCard(tone, iconName, label, value, hint = "") {
+    return `<div class="stat-card">
+      <div class="stat-icon ${tone}">${icon(iconName)}</div>
+      <div class="stat-info">
+        <h4>${label}</h4>
+        <div class="stat-value">${value}</div>
+        ${hint ? `<small class="text-muted">${hint}</small>` : ""}
+      </div>
+    </div>`;
+  }
 
   function escapeHtml(value) {
     return String(value || "")
@@ -35,15 +60,6 @@
     return `${m}m`;
   }
 
-  function formatSince(ts) {
-    const minutes = Math.max(0, Math.round((Date.now() - Number(ts || 0)) / 60000));
-    if (minutes < 1) return "just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.round(hours / 24)}d ago`;
-  }
-
   function chartColors() {
     const styles = getComputedStyle(document.documentElement);
     const read = (name, fallback) => (styles.getPropertyValue(name) || fallback).trim();
@@ -54,7 +70,6 @@
       info: "#3b82f6",
       warn: "#f59e0b",
       danger: "#ef4444",
-      muted: "#9ca3af",
     };
   }
 
@@ -63,22 +78,8 @@
       UI.setHtml(
         document.getElementById("page-content"),
         `
-        <div class="dash-head">
-          <div>
-            <h3>Overview</h3>
-            <p class="text-muted text-sm" id="dash-meta">Loading…</p>
-          </div>
-          <div class="dash-controls">
-            <select id="dash-range" class="input">
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-            </select>
-            <button class="btn btn-outline btn-sm" id="dash-refresh" type="button">Refresh</button>
-          </div>
-        </div>
-
         <div class="stats-grid" id="dash-kpis">
-          ${Array.from({ length: 4 })
+          ${Array.from({ length: 6 })
             .map(
               () =>
                 '<div class="stat-card"><div class="skeleton skeleton-card w-full"></div></div>',
@@ -90,14 +91,23 @@
           <div class="card">
             <div class="card-header"><h3>Routing Decisions</h3></div>
             <div class="dash-chart"><canvas id="chart-routing"></canvas></div>
-            <p class="dash-note">Since restart. "Skipped" means the router declined to answer, not that a human replied.</p>
+            <p class="dash-note">Since restart. "Skipped" is a routing outcome, not a human reply.</p>
           </div>
           <div class="card">
             <div class="card-header"><h3>Hourly Activity (24h)</h3></div>
             <div class="dash-chart"><canvas id="chart-hourly"></canvas></div>
           </div>
           <div class="card">
-            <div class="card-header"><h3>Daily Trend</h3></div>
+            <div class="card-header">
+              <h3>Daily Trend</h3>
+              <div class="dash-controls">
+                <select id="dash-range" class="input">
+                  <option value="7">Last 7 days</option>
+                  <option value="30">Last 30 days</option>
+                </select>
+                <button class="btn btn-outline btn-sm" id="dash-refresh" type="button">Refresh</button>
+              </div>
+            </div>
             <div class="dash-chart"><canvas id="chart-daily"></canvas></div>
           </div>
           <div class="card">
@@ -112,8 +122,8 @@
         </div>
 
         <div class="card">
-          <div class="card-header"><h3>Recent Decisions</h3></div>
-          <div id="dash-recent"></div>
+          <div class="card-header"><h3>Server Information</h3></div>
+          <div id="dash-server"><div class="skeleton skeleton-text"></div></div>
         </div>`,
       );
 
@@ -134,11 +144,14 @@
       if (!force && Date.now() - state.lastRefresh < 2000) return;
       state.loading = true;
       try {
-        const result = await API.get(`/overview?days=${state.days}`);
-        if (!result.success) return;
-        state.data = result.data;
+        const [overview, stats] = await Promise.all([
+          API.get(`/overview?days=${state.days}`),
+          API.get("/stats"),
+        ]);
+        if (!overview.success) return;
         state.lastRefresh = Date.now();
-        this.renderData(result.data);
+        this.renderData(overview.data);
+        if (stats.success) this.renderServer(stats.data);
       } finally {
         state.loading = false;
       }
@@ -146,39 +159,46 @@
 
     renderData(data) {
       const k = data.kpis;
-      const meta = document.getElementById("dash-meta");
-      if (meta) {
-        meta.textContent = `${k.sessions} session(s) · uptime ${formatUptime(k.uptimeSeconds)} · counters since ${formatSince(data.meta.since)} · trend ${data.meta.days}d`;
-      }
-
-      const cards = [
-        { label: "Sessions", value: `${k.connected}/${k.sessions}`, hint: "connected" },
-        { label: "AI Replies", value: k.aiReplies, hint: "since restart" },
-        { label: "Skipped", value: k.skipped, hint: "router declined" },
-        {
-          label: "Avg Latency",
-          value: k.avgLatencyMs ? `${(k.avgLatencyMs / 1000).toFixed(1)}s` : "—",
-          hint: `${k.failures} failure(s)`,
-        },
-      ];
       UI.setHtml(
         document.getElementById("dash-kpis"),
-        cards
-          .map(
-            (card) => `<div class="stat-card">
-              <div class="stat-info">
-                <h4>${escapeHtml(card.label)}</h4>
-                <div class="stat-value">${escapeHtml(card.value)}</div>
-                <small class="text-muted">${escapeHtml(card.hint)}</small>
-              </div>
-            </div>`,
-          )
-          .join(""),
+        [
+          statCard("green", "chat", "Total Sessions", k.sessions),
+          statCard("blue", "check", "Connected", k.connected),
+          statCard("amber", "warning", "Disconnected", k.disconnected),
+          statCard("red", "bolt", "Uptime", formatUptime(k.uptimeSeconds)),
+          statCard("green", "clock", "AI Replies", k.aiReplies, "since restart"),
+          statCard(
+            "blue",
+            "timer",
+            "Avg Latency",
+            k.avgLatencyMs ? `${(k.avgLatencyMs / 1000).toFixed(1)}s` : "—",
+            `${k.failures} failure(s)`,
+          ),
+        ].join(""),
       );
 
       this.renderHealth(data.health);
-      this.renderRecent(data.recent);
       this.renderCharts(data);
+    },
+
+    renderServer(stats) {
+      const target = document.getElementById("dash-server");
+      if (!target) return;
+      const mem = stats.memoryUsage;
+      const restricted = Boolean(stats.infoRestricted);
+      const row = (label, value) =>
+        `<tr><td class="text-muted">${label}</td><td>${value}</td></tr>`;
+
+      UI.setHtml(
+        target,
+        `<table>
+          ${restricted ? row("System Info", '<span class="badge badge-warning">ADMIN ONLY</span>') : row("Environment", `<span class="badge badge-info">${escapeHtml(stats.environment)}</span>`)}
+          ${restricted ? "" : row("Redis", `<span class="badge ${stats.redisEnabled ? "badge-success" : "badge-warning"}">${stats.redisEnabled ? "CONNECTED" : "DISABLED"}</span>`)}
+          ${restricted ? "" : row("Memory (RSS)", `${(mem.rss / 1024 / 1024).toFixed(1)} MB`)}
+          ${restricted ? "" : row("Memory (Heap)", `${(mem.heapUsed / 1024 / 1024).toFixed(1)} / ${(mem.heapTotal / 1024 / 1024).toFixed(1)} MB`)}
+          ${row("Version", escapeHtml(stats.version))}
+        </table>`,
+      );
     },
 
     renderHealth(health) {
@@ -224,45 +244,15 @@
       );
     },
 
-    renderRecent(recent) {
-      const target = document.getElementById("dash-recent");
-      if (!target) return;
-      if (!recent?.length) {
-        UI.setHtml(
-          target,
-          '<div class="empty-state"><p class="text-muted">No routing decisions yet.</p></div>',
-        );
-        return;
-      }
-      UI.setHtml(
-        target,
-        `<div class="table-wrapper"><table>
-          <thead><tr><th>When</th><th>Session</th><th>Chat</th><th>Route</th><th>Reason</th></tr></thead>
-          <tbody>
-            ${recent
-              .map(
-                (row) => `<tr>
-                  <td class="text-muted text-xs">${new Date(row.at).toLocaleTimeString()}</td>
-                  <td>${escapeHtml(row.sessionId)}</td>
-                  <td class="text-xs">${escapeHtml(String(row.conversationId || "").replace(/@.*$/, ""))}</td>
-                  <td><span class="badge ${row.route === "ai" ? "badge-success" : row.route === "failed" ? "badge-danger" : "badge-info"}">${escapeHtml(row.route)}</span></td>
-                  <td class="text-muted text-xs">${escapeHtml(row.reason)}</td>
-                </tr>`,
-              )
-              .join("")}
-          </tbody>
-        </table></div>`,
-      );
-    },
-
     renderCharts(data) {
       if (typeof window.Chart !== "function") {
         for (const id of ["chart-routing", "chart-hourly", "chart-daily", "chart-top"]) {
           const canvas = document.getElementById(id);
+          if (!canvas) continue;
           const fallback = document.createElement("p");
           fallback.className = "text-muted text-sm";
-          fallback.textContent = "Charts need the CDN; the numbers above are authoritative.";
-          canvas?.replaceWith(fallback);
+          fallback.textContent = "Charts need the CDN; the numbers are authoritative.";
+          canvas.replaceWith(fallback);
         }
         return;
       }
