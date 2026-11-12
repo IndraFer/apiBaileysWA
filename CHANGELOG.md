@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.43.2] - 2026-11-12
+
+### Fixed
+
+- Memory page was hidden, settings divider was misplaced
+
 ## [1.43.1] - 2026-11-12
 
 ### Added
