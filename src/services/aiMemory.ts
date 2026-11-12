@@ -12,7 +12,17 @@
  *   participant in a group).
  */
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import config from "@/config";
 import logger from "@/lib/logger";
@@ -61,6 +71,8 @@ export interface ConversationMemory {
     messages: number;
     summarizedMessages: number;
     lastSummaryError: string | null;
+    /** Set once a rebuild seed was attempted, so it never loops. */
+    seededAt: number | null;
   };
 }
 
@@ -108,7 +120,7 @@ function emptyMemory(sessionId: string, scope: MemoryScope): ConversationMemory 
     pinned: [],
     createdAt: now,
     updatedAt: now,
-    stats: { messages: 0, summarizedMessages: 0, lastSummaryError: null },
+    stats: { messages: 0, summarizedMessages: 0, lastSummaryError: null, seededAt: null },
   };
 }
 
@@ -365,13 +377,15 @@ export async function summarizeScope(
   sessionId: string,
   scope: MemoryScope,
   ai: ResolvedAiConfig,
+  options?: { force?: boolean },
 ): Promise<boolean> {
   if (!config.aiMemory.enabled) return false;
   if (!ai.apiKey || !ai.baseUrl || !ai.model) return false;
 
   const memory = await loadMemory(sessionId, scope);
   const pending = (await readLog(sessionId, scope)).filter((m) => m.ts > memory.summaryUntil);
-  if (pending.length < config.aiMemory.summaryEvery) return false;
+  if (pending.length === 0) return false;
+  if (!options?.force && pending.length < config.aiMemory.summaryEvery) return false;
 
   const batch = pending.slice(0, config.aiMemory.summaryMaxMessages);
   const transcript = batch
@@ -443,6 +457,145 @@ export function observeConversation(
     .finally(() => inflight.delete(key));
 
   inflight.set(key, task);
+}
+
+/**
+ * Seed a scope from history that already exists (a chat that reappeared after
+ * deletion). Runs at most once per scope, and never blocks a reply.
+ */
+export async function seedFromHistory(
+  sessionId: string,
+  scope: MemoryScope,
+  ai: ResolvedAiConfig,
+  history: Array<{ id: string; role: "user" | "assistant"; text: string; ts: number }>,
+): Promise<void> {
+  if (!config.aiMemory.enabled) return;
+  const memory = await loadMemory(sessionId, scope);
+  if (memory.stats.seededAt) return;
+  if (history.length < config.aiMemory.seedMinMessages) return;
+
+  memory.stats.seededAt = Date.now();
+  await saveMemory(memory);
+
+  for (const entry of history) {
+    if (!entry.text) continue;
+    await appendMessage(sessionId, scope, {
+      id: entry.id,
+      role: entry.role,
+      text: entry.text,
+      ts: entry.ts,
+    }).catch(() => undefined);
+  }
+
+  await summarizeScope(sessionId, scope, ai, { force: true });
+}
+
+function shortHash(value: string, length = 8): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, length);
+}
+
+/**
+ * Remove every scope that belongs to one conversation. Groups own a digest plus
+ * one file per participant, so the participant files are matched by prefix.
+ */
+export async function forgetConversation(
+  sessionId: string,
+  conversationId: string,
+  isGroup: boolean,
+): Promise<void> {
+  if (!isGroup) {
+    await forgetScope(sessionId, { kind: "dm", conversationId });
+    return;
+  }
+
+  await forgetScope(sessionId, { kind: "group-digest", conversationId });
+
+  const prefix = `gp_${shortHash(conversationId)}_`;
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`${sessionId}:${prefix}`)) cache.delete(key);
+  }
+  for (const key of [...recentIds.keys()]) {
+    if (key.startsWith(`${sessionId}:${prefix}`)) recentIds.delete(key);
+  }
+
+  let names: string[] = [];
+  try {
+    names = await readdir(sessionDir(sessionId));
+  } catch {
+    return;
+  }
+  await Promise.all(
+    names
+      .filter((name) => name.startsWith(prefix))
+      .map((name) => unlink(join(sessionDir(sessionId), name)).catch(() => undefined)),
+  );
+}
+
+/** Remove every memory file for one session. */
+export async function forgetSession(sessionId: string): Promise<void> {
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`${sessionId}:`)) cache.delete(key);
+  }
+  for (const key of [...recentIds.keys()]) {
+    if (key.startsWith(`${sessionId}:`)) recentIds.delete(key);
+  }
+  await rm(sessionDir(sessionId), { recursive: true, force: true });
+}
+
+/** Bundle one conversation for download (dashboard only). */
+export async function exportConversation(
+  sessionId: string,
+  conversationId: string,
+  isGroup: boolean,
+): Promise<{
+  version: number;
+  sessionId: string;
+  conversationId: string;
+  exportedAt: number;
+  scopes: Array<{ scope: MemoryScope; memory: ConversationMemory; messages: MemoryMessage[] }>;
+}> {
+  const scopes: MemoryScope[] = isGroup
+    ? [{ kind: "group-digest", conversationId }]
+    : [{ kind: "dm", conversationId }];
+
+  // Every participant scope that has a file on disk.
+  if (isGroup) {
+    const prefix = `gp_${shortHash(conversationId)}_`;
+    let names: string[] = [];
+    try {
+      names = await readdir(sessionDir(sessionId));
+    } catch {
+      names = [];
+    }
+    for (const name of new Set(names.filter((n) => n.startsWith(prefix) && n.endsWith(".json")))) {
+      const key = name.slice(0, -".json".length);
+      // The hash alone identifies the file; read the JSON to recover the scope.
+      try {
+        const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
+        const parsed = JSON.parse(raw) as ConversationMemory;
+        if (parsed?.scope?.participantId) scopes.push(parsed.scope);
+      } catch {
+        void key;
+      }
+    }
+  }
+
+  const entries = [];
+  for (const scope of scopes) {
+    entries.push({
+      scope,
+      memory: await loadMemory(sessionId, scope),
+      messages: await readLog(sessionId, scope, 5000),
+    });
+  }
+
+  return {
+    version: 2,
+    sessionId,
+    conversationId,
+    exportedAt: Date.now(),
+    scopes: entries,
+  };
 }
 
 /** Forget one scope entirely. Used by clear/delete/end chat. */

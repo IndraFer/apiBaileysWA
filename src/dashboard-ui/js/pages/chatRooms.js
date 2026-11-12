@@ -325,8 +325,20 @@
         label: "Mark Read",
         icon: '<polyline points="20 6 9 17 4 12"/>',
       },
+      { separator: true },
+      {
+        action: "export",
+        label: "Export Memory",
+        icon: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+      },
+      ...(canClear ? [{ separator: true }] : []),
       ...(canClear
         ? [
+            {
+              action: "end",
+              label: "End Chat",
+              icon: '<circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>',
+            },
             {
               action: "clear",
               label: "Clear Chat",
@@ -362,10 +374,10 @@
     UI.setHtml(
       menu,
       items
-        .map(
-          (item) =>
-            `<button type="button" class="chat-action-item ${item.danger ? "chat-action-danger" : ""}" data-action="${item.action}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${item.icon}</svg><span>${item.label}</span></button>`,
-        )
+        .map((item) => {
+          if (item.separator) return '<div class="chat-action-sep" role="separator"></div>';
+          return `<button type="button" class="chat-action-item ${item.danger ? "chat-action-danger" : ""}" data-action="${item.action}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${item.icon}</svg><span>${item.label}</span></button>`;
+        })
         .join(""),
     );
     menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - (items.length * 42 + 20))}px`;
@@ -414,6 +426,51 @@
 
     if (action === "read") {
       await page.markRoomAsRead(jid, true, true);
+      return;
+    }
+
+    if (action === "export") {
+      const url = `/dashboard/api/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/memory/export`;
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (!response.ok) {
+          Toast.error("Failed to export memory");
+          return;
+        }
+        const blob = await response.blob();
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = `memory-${selectedSessionId}-${jid.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(href);
+        Toast.success("Memory exported");
+      } catch {
+        Toast.error("Failed to export memory");
+      }
+      return;
+    }
+
+    if (action === "end") {
+      const confirmed = await window.Modal.confirm(
+        "End Chat",
+        "Forget the assistant memory for this chat? Messages stay, but the summary and facts are removed. A later message starts fresh.",
+        { confirmText: "End Chat", cancelText: "Cancel", variant: "danger" },
+      );
+      if (!confirmed) return;
+      const result = await API.post(
+        `/sessions/${encodeURIComponent(selectedSessionId)}/chats/end`,
+        {
+          jid,
+        },
+      );
+      if (!result.success) {
+        Toast.error(result.message || "Failed to end chat");
+        return;
+      }
+      Toast.success("Chat ended; memory cleared");
       return;
     }
 

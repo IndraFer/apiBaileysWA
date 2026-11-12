@@ -5,7 +5,10 @@ import { join } from "node:path";
 import config from "@/config";
 import {
   appendMessage,
+  exportConversation,
+  forgetConversation,
   forgetScope,
+  forgetSession,
   loadMemory,
   type MemoryScope,
   readLog,
@@ -156,5 +159,73 @@ describe("rendering", () => {
   test("returns an empty string when there is nothing to say", async () => {
     const memory = await loadMemory("s5", { kind: "dm", conversationId: "628000@s.whatsapp.net" });
     expect(renderMemoryBlock(memory)).toBe("");
+  });
+});
+
+describe("lifecycle", () => {
+  const group = "120363000000000000@g.us";
+  const memberA = "628111@s.whatsapp.net";
+  const memberB = "628222@s.whatsapp.net";
+
+  test("forgetConversation removes a DM scope only", async () => {
+    const sessionId = "life-1";
+    const dmScope: MemoryScope = { kind: "dm", conversationId: "628333@s.whatsapp.net" };
+    await appendMessage(sessionId, dmScope, { id: "a", role: "user", text: "x", ts: 1 });
+
+    await forgetConversation(sessionId, dmScope.conversationId, false);
+    expect(await readLog(sessionId, dmScope)).toEqual([]);
+  });
+
+  test("forgetConversation clears the digest and every participant file", async () => {
+    const sessionId = "life-2";
+    const a: MemoryScope = {
+      kind: "group-participant",
+      conversationId: group,
+      participantId: memberA,
+    };
+    const b: MemoryScope = {
+      kind: "group-participant",
+      conversationId: group,
+      participantId: memberB,
+    };
+    const digest: MemoryScope = { kind: "group-digest", conversationId: group };
+
+    for (const scope of [a, b, digest]) {
+      await appendMessage(sessionId, scope, {
+        id: `${scopeKey(scope)}-1`,
+        role: "user",
+        text: "x",
+        ts: 1,
+      });
+    }
+
+    await forgetConversation(sessionId, group, true);
+
+    for (const scope of [a, b, digest]) {
+      expect(await readLog(sessionId, scope)).toEqual([]);
+      expect((await loadMemory(sessionId, scope)).summary).toBe("");
+    }
+  });
+
+  test("forgetSession removes every file for that session", async () => {
+    const sessionId = "life-3";
+    await appendMessage(sessionId, dm, { id: "z", role: "user", text: "x", ts: 1 });
+    await forgetSession(sessionId);
+    expect(await readLog(sessionId, dm)).toEqual([]);
+  });
+
+  test("export bundles the scope with its messages", async () => {
+    const sessionId = "life-4";
+    const scope: MemoryScope = { kind: "dm", conversationId: "628444@s.whatsapp.net" };
+    await appendMessage(sessionId, scope, { id: "e1", role: "user", text: "halo", ts: 5 });
+    const memory = await loadMemory(sessionId, scope);
+    memory.summary = "ringkasan";
+    await saveMemory(memory);
+
+    const bundle = await exportConversation(sessionId, scope.conversationId, false);
+    expect(bundle.version).toBe(2);
+    expect(bundle.scopes).toHaveLength(1);
+    expect(bundle.scopes[0]?.memory.summary).toBe("ringkasan");
+    expect(bundle.scopes[0]?.messages.map((m) => m.text)).toEqual(["halo"]);
   });
 });

@@ -35,13 +35,14 @@ import eventBus from "@/dashboard/eventBus";
 import logger, { baileysLogger, deepSanitizeObject } from "@/lib/logger";
 import { isPrivateAddress } from "@/lib/urlGuard";
 import { activeWebhookSecrets } from "@/lib/webhookSecrets";
-import { generateAgentReply, resolveAiConfig } from "@/services/aiAgent";
+import { generateAgentReply, type ResolvedAiConfig, resolveAiConfig } from "@/services/aiAgent";
 import { type HistoryEntry, selectHistory } from "@/services/aiHistory";
 import {
   appendMessage,
   buildMemoryBlock,
   type MemoryScope,
   observeConversation,
+  seedFromHistory,
 } from "@/services/aiMemory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import {
@@ -1167,6 +1168,7 @@ export class BaileysConnection {
 
     const routingCfg = resolveRoutingConfig(this.options.routing);
     const memoryScope = this.memoryScopeFor(input.conversationId);
+    if (memoryScope) void this.seedMemoryIfEmpty(memoryScope, ai);
     const memoryBlock = memoryScope
       ? await buildMemoryBlock({
           sessionId: this.sessionId,
@@ -1232,6 +1234,28 @@ export class BaileysConnection {
     if (!config.aiMemory.enabled) return null;
     if (conversationId.endsWith("@g.us")) return null;
     return { kind: "dm", conversationId };
+  }
+
+  /**
+   * A chat that reappears after deletion has history but no memory. Build one
+   * summary from what is stored, once, so the agent does not start from zero.
+   */
+  private async seedMemoryIfEmpty(scope: MemoryScope, ai: ResolvedAiConfig): Promise<void> {
+    try {
+      const history = this.store
+        .loadMessages(scope.conversationId, 50)
+        .map((message) => ({
+          id: message.key.id ?? "",
+          role: (message.key.fromMe ? "assistant" : "user") as "user" | "assistant",
+          text: extractMessageText(message) ?? "",
+          ts: toNumber(message.messageTimestamp || 0) * 1000,
+        }))
+        .filter((entry) => entry.text.length > 0);
+      if (history.length === 0) return;
+      await seedFromHistory(this.sessionId, scope, ai, history);
+    } catch (error) {
+      logger.debug("[%s] memory seed skipped: %s", this.sessionId, errorToString(error));
+    }
   }
 
   /** Append accepted inbound texts once per event, before the AI runs. */

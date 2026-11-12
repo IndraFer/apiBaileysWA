@@ -42,6 +42,7 @@ import {
   readStoredCredentials,
   serializeCredentials,
 } from "@/services/aiAgent";
+import { exportConversation, forgetConversation, forgetSession } from "@/services/aiMemory";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
 import { listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
@@ -397,6 +398,7 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
   if (sessionDenied) return sessionDenied;
   try {
     await connectionManager.deleteSession(sessionId);
+    await forgetSession(sessionId);
     return c.json({ success: true, message: "Session deleted" });
   } catch (err) {
     return error(c, (err as Error).message, 500);
@@ -1474,6 +1476,59 @@ dashboardApi.post("/sessions/:sessionId/chats/delete", async (c) => {
 });
 
 /**
+ * POST /dashboard/api/sessions/:sessionId/chats/end
+ *
+ * Ends a conversation for the assistant: the memory is forgotten, but the chat
+ * and its messages stay. The next inbound message starts a fresh scope and can
+ * rebuild a summary from whatever history is available.
+ */
+dashboardApi.post("/sessions/:sessionId/chats/end", async (c) => {
+  const denied = requireCapability(c, "manageSessions");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const body = await c.req.json().catch(() => ({}));
+  const jid = typeof body.jid === "string" ? body.jid.trim() : "";
+  if (!jid) return c.json({ success: false, message: "Provide the jid of the open chat" }, 400);
+
+  try {
+    await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
+    return c.json({ success: true, message: "Chat ended; memory cleared", data: { jid } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/sessions/:sessionId/chats/:jid/memory/export
+ * Download the assistant memory for one chat as a JSON bundle.
+ */
+dashboardApi.get("/sessions/:sessionId/chats/:jid/memory/export", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const bundle = await exportConversation(sessionId, jid, jid.endsWith("@g.us"));
+    const safeName = jid.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 64);
+    return new Response(JSON.stringify(bundle, null, 2), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="memory-${sessionId}-${safeName}.json"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
  * POST /dashboard/api/sessions/:sessionId/chats/clear
  *
  * Clears the history of ONE chat, in both directions: chatModify({ clear }) on
@@ -1520,6 +1575,8 @@ dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
     }
 
     const clearedMessages = store.clearChat(jid);
+    // Memory is derived from this chat, so it goes with it.
+    await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
 
     return c.json({
       success: true,
@@ -1762,6 +1819,7 @@ dashboardApi.post("/groups/:sessionId/leave-and-delete/:jid", async (c) => {
 
     await session.groupLeave(jid);
     store.deleteChat(jid);
+    await forgetConversation(sessionId, jid, true);
     return c.json({ success: true, message: "Left and deleted the group", data: { jid } });
   } catch (err) {
     return error(c, (err as Error).message, 500);

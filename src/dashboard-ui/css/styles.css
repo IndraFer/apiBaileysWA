@@ -2448,6 +2448,12 @@ details[open] > summary::before {
   background: var(--bg-input);
 }
 
+.chat-action-sep {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--border);
+}
+
 .chat-action-danger {
   color: var(--danger);
 }

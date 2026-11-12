@@ -344,12 +344,18 @@ on.
 - **Current stage**: direct chats only. Group participant memory and the group
   digest are designed but not implemented yet.
 
-**Deletion is not implemented yet.** Clearing or deleting a chat, deleting a
-session, or ending a chat currently leaves the memory files in place:
-`data/ai-memory/<sessionId>/` keeps the plaintext transcript until the lifecycle
-hooks ship in a later stage. Treat that directory as data you must remove
-yourself, and do not enable memory on a number whose retention you cannot manage
-by hand.
+**Deletion follows the chat.** Clearing a chat, deleting it, exiting and
+deleting a group, deleting a session, or using **End Chat** removes the matching
+memory files. A group deletion also removes the group digest and every
+participant scope belonging to that group.
+
+**End Chat** forgets the assistant memory but keeps the messages. If the chat
+comes back later, the next inbound message starts a fresh scope and one seed
+summary is built from whatever history is available, so the agent does not start
+from zero.
+
+**Export** in the chat ⋯ menu downloads one JSON bundle per chat (summary, facts
+and the raw log). Group exports include the digest and every participant scope.
 
 #### Tuning (env defaults, overridable per number in the UI)
 
