@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-11-12
+
+### Added
+
+- bound the memory log, fixed storage path, memory page
+
 ## [1.42.0] - 2026-11-12
 
 ### Added
