@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-11-12
+
+### Added
+
+- analytics dashboard with charts and a daily trend
+
 ## [1.44.7] - 2026-11-12
 
 ### Fixed
