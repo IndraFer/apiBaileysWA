@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.43.1] - 2026-11-12
+
+### Added
+
+- summarise on volume as well as count, fix Memory page roles
+
 ## [1.43.0] - 2026-11-12
 
 ### Added
