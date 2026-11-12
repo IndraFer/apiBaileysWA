@@ -296,16 +296,20 @@
   function resolveExistingRoom(rawJid) {
     const target = normalizeJid(rawJid);
     const isPn = (value) => String(value).endsWith("@s.whatsapp.net");
+    const targetIsPn = isPn(target);
     const targetPhone = jidPhoneOnly(target);
 
     const match = chatCache.find((chat) => {
       const id = normalizeJid(chat.id);
       if (id === target) return true;
+      // Room stored as PN, participant given as its LID alias.
       if (chat.lid && normalizeJid(chat.lid) === target) return true;
-      if (chat.phoneNumber && isPn(id) && jidPhoneOnly(chat.phoneNumber) === targetPhone) {
+      // Room stored as LID, participant given as its PN: phoneNumber is the PN
+      // alias, so it matches in both directions.
+      if (chat.phoneNumber && targetIsPn && jidPhoneOnly(chat.phoneNumber) === targetPhone) {
         return true;
       }
-      return isPn(id) && isPn(target) && jidPhoneOnly(id) === targetPhone;
+      return isPn(id) && targetIsPn && jidPhoneOnly(id) === targetPhone;
     });
 
     return match?.id ? normalizeJid(match.id) : target;
