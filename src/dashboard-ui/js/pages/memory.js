@@ -19,29 +19,6 @@
       .replace(/'/g, "&#39;");
   }
 
-  async function downloadFile(url, fallbackName) {
-    try {
-      const response = await fetch(url, { credentials: "same-origin" });
-      if (!response.ok) {
-        Toast.error("Download failed");
-        return;
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") || "";
-      const match = /filename="([^"]+)"/.exec(disposition);
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = href;
-      link.download = match?.[1] || fallbackName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(href);
-    } catch {
-      Toast.error("Download failed");
-    }
-  }
-
   function phoneOf(jid) {
     return String(jid || "").replace(/@.*$/, "");
   }
@@ -75,7 +52,7 @@
             <h3>Assistant Memory</h3>
             <span class="text-muted text-xs" id="memory-count"></span>
           </div>
-          <div class="form-row cols-2">
+          <div class="form-row memory-toolbar">
             <div class="form-group">
               <label for="memory-session">Session</label>
               <select id="memory-session" class="input">
@@ -145,18 +122,6 @@
         if (!Number.isFinite(next) || next === state.page) return;
         state.page = next;
         void this.load();
-      });
-
-      document.getElementById("memory-results")?.addEventListener("click", async (event) => {
-        const button =
-          event.target instanceof Element ? event.target.closest("[data-export-jid]") : null;
-        if (!button) return;
-        const chatJid = button.getAttribute("data-export-jid");
-        if (!chatJid) return;
-        await downloadFile(
-          `/dashboard/api/sessions/${encodeURIComponent(state.sessionId)}/chats/${encodeURIComponent(chatJid)}/memory/export`,
-          `memory-${state.sessionId}.json`,
-        );
       });
 
       await this.load();
@@ -279,10 +244,7 @@
                   <span class="badge ${kind.tone}">${kind.text}</span>
                   <strong class="u-ml-05">${escapeHtml(targetLabel(item))}</strong>
                 </div>
-                <div class="memory-block-actions">
-                  <span class="text-muted text-xs">${item.messages} summarised · ${new Date(item.updatedAt).toLocaleString()}</span>
-                  <button type="button" class="btn btn-outline btn-sm" data-export-jid="${escapeHtml(item.conversationId)}">Export</button>
-                </div>
+                <span class="text-muted text-xs">${item.messages} summarised · ${new Date(item.updatedAt).toLocaleString()}</span>
               </div>
               ${
                 item.summary
