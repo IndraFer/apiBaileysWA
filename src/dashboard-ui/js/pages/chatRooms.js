@@ -171,6 +171,24 @@
     return { title, lid: showLid ? lid : "" };
   }
 
+  /**
+   * Name shown on an incoming bubble. Same fallback chain as the chat header:
+   * saved/contact name, then phone, then LID, and finally the raw JID.
+   */
+  function bubbleSenderName(msg, chatJid) {
+    const ident = chatIdentity(chatJid);
+    const senderJid = String(msg?.senderJid || msg?.key?.participant || chatJid || "");
+    const own = String(msg?.senderName || "").trim();
+    if (own) return { label: own, jid: senderJid };
+    const phone = String(msg?.senderPhone || "").trim();
+    if (phone) return { label: phone, jid: senderJid };
+    if (senderJid && !isGroupJid(senderJid)) {
+      const resolved = chatIdentity(senderJid);
+      if (resolved.title) return { label: resolved.title, jid: senderJid };
+    }
+    return { label: ident.title, jid: senderJid };
+  }
+
   function renderTextWithMarkdown(raw) {
     // WhatsApp-first parser with safe Markdown enrichment; see lib/messageFormat.js.
     return window.MessageFormat?.render(raw) ?? escapeHtml(raw);
@@ -1452,13 +1470,29 @@
         <div class="group-members-count">Members: ${members.length}</div>
         <div class="group-members-list">
           ${members
-            .map(
-              (m) =>
-                `<span class="group-member-chip">${escapeHtml((m.id || "").replace(/@s\.whatsapp\.net$/, ""))}${m.admin ? ` (${escapeHtml(String(m.admin))})` : ""}</span>`,
-            )
+            .map((m) => {
+              const jid = String(m.id || "");
+              const label =
+                String(m.name || "").trim() || String(m.phone || "").trim() || jidPhoneOnly(jid);
+              const isMe =
+                normalizeJid(jid) === normalizeJid(activeSelfJid) ||
+                normalizeJid(jid) === normalizeJid(activeSelfLid);
+              return `<span class="group-member-chip">
+                <button type="button" class="group-member-link" data-member-jid="${escapeHtml(jid)}" ${isMe ? "disabled" : ""}>${escapeHtml(label)}</button>${m.admin ? ` <span class="group-member-role">${escapeHtml(String(m.admin))}</span>` : ""}
+              </span>`;
+            })
             .join("")}
         </div>`,
       );
+
+      body.querySelectorAll(".group-member-link").forEach((button) => {
+        button.addEventListener("click", () => {
+          const jid = button.getAttribute("data-member-jid");
+          if (!jid) return;
+          Modal.hide();
+          void this.openPrivateChat(jid);
+        });
+      });
     },
 
     async loadConversation(jid, showToastOnError = true) {
@@ -1662,12 +1696,24 @@
               }
             }
 
+            const sender = !fromMe ? bubbleSenderName(msg, jid) : null;
+            // In a group the label is a shortcut to that member's direct chat.
+            // In a DM it is the same person already open, so it stays plain text.
+            const senderIsShortcut =
+              Boolean(sender?.jid) && normalizeJid(sender.jid) !== normalizeJid(jid);
+            const senderLine =
+              sender && sender.label
+                ? senderIsShortcut
+                  ? `<button type="button" class="msg-sender" data-sender-jid="${escapeHtml(sender.jid)}" title="Open this contact">${escapeHtml(sender.label)}</button>`
+                  : `<span class="msg-sender msg-sender-static">${escapeHtml(sender.label)}</span>`
+                : "";
             const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
             const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
 
             return `
               <div class="${bubbleWrap}"${dataMessageKey}>
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
+                  ${senderLine}
                   <div class="msg-text">${renderTextWithMarkdown(payload.text || "(empty)")}</div>
                   ${
                     Array.isArray(mentioned) && mentioned.length > 0
@@ -1698,6 +1744,37 @@
       if (nearBottom) {
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
+
+      // Delegated per render; the container is rebuilt on every refresh.
+      messagesEl.onclick = (event) => {
+        const el = event.target instanceof Element ? event.target.closest(".msg-sender") : null;
+        if (!el) return;
+        const senderJid = el.getAttribute("data-sender-jid") || "";
+        if (!senderJid) return;
+        if (normalizeJid(senderJid) === normalizeJid(jid)) return;
+        void this.openPrivateChat(senderJid);
+      };
+    },
+
+    /** Jump from a group bubble or member list to that person's direct chat. */
+    async openPrivateChat(participantJid) {
+      const target = normalizeJid(participantJid);
+      if (!target || !selectedSessionId) return;
+      if (isGroupJid(target)) {
+        Toast.warning("Pick a group member, not the group itself.");
+        return;
+      }
+
+      selectedMode = "personal";
+      document.querySelectorAll(".chatrooms-mode-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.mode === "personal");
+      });
+      document.getElementById("chatrooms-create-group")?.classList.add("hidden");
+
+      selectedJid = target;
+      await this.loadChatList(true);
+      await this.loadConversation(target);
+      await this.markRoomAsRead(target, false, true);
     },
 
     async refreshCurrentConversation(showToastOnError = false) {

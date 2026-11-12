@@ -364,12 +364,39 @@ export class MemoryStore extends EventEmitter {
       .map(enrich);
   }
 
+  /**
+   * Display name and phone for any JID, using the same priority as the chat
+   * list: saved contact name, then push name, then verified name, then phone.
+   * The UI uses it for chat bubbles and member lists, so both stay consistent.
+   */
+  identityFor(jidRaw: string): { name: string; phone: string } {
+    const id = jidNormalizedUser(String(jidRaw ?? ""));
+    const alternate = this.pnToLid.get(id) || this.lidToPn.get(id);
+    const records = [
+      this.contacts.get(id),
+      alternate ? this.contacts.get(alternate) : undefined,
+    ].filter((contact): contact is Record<string, unknown> => Boolean(contact));
+
+    const savedName = records.map((c) => String(c.name || "").trim()).find(Boolean);
+    const pushName = records.map((c) => String(c.notify || "").trim()).find(Boolean);
+    const verifiedName = records.map((c) => String(c.verifiedName || "").trim()).find(Boolean);
+
+    const pn = id.endsWith("@s.whatsapp.net") ? id : this.lidToPn.get(id) || "";
+    return {
+      name: savedName || pushName || verifiedName || "",
+      phone: pn ? pn.slice(0, -"@s.whatsapp.net".length) : "",
+    };
+  }
+
   /** Clear the unread badge for a chat (also used when the UI opens it). */
   markChatRead(jid: string): void {
     const target = normalizeJidKey(jid);
     for (const [key, chat] of this.chats) {
       if (normalizeJidKey(key) === target) {
         chat.unreadCount = 0;
+        // Without this the reset lives only in memory and the saved snapshot
+        // restores the old badge after a restart or reconnect.
+        this.dirty = true;
       }
     }
   }

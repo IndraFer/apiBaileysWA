@@ -1904,6 +1904,56 @@ details[open] > summary::before {
   overflow: auto;
 }
 
+.msg-sender {
+  display: block;
+  margin: 0 0 0.15rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.msg-sender:hover {
+  text-decoration: underline;
+}
+
+.msg-sender-static {
+  cursor: default;
+}
+
+.msg-sender-static:hover {
+  text-decoration: none;
+}
+
+.group-member-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.group-member-link:hover {
+  text-decoration: underline;
+}
+
+.group-member-link:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  text-decoration: none;
+}
+
+.group-member-role {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
 .group-member-chip {
   font-size: 0.72rem;
   padding: 0.2rem 0.45rem;

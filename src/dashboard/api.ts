@@ -1263,7 +1263,20 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const messages = session.getStore().loadMessages(jid, limit);
+    const store = session.getStore();
+    // Attach a display identity per message so group bubbles can show the
+    // sender the same way the chat list and header do.
+    const messages = store.loadMessages(jid, limit).map((message) => {
+      const senderJid = message.key.participant || message.key.remoteJid || "";
+      if (!senderJid) return message;
+      const identity = store.identityFor(senderJid);
+      return {
+        ...message,
+        senderJid,
+        senderName: identity.name,
+        senderPhone: identity.phone,
+      };
+    });
     return c.json({ success: true, data: messages });
   } catch (err) {
     return error(c, (err as Error).message, 500);
@@ -1574,6 +1587,7 @@ dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
+    const store = session.getStore();
     const metadata = await session.groupMetadata(jid);
 
     return c.json({
@@ -1581,10 +1595,16 @@ dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
       data: {
         id: metadata.id,
         subject: metadata.subject,
-        participants: (metadata.participants || []).map((p) => ({
-          id: p.id,
-          admin: p.admin || null,
-        })),
+        participants: (metadata.participants || []).map((p) => {
+          // Same identity priority as the chat list, so names match everywhere.
+          const identity = store.identityFor(p.id);
+          return {
+            id: p.id,
+            admin: p.admin || null,
+            name: identity.name,
+            phone: identity.phone,
+          };
+        }),
       },
     });
   } catch (err) {
