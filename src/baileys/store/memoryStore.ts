@@ -53,6 +53,31 @@ export class MemoryStore extends EventEmitter {
   }
 
   bind(ev: BaileysEventEmitter) {
+    // App-state sync carries the chat counters. Reading a chat on the phone
+    // reaches the server, and the resulting patch lands here, so the dashboard
+    // badge follows the phone instead of waiting for the dashboard to open it.
+    ev.on("chats.update", (updates) => {
+      for (const update of updates ?? []) {
+        const jid = update.id ? this.canonicalRoomJid(update.id) : "";
+        if (!jid) continue;
+        const chat = this.chats.get(jid);
+        if (!chat) continue;
+        if (typeof update.unreadCount === "number" && update.unreadCount >= 0) {
+          if (chat.unreadCount !== update.unreadCount) {
+            chat.unreadCount = update.unreadCount;
+            this.dirty = true;
+          }
+        }
+        if (typeof update.conversationTimestamp === "number" && update.conversationTimestamp > 0) {
+          const current = Number(chat.conversationTimestamp || 0);
+          if (update.conversationTimestamp > current) {
+            chat.conversationTimestamp = update.conversationTimestamp;
+            this.dirty = true;
+          }
+        }
+      }
+    });
+
     ev.on("messages.delete", (item) => {
       this.dirty = true;
       // { jid, all: true } arrives when a chat is cleared on the account;

@@ -386,6 +386,9 @@ export class BaileysConnection {
       routing: this.options.routing,
       ai: this.options.ai,
       groupReply: this.options.groupReply,
+      autoReadMessages: this.options.autoReadMessages,
+      autoMarkOnline: this.options.autoMarkOnline,
+      rejectCalls: this.options.rejectCalls,
     };
   }
 
@@ -568,7 +571,7 @@ export class BaileysConnection {
     this.socket.ev.on("call", async (calls) => {
       this.sendToWebhook({ sessionId: this.sessionId, event: "call", data: calls });
 
-      if (config.simulation.rejectCalls) {
+      if (this.options.rejectCalls ?? config.simulation.rejectCalls) {
         for (const call of calls) {
           if (call.status === "offer") {
             try {
@@ -1421,7 +1424,7 @@ export class BaileysConnection {
 
         if (!withinDedupe) {
           // Mark as "available" first (like opening WA Web)
-          if (config.simulation.autoMarkOnline) {
+          if (this.options.autoMarkOnline ?? config.simulation.autoMarkOnline) {
             await this.sendPresenceUpdate("available", receiver);
           }
           // Subscribe to presence & send "composing" indicator

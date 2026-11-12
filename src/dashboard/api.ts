@@ -329,6 +329,9 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       phoneNumber: body.phoneNumber,
       includeMedia: body.includeMedia,
       syncFullHistory: body.syncFullHistory ?? false,
+      autoReadMessages: body.autoReadMessages,
+      autoMarkOnline: body.autoMarkOnline,
+      rejectCalls: body.rejectCalls,
       autoReply: normalizeAutoReplyConfig(body.autoReply),
     });
 
@@ -437,6 +440,9 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
       includeMedia: body.includeMedia ?? current.includeMedia,
       syncFullHistory: body.syncFullHistory ?? current.syncFullHistory,
       autoReply: body.autoReply ? normalizeAutoReplyConfig(body.autoReply) : current.autoReply,
+      autoReadMessages: body.autoReadMessages ?? current.autoReadMessages,
+      autoMarkOnline: body.autoMarkOnline ?? current.autoMarkOnline,
+      rejectCalls: body.rejectCalls ?? current.rejectCalls,
     };
 
     if (live) await connectionManager.updateSessionSettings(sessionId, next);
@@ -1590,23 +1596,62 @@ dashboardApi.get("/sessions/:sessionId/groups/:jid/members", async (c) => {
     const store = session.getStore();
     const metadata = await session.groupMetadata(jid);
 
+    const self = session.user as { id?: string; lid?: string } | null;
+    const normalize = (value: string) => String(value ?? "").replace(/:\d+(?=@)/, "");
+    const selfIds = new Set(
+      [self?.id, self?.lid].filter(Boolean).map((v) => normalize(v as string)),
+    );
+
+    const participants = (metadata.participants || []).map((p) => {
+      // Same identity priority as the chat list, so names match everywhere.
+      const identity = store.identityFor(p.id);
+      return {
+        id: p.id,
+        admin: p.admin || null,
+        name: identity.name,
+        phone: identity.phone,
+        isSelf: selfIds.has(normalize(p.id)),
+      };
+    });
+    const selfParticipant = participants.find((p) => p.isSelf);
+
     return c.json({
       success: true,
       data: {
         id: metadata.id,
         subject: metadata.subject,
-        participants: (metadata.participants || []).map((p) => {
-          // Same identity priority as the chat list, so names match everywhere.
-          const identity = store.identityFor(p.id);
-          return {
-            id: p.id,
-            admin: p.admin || null,
-            name: identity.name,
-            phone: identity.phone,
-          };
-        }),
+        // Only a group admin may remove someone; the UI needs to know this.
+        selfAdmin: selfParticipant?.admin ?? null,
+        participants,
       },
     });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * POST /dashboard/api/sessions/:sessionId/groups/:jid/kick
+ * Remove one participant. Group admins only; dashboard capability keeps it to
+ * admin/manager roles.
+ */
+dashboardApi.post("/sessions/:sessionId/groups/:jid/kick", async (c) => {
+  const denied = requireCapability(c, "manageGroups");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  const body = await c.req.json().catch(() => ({}));
+  const participant = String(body.participant || "").trim();
+  if (!participant) return c.json({ success: false, message: "Participant is required" }, 400);
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    await session.groupParticipantsUpdate(jid, [participant], "remove");
+    logger.info("[Dashboard] Removed %s from %s", participant, jid);
+    return c.json({ success: true, message: "Participant removed" });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

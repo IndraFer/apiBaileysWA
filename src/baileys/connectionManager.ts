@@ -52,6 +52,9 @@ class ConnectionManager {
           routing: metadata?.routing,
           ai: metadata?.ai,
           groupReply: metadata?.groupReply,
+          autoReadMessages: metadata?.autoReadMessages,
+          autoMarkOnline: metadata?.autoMarkOnline,
+          rejectCalls: metadata?.rejectCalls,
           isReconnect: true,
           onConnectionClose: () => {
             this.connections.delete(id);
@@ -159,6 +162,9 @@ class ConnectionManager {
       routing: metadata.routing,
       ai: metadata.ai,
       groupReply: metadata.groupReply,
+      autoReadMessages: metadata.autoReadMessages,
+      autoMarkOnline: metadata.autoMarkOnline,
+      rejectCalls: metadata.rejectCalls,
       isReconnect: true,
       onConnectionClose: () => {
         this.connections.delete(sessionId);
@@ -224,6 +230,9 @@ class ConnectionManager {
     webhookSecretLast4: string;
     webhookEvents: string[];
     autoReply: SessionMetadata["autoReply"];
+    autoReadMessages: boolean | undefined;
+    autoMarkOnline: boolean | undefined;
+    rejectCalls: boolean | undefined;
     /** Epoch ms of the newest known chat activity, or null when never seen. */
     lastActiveAt: number | null;
   }> {
@@ -246,6 +255,9 @@ class ConnectionManager {
         webhookSecretLast4: secret ? secret.slice(-4) : "",
         webhookEvents: conn.getOptions().webhookEvents || [],
         autoReply: conn.getOptions().autoReply,
+        autoReadMessages: conn.getOptions().autoReadMessages,
+        autoMarkOnline: conn.getOptions().autoMarkOnline,
+        rejectCalls: conn.getOptions().rejectCalls,
         lastActiveAt,
       };
     });

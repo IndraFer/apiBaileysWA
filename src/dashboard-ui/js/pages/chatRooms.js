@@ -1464,22 +1464,36 @@
         return;
       }
 
+      // Kick needs both: this account is a group admin, and the dashboard role is
+      // allowed to manage groups (assistant is not).
+      const canKick = Boolean(result.data?.selfAdmin) && can("manageGroups");
+
       UI.setHtml(
         body,
         `
-        <div class="group-members-count">Members: ${members.length}</div>
+        <div class="group-members-count">Members: ${members.length}${result.data?.selfAdmin ? ` · You are ${escapeHtml(String(result.data.selfAdmin))}` : ""}</div>
         <div class="group-members-list">
           ${members
             .map((m) => {
-              const jid = String(m.id || "");
+              const memberJid = String(m.id || "");
               const label =
-                String(m.name || "").trim() || String(m.phone || "").trim() || jidPhoneOnly(jid);
-              const isMe =
-                normalizeJid(jid) === normalizeJid(activeSelfJid) ||
-                normalizeJid(jid) === normalizeJid(activeSelfLid);
-              return `<span class="group-member-chip">
-                <button type="button" class="group-member-link" data-member-jid="${escapeHtml(jid)}" ${isMe ? "disabled" : ""}>${escapeHtml(label)}</button>${m.admin ? ` <span class="group-member-role">${escapeHtml(String(m.admin))}</span>` : ""}
-              </span>`;
+                String(m.name || "").trim() ||
+                String(m.phone || "").trim() ||
+                jidPhoneOnly(memberJid);
+              const isMe = m.isSelf === true;
+              const role = m.admin ? String(m.admin) : "";
+              return `<div class="group-member-row">
+                <div class="group-member-id">
+                  <button type="button" class="group-member-link" data-member-jid="${escapeHtml(memberJid)}" title="Open this contact">${escapeHtml(label)}</button>
+                  ${isMe ? '<span class="group-member-role">you</span>' : ""}
+                  ${role ? `<span class="badge ${role === "superadmin" ? "badge-success" : "badge-info"}">${escapeHtml(role)}</span>` : ""}
+                </div>
+                ${
+                  canKick && !isMe
+                    ? `<button type="button" class="btn btn-outline-danger btn-sm" data-kick-jid="${escapeHtml(memberJid)}">Kick</button>`
+                    : ""
+                }
+              </div>`;
             })
             .join("")}
         </div>`,
@@ -1487,10 +1501,37 @@
 
       body.querySelectorAll(".group-member-link").forEach((button) => {
         button.addEventListener("click", () => {
-          const jid = button.getAttribute("data-member-jid");
-          if (!jid) return;
+          const memberJid = button.getAttribute("data-member-jid");
+          if (!memberJid) return;
           Modal.hide();
-          void this.openPrivateChat(jid);
+          void this.openPrivateChat(memberJid);
+        });
+      });
+
+      body.querySelectorAll("[data-kick-jid]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const memberJid = button.getAttribute("data-kick-jid") || "";
+          if (!memberJid) return;
+          const shownName =
+            button.closest(".group-member-row")?.querySelector(".group-member-link")?.textContent ||
+            jidPhoneOnly(memberJid);
+          const confirmed = await window.Modal.confirm(
+            "Remove Member",
+            `Remove <strong>${escapeHtml(shownName)}</strong> from this group?`,
+            { confirmText: "Remove", cancelText: "Cancel", variant: "danger" },
+          );
+          if (!confirmed) return;
+
+          const kicked = await API.post(
+            `/sessions/${encodeURIComponent(selectedSessionId)}/groups/${encodeURIComponent(jid)}/kick`,
+            { participant: memberJid },
+          );
+          if (!kicked.success) {
+            Toast.error(kicked.message || "Failed to remove member");
+            return;
+          }
+          Toast.success("Member removed");
+          await this.showGroupMembers(jid);
         });
       });
     },

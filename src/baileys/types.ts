@@ -253,6 +253,10 @@ export interface SessionOptions {
   simulateTyping?: boolean;
   /** Override: auto-read incoming messages (per-session) */
   autoReadMessages?: boolean;
+  /** Override: mark presence "available" before composing (per-session) */
+  autoMarkOnline?: boolean;
+  /** Override: reject incoming calls automatically (per-session) */
+  rejectCalls?: boolean;
   /** Auto-reply configuration */
   autoReply?: AutoReplyConfig;
   /** Time-based routing between human CS and AI agent */
@@ -278,6 +282,9 @@ export interface SessionMetadata {
   routing?: RoutingConfig;
   ai?: AiAgentConfig;
   groupReply?: GroupReplyConfig;
+  autoReadMessages?: boolean;
+  autoMarkOnline?: boolean;
+  rejectCalls?: boolean;
 }
 
 export interface WebhookPayload {

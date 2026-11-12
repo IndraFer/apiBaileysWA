@@ -31,6 +31,9 @@ export const createSessionSchema = z
     phoneNumber: z.string().optional(),
     includeMedia: z.boolean().optional(),
     syncFullHistory: z.boolean().optional().default(false),
+    autoReadMessages: z.boolean().optional(),
+    autoMarkOnline: z.boolean().optional(),
+    rejectCalls: z.boolean().optional(),
     autoReply: autoReplySchema,
   })
   .optional()

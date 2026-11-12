@@ -325,6 +325,16 @@
         `Update Settings — ${escapeHtml(sessionId)}`,
         `
         <form id="update-session-form">
+          <div class="u-section-divider">
+            <h4 class="u-fs-09-mb-1">Behaviour</h4>
+            <label class="checkbox-label"><input type="checkbox" id="update-autoread" ${session.autoReadMessages === true ? "checked" : ""} /> Auto-Read Messages</label>
+            <small class="text-muted u-block-mt-035">Marks incoming messages as read. Default comes from the server env; override per number here.</small>
+            <label class="checkbox-label"><input type="checkbox" id="update-autoonline" ${session.autoMarkOnline !== false ? "checked" : ""} /> Auto-Mark Online</label>
+            <small class="text-muted u-block-mt-035">Sets presence to available before composing. Default comes from the server env.</small>
+            <label class="checkbox-label"><input type="checkbox" id="update-rejectcalls" ${session.rejectCalls === true ? "checked" : ""} /> Auto-Reject Calls</label>
+            <small class="text-muted u-block-mt-035">Rejects incoming calls automatically. Default comes from the server env.</small>
+          </div>
+
           <div class="form-group">
             <label for="update-webhook">Webhook URL</label>
             <input type="url" id="update-webhook" placeholder="https://your-server.com/webhook" value="${escapeHtml(session.webhookUrl || "")}" />
@@ -348,6 +358,9 @@
         const body = {
           webhookUrl: document.getElementById("update-webhook").value.trim(),
           webhookSecret: document.getElementById("update-secret").value.trim(),
+          autoReadMessages: Boolean(document.getElementById("update-autoread")?.checked),
+          autoMarkOnline: Boolean(document.getElementById("update-autoonline")?.checked),
+          rejectCalls: Boolean(document.getElementById("update-rejectcalls")?.checked),
         };
 
         const result = await API.patch(`/sessions/${sessionId}/settings`, body);
