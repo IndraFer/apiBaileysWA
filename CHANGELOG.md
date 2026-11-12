@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.1] - 2026-11-12
+
+### Fixed
+
+- restore the informative KPI cards, drop the header gimmick
+
 ## [1.45.0] - 2026-11-12
 
 ### Added
