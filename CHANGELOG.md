@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-11-12
+
+### Added
+
+- backup and restore for file-based data
+
+### Changed
+
+- update dependencies to their latest releases
+
 ## [1.43.2] - 2026-11-12
 
 ### Fixed
