@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-11-12
+
+### Added
+
+- add opt-in conversation memory for direct chats
+
 ## [1.35.0] - 2026-11-11
 
 ### Added
