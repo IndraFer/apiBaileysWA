@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.1] - 2026-11-12
+
+### Added
+
+- quoted replies, resolved mentions, grouped pager, tidier migration card
+
 ## [1.44.0] - 2026-11-12
 
 ### Added
