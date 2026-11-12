@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.7] - 2026-11-12
+
+### Fixed
+
+- drop the per-row export and align the memory toolbar
+
 ## [1.44.6] - 2026-11-12
 
 ### Fixed
