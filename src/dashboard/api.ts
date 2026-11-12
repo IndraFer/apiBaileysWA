@@ -140,6 +140,22 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
   ]),
 };
 
+/** Plain text out of any message content, including a quoted payload. */
+function messageTextOf(content: unknown): string {
+  const c = content as Record<string, Record<string, unknown> | undefined> | null;
+  const text =
+    (c?.conversation as string | undefined) ||
+    (c?.extendedTextMessage?.text as string | undefined) ||
+    (c?.imageMessage?.caption as string | undefined) ||
+    (c?.videoMessage?.caption as string | undefined) ||
+    (c?.documentMessage?.caption as string | undefined) ||
+    (
+      (c?.documentWithCaptionMessage?.message as Record<string, unknown> | undefined)
+        ?.documentMessage as Record<string, unknown> | undefined
+    )?.caption;
+  return typeof text === "string" ? text.trim() : "";
+}
+
 function getDashboardUserPayload(c: Context): DashboardUserPayload {
   return c.get("dashboardUser") as DashboardUserPayload;
 }
@@ -1321,21 +1337,7 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
     const session = connectionManager.getSession(sessionId);
     const store = session.getStore();
 
-    /** Plain text out of any message content, including a quoted payload. */
-    const contentText = (content: unknown): string => {
-      const c = content as Record<string, Record<string, unknown> | undefined> | null;
-      const text =
-        (c?.conversation as string | undefined) ||
-        (c?.extendedTextMessage?.text as string | undefined) ||
-        (c?.imageMessage?.caption as string | undefined) ||
-        (c?.videoMessage?.caption as string | undefined) ||
-        (c?.documentMessage?.caption as string | undefined) ||
-        (
-          (c?.documentWithCaptionMessage?.message as Record<string, unknown> | undefined)
-            ?.documentMessage as Record<string, unknown> | undefined
-        )?.caption;
-      return typeof text === "string" ? text.trim() : "";
-    };
+    const contentText = messageTextOf;
 
     const contextOf = (content: unknown): Record<string, unknown> | null => {
       if (!content || typeof content !== "object") return null;
@@ -1722,6 +1724,55 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/memory", async (c) => {
   try {
     const scopes = await inspectConversation(sessionId, jid, jid.endsWith("@g.us"));
     return c.json({ success: true, data: { scopes } });
+  } catch (err) {
+    return error(c, (err as Error).message, 500);
+  }
+});
+
+/**
+ * GET /dashboard/api/sessions/:sessionId/chats/:jid/export
+ * Whole stored conversation as JSON. WhatsApp does not expose full history, so
+ * this exports what the gateway still holds for the chat.
+ */
+dashboardApi.get("/sessions/:sessionId/chats/:jid/export", (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const messages = session
+      .getStore()
+      .loadMessages(jid, 5000)
+      .map((message) => ({
+        id: message.key.id ?? null,
+        fromMe: Boolean(message.key.fromMe),
+        participant: message.key.participant ?? null,
+        timestamp: Number(message.messageTimestamp) || null,
+        text: messageTextOf(message.message),
+      }))
+      .reverse();
+
+    const bundle = {
+      sessionId,
+      jid,
+      exportedAt: Date.now(),
+      count: messages.length,
+      note: "Stored messages only; WhatsApp does not provide full history to linked devices.",
+      messages,
+    };
+
+    const safeName = jid.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 64);
+    return new Response(JSON.stringify(bundle, null, 2), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="chat-${sessionId}-${safeName}.json"`,
+        "Cache-Control": "no-store",
+      },
+    });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

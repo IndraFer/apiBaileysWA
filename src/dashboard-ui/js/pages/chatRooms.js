@@ -287,6 +287,56 @@
     return null;
   }
 
+  /**
+   * Map a participant JID to the direct-chat room that already exists. A group
+   * member may be addressed by LID while the room is stored under the phone
+   * number (or the reverse), so opening "message privately" must land on the
+   * existing conversation instead of an empty duplicate.
+   */
+  function resolveExistingRoom(rawJid) {
+    const target = normalizeJid(rawJid);
+    const isPn = (value) => String(value).endsWith("@s.whatsapp.net");
+    const targetPhone = jidPhoneOnly(target);
+
+    const match = chatCache.find((chat) => {
+      const id = normalizeJid(chat.id);
+      if (id === target) return true;
+      if (chat.lid && normalizeJid(chat.lid) === target) return true;
+      if (chat.phoneNumber && isPn(id) && jidPhoneOnly(chat.phoneNumber) === targetPhone) {
+        return true;
+      }
+      return isPn(id) && isPn(target) && jidPhoneOnly(id) === targetPhone;
+    });
+
+    return match?.id ? normalizeJid(match.id) : target;
+  }
+
+  /** Fetch a download endpoint with the session cookie and save the result. */
+  async function downloadFile(url, fallbackName) {
+    try {
+      const response = await fetch(url, { credentials: "same-origin" });
+      if (!response.ok) {
+        Toast.error("Download failed");
+        return false;
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = match?.[1] || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+      return true;
+    } catch {
+      Toast.error("Download failed");
+      return false;
+    }
+  }
+
   let chatMenuElement = null;
   let chatMenuCleanup = null;
 
@@ -332,8 +382,8 @@
         icon: '<path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/>',
       },
       {
-        action: "export",
-        label: "Export Memory",
+        action: "exportchat",
+        label: "Export Chat",
         icon: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
       },
       ...(canClear ? [{ separator: true }] : []),
@@ -439,27 +489,11 @@
       return;
     }
 
-    if (action === "export") {
-      const url = `/dashboard/api/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/memory/export`;
-      try {
-        const response = await fetch(url, { credentials: "same-origin" });
-        if (!response.ok) {
-          Toast.error("Failed to export memory");
-          return;
-        }
-        const blob = await response.blob();
-        const href = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = href;
-        link.download = `memory-${selectedSessionId}-${jid.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(href);
-        Toast.success("Memory exported");
-      } catch {
-        Toast.error("Failed to export memory");
-      }
+    if (action === "exportchat") {
+      await downloadFile(
+        `/dashboard/api/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/export`,
+        `chat-${selectedSessionId}-${jid.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`,
+      );
       return;
     }
 
@@ -1534,7 +1568,7 @@
 
       UI.setHtml(
         body,
-        populated
+        `${populated
           .map((entry) => {
             const who =
               entry.scope.kind === "dm"
@@ -1567,8 +1601,18 @@
               ${pinned}
             </div>`;
           })
-          .join(""),
+          .join("")}
+        <div class="memory-modal-footer">
+          <button type="button" class="btn btn-outline btn-sm" id="memory-modal-export">Export Memory</button>
+        </div>`,
       );
+
+      document.getElementById("memory-modal-export")?.addEventListener("click", async () => {
+        await downloadFile(
+          `/dashboard/api/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/memory/export`,
+          `memory-${selectedSessionId}.json`,
+        );
+      });
     },
 
     async showGroupMembers(jid) {
@@ -1871,10 +1915,13 @@
             }
 
             const sender = !fromMe ? bubbleSenderName(msg, jid) : null;
-            // In a group the label is a shortcut to that member's direct chat.
-            // In a DM it is the same person already open, so it stays plain text.
+            // Only a group bubble is a shortcut to that member's direct chat. In
+            // a DM the message is already in that person's conversation, so the
+            // label is plain text even if the room JID and sender JID differ
+            // (a legacy LID room against a PN canonical room, for example).
+            const groupRoom = isGroupJid(jid) || selectedMode === "groups";
             const senderIsShortcut =
-              Boolean(sender?.jid) && normalizeJid(sender.jid) !== normalizeJid(jid);
+              groupRoom && Boolean(sender?.jid) && normalizeJid(sender.jid) !== normalizeJid(jid);
             const senderLine =
               sender && sender.label
                 ? senderIsShortcut
@@ -1964,10 +2011,16 @@
       });
       document.getElementById("chatrooms-create-group")?.classList.add("hidden");
 
-      selectedJid = target;
+      // Load the direct rooms first: the canonical room (PN vs LID) can only be
+      // resolved from the list that already exists on the server.
       await this.loadChatList(true);
-      await this.loadConversation(target);
-      await this.markRoomAsRead(target, false, true);
+      const roomJid = resolveExistingRoom(participantJid);
+      selectedJid = roomJid;
+
+      const searchInput = document.getElementById("chatrooms-search");
+      await this.renderChatListFromCache((searchInput?.value || "").trim().toLowerCase());
+      await this.loadConversation(roomJid);
+      await this.markRoomAsRead(roomJid, false, true);
     },
 
     async refreshCurrentConversation(showToastOnError = false) {

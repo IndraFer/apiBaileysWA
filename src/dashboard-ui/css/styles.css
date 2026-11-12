@@ -2914,3 +2914,15 @@ details[open] > summary::before {
     width: 100%;
   }
 }
+
+.memory-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.memory-block-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
