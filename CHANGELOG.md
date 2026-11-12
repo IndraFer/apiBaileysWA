@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.4] - 2026-11-12
+
+### Added
+
+- export placement, and open the existing direct room from a group
+
 ## [1.44.3] - 2026-11-12
 
 ### Fixed
