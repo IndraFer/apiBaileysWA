@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.44.2] - 2026-11-12
+
+### Fixed
+
+- restore row widths and the memory page counter
+
 ## [1.44.1] - 2026-11-12
 
 ### Added
