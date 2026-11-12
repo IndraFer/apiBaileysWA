@@ -344,7 +344,12 @@ on.
 - **Current stage**: direct chats only. Group participant memory and the group
   digest are designed but not implemented yet.
 
-Deleting a chat removes its memory; the next message starts a fresh scope.
+**Deletion is not implemented yet.** Clearing or deleting a chat, deleting a
+session, or ending a chat currently leaves the memory files in place:
+`data/ai-memory/<sessionId>/` keeps the plaintext transcript until the lifecycle
+hooks ship in a later stage. Treat that directory as data you must remove
+yourself, and do not enable memory on a number whose retention you cannot manage
+by hand.
 
 #### Tuning (env defaults, overridable per number in the UI)
 
