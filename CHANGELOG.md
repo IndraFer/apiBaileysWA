@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-11-12
+
+### Added
+
+- memory lifecycle, end chat and per-chat export
+
 ## [1.38.0] - 2026-11-12
 
 ### Added
