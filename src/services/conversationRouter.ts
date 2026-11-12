@@ -42,6 +42,8 @@ export interface ConversationRouterOptions {
     texts: string[];
     /** Image messages from this batch, for opt-in vision. */
     media?: WAMessage[];
+    /** Author of the last message; used for group participant memory. */
+    participant?: string;
   }) => Promise<RouterGeneration | AgentReplyResult>;
   /** Deliver a generated text back to the chat. */
   deliver: (conversationId: string, text: string, lastMessage: WAMessage) => Promise<void>;
@@ -267,7 +269,12 @@ export class ConversationRouter {
     state.firstAt = 0;
 
     try {
-      const result = await this.options.generateReply({ conversationId, texts, media });
+      const result = await this.options.generateReply({
+        conversationId,
+        texts,
+        media,
+        participant: lastMessage?.key.participant ?? undefined,
+      });
       if (!result.ok) {
         this.options.logger.warn(
           "[%s] AI reply failed for %s: %s",

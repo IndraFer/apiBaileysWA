@@ -16,6 +16,7 @@ import {
   renderMemoryBlock,
   saveMemory,
   scopeKey,
+  shouldRunDigest,
 } from "@/services/aiMemory";
 
 const originalDir = config.aiMemory.dir;
@@ -227,5 +228,40 @@ describe("lifecycle", () => {
     expect(bundle.scopes).toHaveLength(1);
     expect(bundle.scopes[0]?.memory.summary).toBe("ringkasan");
     expect(bundle.scopes[0]?.messages.map((m) => m.text)).toEqual(["halo"]);
+  });
+});
+
+describe("digest trigger", () => {
+  const base = {
+    now: 10_000_000,
+    lastActivityAt: 0,
+    messagesSinceDigest: 60,
+    digestsToday: 0,
+    idleMs: 900_000,
+    minMessages: 50,
+    maxPerDay: 0,
+  };
+
+  test("requires enough new messages and a quiet group", () => {
+    expect(shouldRunDigest({ ...base, lastActivityAt: base.now - 900_000 })).toBe(true);
+    // Still talking.
+    expect(shouldRunDigest({ ...base, lastActivityAt: base.now - 60_000 })).toBe(false);
+    // Not enough since the last digest.
+    expect(
+      shouldRunDigest({ ...base, messagesSinceDigest: 49, lastActivityAt: base.now - 900_000 }),
+    ).toBe(false);
+  });
+
+  test("zero means no daily cap, otherwise the cap is enforced", () => {
+    const quiet = base.now - 900_000;
+    expect(
+      shouldRunDigest({ ...base, lastActivityAt: quiet, maxPerDay: 0, digestsToday: 99 }),
+    ).toBe(true);
+    expect(shouldRunDigest({ ...base, lastActivityAt: quiet, maxPerDay: 3, digestsToday: 2 })).toBe(
+      true,
+    );
+    expect(shouldRunDigest({ ...base, lastActivityAt: quiet, maxPerDay: 3, digestsToday: 3 })).toBe(
+      false,
+    );
   });
 });

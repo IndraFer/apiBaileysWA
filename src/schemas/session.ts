@@ -133,6 +133,13 @@ export const aiVisionSchema = z
   })
   .strict();
 
+export const groupMemorySchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    digest: z.boolean().optional(),
+  })
+  .strict();
+
 export const groupReplySchema = z
   .object({
     mode: z.enum(["all", "senders", "mention"]).optional(),
@@ -200,6 +207,7 @@ export const aiConfigPatchSchema = z
     routing: routingConfigSchema.optional(),
     ai: aiConfigSchema.optional(),
     groupReply: groupReplySchema.optional(),
+    groupMemory: groupMemorySchema.optional(),
     // Kept accepted here so the AI page can save one atomic response config.
     autoReply: autoReplySchema.optional(),
   })

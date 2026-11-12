@@ -131,6 +131,17 @@ export interface GroupReplyConfig {
    */
   fallbackToStatic?: boolean;
 }
+
+/**
+ * Group conversation memory. Off by default: it costs one summary call per
+ * participant interaction, plus a periodic group digest.
+ */
+export interface GroupMemoryConfig {
+  /** Record and inject per-participant memory in groups. */
+  enabled?: boolean;
+  /** Also build a periodic group digest (topics, decisions, lead signals). */
+  digest?: boolean;
+}
 export type OtpFilterDetectionMode = "keywords" | "smart";
 
 /** Optional deny-list/keyword filter for OTP and verification messages. */
@@ -265,6 +276,8 @@ export interface SessionOptions {
   ai?: AiAgentConfig;
   /** Group auto-reply policy (applies to AI and static replies). */
   groupReply?: GroupReplyConfig;
+  /** Group conversation memory. */
+  groupMemory?: GroupMemoryConfig;
 }
 
 export interface SessionMetadata {
@@ -282,6 +295,7 @@ export interface SessionMetadata {
   routing?: RoutingConfig;
   ai?: AiAgentConfig;
   groupReply?: GroupReplyConfig;
+  groupMemory?: GroupMemoryConfig;
   autoReadMessages?: boolean;
   autoMarkOnline?: boolean;
   rejectCalls?: boolean;

@@ -341,8 +341,12 @@ on.
 - **Not encrypted**: `data/ai-memory/` holds plaintext transcripts so search and
   export stay simple. The directory is created with mode `700`; protect it like
   any other data directory.
-- **Current stage**: direct chats only. Group participant memory and the group
-  digest are designed but not implemented yet.
+- **Groups**: opt-in per session in `AI & Routing → Group Reply & Memory`.
+  **Remember Group Conversations** keeps a summary and facts per member, so one
+  member's facts never reach another. **Build Group Digest** adds a periodic
+  summary of the whole group (topics, decisions, open questions, lead signals)
+  and only runs after the group has been quiet, so cost follows quiet periods
+  rather than message volume.
 
 **Deletion follows the chat.** Clearing a chat, deleting it, exiting and
 deleting a group, deleting a session, or using **End Chat** removes the matching

@@ -605,6 +605,10 @@ dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
           senders: options.groupReply?.senders ?? [],
           fallbackToStatic: options.groupReply?.fallbackToStatic === true,
         },
+        groupMemory: {
+          enabled: options.groupMemory?.enabled === true,
+          digest: options.groupMemory?.digest === true,
+        },
         autoReply: resolveAutoReplyConfig(autoReply),
         ai: {
           enabled: ai.enabled ?? false,
@@ -707,6 +711,10 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       ...(current.groupReply ?? {}),
       ...(parsed.data.groupReply ?? {}),
     };
+    const groupMemory = {
+      ...(current.groupMemory ?? {}),
+      ...(parsed.data.groupMemory ?? {}),
+    };
     const autoReply = parsed.data.autoReply
       ? normalizeAutoReplyConfig({ ...(current.autoReply ?? {}), ...parsed.data.autoReply })
       : current.autoReply;
@@ -766,12 +774,13 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       }
     }
 
-    session.updateOptions({ routing, ai, groupReply, autoReply });
+    session.updateOptions({ routing, ai, groupReply, groupMemory, autoReply });
     await updateSessionMetadata(sessionId, {
       ...session.getSessionMetadata(),
       routing,
       ai,
       groupReply,
+      groupMemory,
       autoReply,
     });
 
@@ -789,6 +798,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       data: {
         routing,
         groupReply,
+        groupMemory,
         autoReply: resolveAutoReplyConfig(autoReply),
         ai: {
           enabled: ai.enabled ?? false,

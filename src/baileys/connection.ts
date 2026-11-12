@@ -43,6 +43,7 @@ import {
   type MemoryScope,
   observeConversation,
   seedFromHistory,
+  sweepGroupDigests,
 } from "@/services/aiMemory";
 import { recordDecision, recordUsage } from "@/services/aiMetrics";
 import {
@@ -285,6 +286,8 @@ export class BaileysConnection {
   private lidResolved = new Set<string>();
   /** Deduplicates concurrent reconciliation requests. */
   private lidReconcileInFlight: Promise<void> | null = null;
+  /** Periodic group digest sweep; only runs when the session enables it. */
+  private digestTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(sessionId: string, options: SessionOptions) {
     this.sessionId = sessionId;
@@ -387,6 +390,7 @@ export class BaileysConnection {
       routing: this.options.routing,
       ai: this.options.ai,
       groupReply: this.options.groupReply,
+      groupMemory: this.options.groupMemory,
       autoReadMessages: this.options.autoReadMessages,
       autoMarkOnline: this.options.autoMarkOnline,
       rejectCalls: this.options.rejectCalls,
@@ -630,12 +634,14 @@ export class BaileysConnection {
       logger.info("[%s] Connected successfully", this.sessionId);
       this.lidResolved.clear();
       await this.reconcileLidRooms();
+      this.startDigestSweep();
     }
 
     if (connection === "close") {
       this._isConnected = false;
       this.lidResolved.clear();
       this.lidReconcileInFlight = null;
+      this.stopDigestSweep();
       const error = lastDisconnect?.error as { output?: { statusCode?: number } } | undefined;
       const statusCode = error?.output?.statusCode;
       const shouldReconnect =
@@ -1130,6 +1136,7 @@ export class BaileysConnection {
     conversationId: string;
     texts: string[];
     media?: WAMessage[];
+    participant?: string;
   }): Promise<RouterGeneration> {
     const ai = resolveAiConfig(this.options.ai);
     const startedAt = Date.now();
@@ -1167,13 +1174,17 @@ export class BaileysConnection {
     }
 
     const routingCfg = resolveRoutingConfig(this.options.routing);
-    const memoryScope = this.memoryScopeFor(input.conversationId);
-    if (memoryScope) void this.seedMemoryIfEmpty(memoryScope, ai);
+    const isGroup = input.conversationId.endsWith("@g.us");
+    const memoryScope = this.memoryScopeFor(input.conversationId, input.participant);
+    // Seeding a group from its history would mix every member; only direct
+    // chats rebuild from stored messages.
+    if (memoryScope && !isGroup) void this.seedMemoryIfEmpty(memoryScope, ai);
     const memoryBlock = memoryScope
       ? await buildMemoryBlock({
           sessionId: this.sessionId,
           conversationId: input.conversationId,
-          isGroup: false,
+          participantId: memoryScope.participantId,
+          isGroup,
         })
       : "";
     const result = await generateAgentReply({
@@ -1227,13 +1238,37 @@ export class BaileysConnection {
   }
 
   /**
-   * Memory scope for a conversation. Groups are handled by a later stage, so
-   * only direct chats are recorded for now.
+   * Memory scope for a conversation. A group needs a participant: memory is
+   * per person so one member's facts never leak into another's reply.
    */
-  private memoryScopeFor(conversationId: string): MemoryScope | null {
+  private memoryScopeFor(conversationId: string, participant?: string): MemoryScope | null {
     if (!config.aiMemory.enabled) return null;
-    if (conversationId.endsWith("@g.us")) return null;
-    return { kind: "dm", conversationId };
+    if (!conversationId.endsWith("@g.us")) return { kind: "dm", conversationId };
+    if (this.options.groupMemory?.enabled !== true) return null;
+    if (!participant) return null;
+    return { kind: "group-participant", conversationId, participantId: participant };
+  }
+
+  /** Group digests are periodic by design: they wait for the group to go quiet. */
+  private startDigestSweep(): void {
+    if (this.digestTimer) return;
+    if (this.options.groupMemory?.enabled !== true) return;
+    if (this.options.groupMemory?.digest !== true) return;
+
+    this.digestTimer = setInterval(
+      () => {
+        const ai = resolveAiConfig(this.options.ai);
+        if (!ai.enabled) return;
+        void sweepGroupDigests(this.sessionId, ai).catch(() => undefined);
+      },
+      5 * 60 * 1000,
+    );
+    this.digestTimer.unref?.();
+  }
+
+  private stopDigestSweep(): void {
+    if (this.digestTimer) clearInterval(this.digestTimer);
+    this.digestTimer = null;
   }
 
   /**
@@ -1260,13 +1295,15 @@ export class BaileysConnection {
 
   /** Append accepted inbound texts once per event, before the AI runs. */
   private async recordMemory(messages: WAMessage[]): Promise<void> {
-    const scope = this.memoryScopeFor(messages[0]?.key.remoteJid ?? "");
-    if (!scope) return;
-
     const now = Date.now();
     for (const [index, message] of messages.entries()) {
       const text = extractMessageText(message);
       if (!text) continue;
+      const scope = this.memoryScopeFor(
+        message.key.remoteJid ?? "",
+        message.key.participant ?? undefined,
+      );
+      if (!scope) continue;
       await appendMessage(this.sessionId, scope, {
         id: message.key.id ?? `${now}-${index}`,
         role: "user",

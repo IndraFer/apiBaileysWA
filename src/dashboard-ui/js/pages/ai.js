@@ -496,7 +496,7 @@
         </div>
 
         <div class="card" id="group-reply-card">
-          <div class="card-header"><h3>Group Reply</h3></div>
+          <div class="card-header"><h3>Group Reply &amp; Memory</h3></div>
           <div class="form-group">
             <label for="group-reply-mode">Reply Policy</label>
             <select id="group-reply-mode" class="input">
@@ -512,6 +512,22 @@
             <span class="toggle-copy">
               <strong>Fallback to Static Reply in Groups</strong>
               <small>Reply with the static auto reply when the AI cannot answer here: disabled, outside its window, or failed. Off by default. A fixed message repeated in a group is easy to identify as a bot and can be reported, so enable this only when you accept that risk.</small>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="group-memory-enabled" class="toggle-input" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-copy">
+              <strong>Remember Group Conversations</strong>
+              <small>Keeps a summary and facts per member for groups where this number is addressed. Facts never leak between members. Off by default; each summary costs one model call.</small>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="group-memory-digest" class="toggle-input" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-copy">
+              <strong>Build Group Digest</strong>
+              <small>Periodically summarises the group: topics, decisions, open questions and lead signals. Runs only after the group has been quiet, so cost follows quiet periods rather than message volume.</small>
             </span>
           </label>
           <div id="group-reply-senders-wrap" class="hidden">
@@ -631,6 +647,9 @@
       document.getElementById("ai-autoreply-policy")?.addEventListener("change", () => {
         this.syncAutoReplyUi();
       });
+      document.getElementById("group-memory-enabled")?.addEventListener("change", () => {
+        this.syncGroupMemoryUi();
+      });
       document.getElementById("group-reply-mode")?.addEventListener("change", () => {
         this.syncGroupReplyUi();
       });
@@ -728,6 +747,12 @@
       set("group-reply-senders", (groupReply.senders || []).join("\n"));
       const groupFallback = document.getElementById("group-reply-fallback");
       if (groupFallback) groupFallback.checked = Boolean(groupReply.fallbackToStatic);
+      const groupMemory = data.groupMemory || {};
+      const groupMemoryOn = document.getElementById("group-memory-enabled");
+      if (groupMemoryOn) groupMemoryOn.checked = Boolean(groupMemory.enabled);
+      const groupDigestOn = document.getElementById("group-memory-digest");
+      if (groupDigestOn) groupDigestOn.checked = Boolean(groupMemory.digest);
+      this.syncGroupMemoryUi();
       this.syncSendMessageUi();
       this.syncOtpFilterUi();
       this.syncGroupReplyUi();
@@ -818,6 +843,14 @@
       document
         .getElementById("ai-autoreply-time-group")
         ?.classList.toggle("hidden", !enabled || policy !== "window");
+    },
+
+    /** The digest summarises the per-member memory, so it needs it enabled. */
+    syncGroupMemoryUi() {
+      const enabled = Boolean(document.getElementById("group-memory-enabled")?.checked);
+      const digest = document.getElementById("group-memory-digest");
+      if (digest) digest.disabled = !enabled;
+      if (!enabled && digest) digest.checked = false;
     },
 
     /** Show the sender list only when the policy needs it. */
@@ -1002,6 +1035,10 @@
           timeStart: value("ai-autoreply-start") || "18:00",
           timeEnd: value("ai-autoreply-end") || "08:00",
         }),
+        groupMemory: {
+          enabled: Boolean(document.getElementById("group-memory-enabled")?.checked),
+          digest: Boolean(document.getElementById("group-memory-digest")?.checked),
+        },
         groupReply: {
           mode: value("group-reply-mode") || "mention",
           fallbackToStatic: Boolean(document.getElementById("group-reply-fallback")?.checked),
