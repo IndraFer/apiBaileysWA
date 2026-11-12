@@ -275,12 +275,116 @@ export function renderMemoryBlock(memory: ConversationMemory): string {
   return `<memori_percakapan>\n${parts.join("\n\n")}\n</memori_percakapan>`;
 }
 
+const STOP_WORDS = new Set([
+  "yang",
+  "dan",
+  "untuk",
+  "dengan",
+  "saya",
+  "aku",
+  "kamu",
+  "ini",
+  "itu",
+  "mau",
+  "bisa",
+  "tolong",
+  "ada",
+  "dari",
+  "ke",
+  "di",
+  "the",
+  "and",
+  "for",
+  "you",
+  "with",
+  "this",
+  "that",
+  "apa",
+  "juga",
+  "saja",
+  "sudah",
+  "belum",
+  "masih",
+]);
+
+/** Words that carry meaning in this conversation; punctuation and fillers go. */
+export function extractKeywords(text: string, limit = 8): string[] {
+  const words = String(text ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
+  return [...new Set(words)].slice(0, limit);
+}
+
+/**
+ * Keyword lookup over the stored log. No embeddings and no index: a few hundred
+ * messages per scope make a scan cheaper than maintaining one.
+ */
+export async function retrieveRelevant(
+  sessionId: string,
+  scope: MemoryScope,
+  text: string,
+): Promise<string> {
+  const keywords = extractKeywords(text);
+  if (keywords.length === 0) return "";
+  if (config.aiMemory.retrieveTopK <= 0) return "";
+
+  const messages = await readLog(sessionId, scope, config.aiMemory.retrieveScanLimit);
+  const newest = messages[messages.length - 1]?.ts ?? Date.now();
+
+  const scored = messages
+    .map((message) => {
+      const haystack = message.text.toLowerCase();
+      let score = 0;
+      for (const keyword of keywords) if (haystack.includes(keyword)) score += 1;
+      if (score === 0) return null;
+      // A tiny recency bonus breaks ties without drowning the keyword match.
+      const ageHours = Math.max(0, newest - message.ts) / 3_600_000;
+      return { message, score: score + Math.max(0, 1 - ageHours / (24 * 30)) };
+    })
+    .filter((entry): entry is { message: MemoryMessage; score: number } => entry !== null)
+    .sort((a, b) => b.score - a.score || b.message.ts - a.message.ts);
+
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  let used = 0;
+  for (const entry of scored) {
+    if (lines.length >= config.aiMemory.retrieveTopK) break;
+    const key = entry.message.text.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const snippet = entry.message.text.trim().slice(0, 200);
+    const day = new Date(entry.message.ts).toISOString().slice(0, 10);
+    const line = `- ${day}: "${snippet}"`;
+    if (used + line.length + 1 > config.aiMemory.retrieveMaxChars) break;
+    used += line.length + 1;
+    lines.push(line);
+  }
+
+  return lines.join("\n");
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise
+      .then((value) => resolve(value))
+      .catch(() => resolve(null))
+      .finally(() => clearTimeout(timer));
+  });
+}
+
 /** Build the block for one request. Never throws, never waits on the model. */
 export async function buildMemoryBlock(input: {
   sessionId: string;
   conversationId: string;
   participantId?: string;
   isGroup: boolean;
+  /** Current texts, used for keyword retrieval. */
+  texts?: string[];
+  /** Per-session opt-in; requires AI_MEMORY_ENABLED. */
+  retrieval?: boolean;
 }): Promise<string> {
   if (!config.aiMemory.enabled) return "";
   try {
@@ -296,7 +400,23 @@ export async function buildMemoryBlock(input: {
     if (scope.kind === "group-participant" && !scope.participantId) return "";
 
     const memory = await loadMemory(input.sessionId, scope);
-    return renderMemoryBlock(memory);
+    const block = renderMemoryBlock(memory);
+    if (!block) return "";
+
+    if (input.retrieval === true && input.texts && input.texts.length > 0) {
+      const retrieved = await withTimeout(
+        retrieveRelevant(input.sessionId, scope, input.texts.join(" ")),
+        config.aiMemory.retrieveTimeoutMs,
+      );
+      if (retrieved) {
+        return block.replace(
+          "</memori_percakapan>",
+          `Konteks terkait (mungkin sudah usang):\n${retrieved}\n</memori_percakapan>`,
+        );
+      }
+    }
+
+    return block;
   } catch (error) {
     logger.debug("[aiMemory] block skipped: %s", errorToString(error));
     return "";
@@ -664,35 +784,6 @@ const DIGEST_PROMPT = [
   'Balas hanya JSON: {"summary":"string","openQuestions":["..."],"leadSignals":["..."]}',
 ].join("\n");
 
-/** Every participant scope that belongs to one group, found by file prefix. */
-async function groupParticipantScopes(
-  sessionId: string,
-  conversationId: string,
-): Promise<MemoryScope[]> {
-  const prefix = `gp_${shortHash(conversationId)}_`;
-  let names: string[] = [];
-  try {
-    names = await readdir(sessionDir(sessionId));
-  } catch {
-    return [];
-  }
-
-  const scopes: MemoryScope[] = [];
-  for (const name of names) {
-    if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
-    try {
-      const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
-      const parsed = JSON.parse(raw) as ConversationMemory;
-      if (parsed?.scope?.kind === "group-participant" && parsed.scope.participantId) {
-        scopes.push(parsed.scope);
-      }
-    } catch {
-      // A broken file is skipped; the sweep must not fail because of it.
-    }
-  }
-  return scopes;
-}
-
 /** Build (or refresh) the digest for one group. Returns true when it changed. */
 export async function runGroupDigest(
   sessionId: string,
@@ -711,11 +802,9 @@ export async function runGroupDigest(
     memory.stats.digestsToday = 0;
   }
 
-  const scopes = await groupParticipantScopes(sessionId, conversationId);
-  const messages: MemoryMessage[] = [];
-  for (const scope of scopes) {
-    messages.push(...(await readLog(sessionId, scope, config.aiMemory.retrieveScanLimit)));
-  }
+  // The digest scope keeps its own log of every group message, so the summary
+  // covers member-to-member chatter, not only messages addressed to the bot.
+  const messages = await readLog(sessionId, digestScope, config.aiMemory.retrieveScanLimit);
 
   const pending = messages.filter((m) => m.ts > memory.summaryUntil).sort((a, b) => a.ts - b.ts);
   if (pending.length === 0) return false;
@@ -772,6 +861,7 @@ function asStringList(value: unknown): string[] {
 export async function sweepGroupDigests(
   sessionId: string,
   ai: ResolvedAiConfig,
+  overrides?: { idleMs?: number; minMessages?: number; maxPerDay?: number },
   now = Date.now(),
 ): Promise<void> {
   if (!config.aiMemory.enabled) return;
@@ -785,7 +875,7 @@ export async function sweepGroupDigests(
 
   const groups = new Set<string>();
   for (const name of names) {
-    if (!name.startsWith("gp_") || !name.endsWith(".json")) continue;
+    if (!name.startsWith("gd_") || !name.endsWith(".json")) continue;
     try {
       const raw = await readFile(join(sessionDir(sessionId), name), "utf8");
       const parsed = JSON.parse(raw) as ConversationMemory;
@@ -799,15 +889,18 @@ export async function sweepGroupDigests(
     try {
       const digestScope: MemoryScope = { kind: "group-digest", conversationId };
       const digestMemory = await loadMemory(sessionId, digestScope);
-      const scopes = await groupParticipantScopes(sessionId, conversationId);
 
+      // The digest scope owns a log of every group message, so the sweep can
+      // measure real activity without touching participant scopes.
       let lastActivityAt = 0;
       let messagesSinceDigest = 0;
-      for (const scope of scopes) {
-        for (const message of await readLog(sessionId, scope, config.aiMemory.retrieveScanLimit)) {
-          lastActivityAt = Math.max(lastActivityAt, message.ts);
-          if (message.ts > digestMemory.summaryUntil) messagesSinceDigest += 1;
-        }
+      for (const message of await readLog(
+        sessionId,
+        digestScope,
+        config.aiMemory.retrieveScanLimit,
+      )) {
+        lastActivityAt = Math.max(lastActivityAt, message.ts);
+        if (message.ts > digestMemory.summaryUntil) messagesSinceDigest += 1;
       }
       if (lastActivityAt === 0) continue;
 
@@ -821,9 +914,9 @@ export async function sweepGroupDigests(
           lastActivityAt,
           messagesSinceDigest,
           digestsToday,
-          idleMs: config.aiMemory.digestIdleMs,
-          minMessages: config.aiMemory.digestMinMessages,
-          maxPerDay: config.aiMemory.digestMaxPerDay,
+          idleMs: overrides?.idleMs ?? config.aiMemory.digestIdleMs,
+          minMessages: overrides?.minMessages ?? config.aiMemory.digestMinMessages,
+          maxPerDay: overrides?.maxPerDay ?? config.aiMemory.digestMaxPerDay,
         })
       ) {
         continue;

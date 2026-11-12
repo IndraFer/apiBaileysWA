@@ -66,6 +66,7 @@ export interface ResolvedAiConfig {
   credentials: ToolCredentials;
   sendMessage: ResolvedSendMessageConfig;
   persona: { scope: "strict" | "flexible" };
+  retrieval: { enabled: boolean };
   webSearch: { enabled: boolean };
   vision: { enabled: boolean; model: string };
 }
@@ -193,6 +194,7 @@ export function resolveAiConfig(override?: AiAgentConfig): ResolvedAiConfig {
         : 10,
     },
     persona: resolvePersona(stored.persona),
+    retrieval: { enabled: stored.retrieval?.enabled !== false },
     webSearch: {
       enabled: stored.webSearch?.enabled ?? false,
     },

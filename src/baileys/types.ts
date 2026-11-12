@@ -137,10 +137,15 @@ export interface GroupReplyConfig {
  * participant interaction, plus a periodic group digest.
  */
 export interface GroupMemoryConfig {
-  /** Record and inject per-participant memory in groups. */
+  /** Per-member memory, for groups where the number is addressed. */
   enabled?: boolean;
-  /** Also build a periodic group digest (topics, decisions, lead signals). */
+  /** Digest of the whole group conversation (not only addressed messages). */
   digest?: boolean;
+  /** Digest trigger overrides; unset values fall back to the env defaults. */
+  digestIdleMs?: number;
+  digestMinMessages?: number;
+  /** 0 means no daily cap. */
+  digestMaxPerDay?: number;
 }
 export type OtpFilterDetectionMode = "keywords" | "smart";
 
@@ -174,6 +179,11 @@ export type AiPersonaScope = "strict" | "flexible";
 export interface AiPersonaConfig {
   /** Default: "flexible". */
   scope?: AiPersonaScope;
+}
+
+/** Keyword retrieval over stored memory; needs AI_MEMORY_ENABLED. */
+export interface AiRetrievalConfig {
+  enabled?: boolean;
 }
 
 /** Opt-in built-in web_search tool backed by the operator's SearXNG instance. */
@@ -225,6 +235,8 @@ export interface AiAgentConfig {
   sendMessage?: AiSendMessageConfig;
   /** Persona scope: how far the model may leave the configured domain. */
   persona?: AiPersonaConfig;
+  /** Keyword retrieval over conversation memory (default on when memory runs). */
+  retrieval?: AiRetrievalConfig;
   /** Optional built-in web search tool (default off, requires SEARXNG_URL). */
   webSearch?: AiWebSearchConfig;
   /** Optional image understanding (default off). */

@@ -128,6 +128,7 @@ describe("generateAgentReply runtime integration", () => {
       ragEndpoints: [],
       credentials: {},
       persona: { scope: "flexible" },
+      retrieval: { enabled: false },
       webSearch: { enabled: false },
       sendMessage: {
         enabled: true,

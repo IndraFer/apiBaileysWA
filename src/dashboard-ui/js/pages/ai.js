@@ -390,6 +390,14 @@
           <div class="card-header"><h3>AI Capabilities</h3></div>
           <div class="u-mb-05">
             <label class="toggle-row">
+              <input type="checkbox" id="ai-retrieval-enabled" class="toggle-input" />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Memory Retrieval</strong>
+                <small>Recalls older messages that match the current question. Needs conversation memory on the server. Local keyword scan only, bounded by a short timeout.</small>
+              </span>
+            </label>
+            <label class="toggle-row">
               <input type="checkbox" id="ai-web-search-enabled" class="toggle-input" />
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               <span class="toggle-copy">
@@ -518,7 +526,7 @@
             <input type="checkbox" id="group-memory-enabled" class="toggle-input" />
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-copy">
-              <strong>Remember Group Conversations</strong>
+              <strong>Group Memory Conversations</strong>
               <small>Keeps a summary and facts per member for groups where this number is addressed. Facts never leak between members. Off by default; each summary costs one model call.</small>
             </span>
           </label>
@@ -530,6 +538,23 @@
               <small>Periodically summarises the group: topics, decisions, open questions and lead signals. Runs only after the group has been quiet, so cost follows quiet periods rather than message volume.</small>
             </span>
           </label>
+          <div id="group-memory-digest-settings" class="hidden">
+            <div class="form-row cols-3">
+              <div class="form-group">
+                <label for="group-digest-idle">Quiet Before Digest (Min)</label>
+                <input id="group-digest-idle" class="input" type="number" min="1" max="1440" />
+              </div>
+              <div class="form-group">
+                <label for="group-digest-min">Minimum New Messages</label>
+                <input id="group-digest-min" class="input" type="number" min="5" max="1000" />
+              </div>
+              <div class="form-group">
+                <label for="group-digest-max">Digests Per Day</label>
+                <input id="group-digest-max" class="input" type="number" min="0" max="1000" />
+              </div>
+            </div>
+            <small class="text-muted">0 digests per day means no daily cap.</small>
+          </div>
           <div id="group-reply-senders-wrap" class="hidden">
             <div class="form-group">
               <label for="group-reply-senders">Allowed Senders</label>
@@ -650,6 +675,9 @@
       document.getElementById("group-memory-enabled")?.addEventListener("change", () => {
         this.syncGroupMemoryUi();
       });
+      document.getElementById("group-memory-digest")?.addEventListener("change", () => {
+        this.syncGroupMemoryUi();
+      });
       document.getElementById("group-reply-mode")?.addEventListener("change", () => {
         this.syncGroupReplyUi();
       });
@@ -752,6 +780,23 @@
       if (groupMemoryOn) groupMemoryOn.checked = Boolean(groupMemory.enabled);
       const groupDigestOn = document.getElementById("group-memory-digest");
       if (groupDigestOn) groupDigestOn.checked = Boolean(groupMemory.digest);
+      const digestDefaults = data.memoryDefaults || {};
+      set(
+        "group-digest-idle",
+        Math.round(
+          Number(groupMemory.digestIdleMs ?? digestDefaults.digestIdleMs ?? 900000) / 60000,
+        ),
+      );
+      set(
+        "group-digest-min",
+        groupMemory.digestMinMessages ?? digestDefaults.digestMinMessages ?? 50,
+      );
+      set("group-digest-max", groupMemory.digestMaxPerDay ?? digestDefaults.digestMaxPerDay ?? 0);
+      const retrievalEnabled = document.getElementById("ai-retrieval-enabled");
+      if (retrievalEnabled) {
+        retrievalEnabled.checked = ai.retrieval?.enabled !== false;
+        retrievalEnabled.disabled = digestDefaults.retrievalAvailable === false;
+      }
       this.syncGroupMemoryUi();
       this.syncSendMessageUi();
       this.syncOtpFilterUi();
@@ -851,6 +896,10 @@
       const digest = document.getElementById("group-memory-digest");
       if (digest) digest.disabled = !enabled;
       if (!enabled && digest) digest.checked = false;
+      const digestOn = Boolean(digest?.checked);
+      document
+        .getElementById("group-memory-digest-settings")
+        ?.classList.toggle("hidden", !enabled || !digestOn);
     },
 
     /** Show the sender list only when the policy needs it. */
@@ -1038,6 +1087,9 @@
         groupMemory: {
           enabled: Boolean(document.getElementById("group-memory-enabled")?.checked),
           digest: Boolean(document.getElementById("group-memory-digest")?.checked),
+          digestIdleMs: Math.max(1, Number(value("group-digest-idle")) || 15) * 60000,
+          digestMinMessages: Math.min(Math.max(Number(value("group-digest-min")) || 50, 5), 1000),
+          digestMaxPerDay: Math.min(Math.max(Number(value("group-digest-max")) || 0, 0), 1000),
         },
         groupReply: {
           mode: value("group-reply-mode") || "mention",

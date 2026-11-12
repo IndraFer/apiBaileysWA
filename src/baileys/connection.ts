@@ -842,6 +842,7 @@ export class BaileysConnection {
     if (messages.length === 0) return;
     if (!autoReply.enabled && !ai.enabled) return;
 
+    await this.recordGroupDigest(data.messages);
     await this.recordMemory(messages);
 
     if (this.enqueueForAi(messages, routing)) return;
@@ -1259,7 +1260,17 @@ export class BaileysConnection {
       () => {
         const ai = resolveAiConfig(this.options.ai);
         if (!ai.enabled) return;
-        void sweepGroupDigests(this.sessionId, ai).catch(() => undefined);
+        const memory = this.options.groupMemory;
+        void sweepGroupDigests(
+          this.sessionId,
+          ai,
+          {
+            idleMs: memory?.digestIdleMs,
+            minMessages: memory?.digestMinMessages,
+            maxPerDay: memory?.digestMaxPerDay,
+          },
+          Date.now(),
+        ).catch(() => undefined);
       },
       5 * 60 * 1000,
     );
@@ -1269,6 +1280,45 @@ export class BaileysConnection {
   private stopDigestSweep(): void {
     if (this.digestTimer) clearInterval(this.digestTimer);
     this.digestTimer = null;
+  }
+
+  /** True when the group digest is enabled for this session. */
+  private digestEnabled(): boolean {
+    return (
+      config.aiMemory.enabled &&
+      this.options.groupMemory?.enabled === true &&
+      this.options.groupMemory?.digest === true
+    );
+  }
+
+  /**
+   * Log every group message for the digest, including member-to-member chatter
+   * and the account's own replies. Runs before the addressing gate on purpose:
+   * the digest summarises the whole group, not just the messages sent to us.
+   */
+  private async recordGroupDigest(messages: WAMessage[]): Promise<void> {
+    if (!this.digestEnabled()) return;
+
+    const now = Date.now();
+    for (const [index, message] of messages.entries()) {
+      const remoteJid = message.key.remoteJid ?? "";
+      if (!remoteJid.endsWith("@g.us")) continue;
+      if (shouldIgnoreJid(remoteJid)) continue;
+      const text = extractMessageText(message);
+      if (!text) continue;
+
+      await appendMessage(
+        this.sessionId,
+        { kind: "group-digest", conversationId: remoteJid },
+        {
+          id: message.key.id ?? `${now}-${index}`,
+          role: message.key.fromMe ? "assistant" : "user",
+          participant: message.key.participant ?? undefined,
+          text,
+          ts: now + index,
+        },
+      ).catch(() => undefined);
+    }
   }
 
   /**

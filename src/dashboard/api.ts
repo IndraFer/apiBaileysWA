@@ -608,6 +608,16 @@ dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
         groupMemory: {
           enabled: options.groupMemory?.enabled === true,
           digest: options.groupMemory?.digest === true,
+          digestIdleMs: options.groupMemory?.digestIdleMs ?? config.aiMemory.digestIdleMs,
+          digestMinMessages:
+            options.groupMemory?.digestMinMessages ?? config.aiMemory.digestMinMessages,
+          digestMaxPerDay: options.groupMemory?.digestMaxPerDay ?? config.aiMemory.digestMaxPerDay,
+        },
+        memoryDefaults: {
+          digestIdleMs: config.aiMemory.digestIdleMs,
+          digestMinMessages: config.aiMemory.digestMinMessages,
+          digestMaxPerDay: config.aiMemory.digestMaxPerDay,
+          retrievalAvailable: config.aiMemory.enabled,
         },
         autoReply: resolveAutoReplyConfig(autoReply),
         ai: {
@@ -636,6 +646,9 @@ dashboardApi.get("/sessions/:sessionId/ai-config", async (c) => {
           },
           persona: {
             scope: ai.persona?.scope === "strict" ? "strict" : "flexible",
+          },
+          retrieval: {
+            enabled: ai.retrieval?.enabled !== false,
           },
           webSearch: {
             enabled: ai.webSearch?.enabled ?? false,
@@ -723,6 +736,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
       apiKey,
       sendMessage: sendMessagePatch,
       persona: personaPatch,
+      retrieval: retrievalPatch,
       webSearch: webSearchPatch,
       vision: visionPatch,
       otpFilter: otpFilterPatch,
@@ -735,6 +749,9 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
     }
     if (personaPatch) {
       ai.persona = { ...(current.ai?.persona ?? {}), ...personaPatch };
+    }
+    if (retrievalPatch) {
+      ai.retrieval = { ...(current.ai?.retrieval ?? {}), ...retrievalPatch };
     }
     if (webSearchPatch) {
       ai.webSearch = { ...(current.ai?.webSearch ?? {}), ...webSearchPatch };
@@ -820,6 +837,7 @@ dashboardApi.patch("/sessions/:sessionId/ai-config", async (c) => {
           persona: {
             scope: ai.persona?.scope === "strict" ? "strict" : "flexible",
           },
+          retrieval: { enabled: ai.retrieval?.enabled !== false },
           webSearch: { enabled: ai.webSearch?.enabled ?? false },
         },
       },

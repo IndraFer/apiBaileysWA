@@ -342,11 +342,18 @@ on.
   export stay simple. The directory is created with mode `700`; protect it like
   any other data directory.
 - **Groups**: opt-in per session in `AI & Routing → Group Reply & Memory`.
-  **Remember Group Conversations** keeps a summary and facts per member, so one
-  member's facts never reach another. **Build Group Digest** adds a periodic
-  summary of the whole group (topics, decisions, open questions, lead signals)
-  and only runs after the group has been quiet, so cost follows quiet periods
-  rather than message volume.
+  **Group Memory Conversations** keeps a summary and facts per member, for the
+  messages that reach the bot (mention, allowlisted sender, or every message
+  when the policy allows it). One member's facts never reach another.
+  **Build Group Digest** is the wider one: it logs *every* group message,
+  including member-to-member chatter and the account's own replies, and
+  summarises the whole group (topics, decisions, open questions, lead signals).
+  Enabling it reveals its own thresholds — quiet period, minimum new messages
+  and digests per day (`0` = no cap) — pre-filled from the server defaults.
+- **Memory Retrieval**: a toggle in `AI Capabilities`, before Allow Web Search.
+  It pulls older messages matching the current question into a
+  "possibly outdated" block. Local keyword scan, no embeddings, bounded by a
+  short timeout so a slow disk can never delay a reply.
 
 **Deletion follows the chat.** Clearing a chat, deleting it, exiting and
 deleting a group, deleting a session, or using **End Chat** removes the matching

@@ -29,6 +29,7 @@ const baseAi: ResolvedAiConfig = {
   credentials: {},
   sendMessage: { enabled: false, scope: "allowlist", allowlist: [], maxPerHour: 10 },
   persona: { scope: "flexible" },
+  retrieval: { enabled: false },
   webSearch: { enabled: false },
   vision: { enabled: true, model: "vision-model" },
 };

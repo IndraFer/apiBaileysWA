@@ -718,11 +718,19 @@ a:active {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.form-row.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .form-row.cols-6 {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 @media (max-width: 900px) {
+  .form-row.cols-3 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
   .form-row.cols-6 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

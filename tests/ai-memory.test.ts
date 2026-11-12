@@ -6,6 +6,7 @@ import config from "@/config";
 import {
   appendMessage,
   exportConversation,
+  extractKeywords,
   forgetConversation,
   forgetScope,
   forgetSession,
@@ -14,6 +15,7 @@ import {
   readLog,
   renderFacts,
   renderMemoryBlock,
+  retrieveRelevant,
   saveMemory,
   scopeKey,
   shouldRunDigest,
@@ -263,5 +265,45 @@ describe("digest trigger", () => {
     expect(shouldRunDigest({ ...base, lastActivityAt: quiet, maxPerDay: 3, digestsToday: 3 })).toBe(
       false,
     );
+  });
+});
+
+describe("retrieval", () => {
+  test("keywords drop fillers, punctuation and short words", () => {
+    const words = extractKeywords("Untuk proyek Bekasi, butuh forklift 3 ton?");
+    expect(words).toContain("proyek");
+    expect(words).toContain("bekasi");
+    expect(words).toContain("forklift");
+    expect(words).not.toContain("untuk");
+    expect(words).not.toContain("3");
+  });
+
+  test("returns matching older messages and ignores unrelated ones", async () => {
+    const sessionId = "retrieve-1";
+    const scope: MemoryScope = { kind: "dm", conversationId: "628777@s.whatsapp.net" };
+
+    await appendMessage(sessionId, scope, {
+      id: "r1",
+      role: "user",
+      text: "butuh forklift 3 ton untuk proyek bekasi",
+      ts: 1_700_000_000_000,
+    });
+    await appendMessage(sessionId, scope, {
+      id: "r2",
+      role: "user",
+      text: "terima kasih",
+      ts: 1_700_000_100_000,
+    });
+
+    const context = await retrieveRelevant(sessionId, scope, "forklift bekasi masih ada?");
+    expect(context).toContain("forklift");
+    expect(context).not.toContain("terima kasih");
+  });
+
+  test("returns an empty block when nothing matches", async () => {
+    const sessionId = "retrieve-2";
+    const scope: MemoryScope = { kind: "dm", conversationId: "628888@s.whatsapp.net" };
+    await appendMessage(sessionId, scope, { id: "x", role: "user", text: "halo", ts: 1 });
+    expect(await retrieveRelevant(sessionId, scope, "voucher diskon")).toBe("");
   });
 });

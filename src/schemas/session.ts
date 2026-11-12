@@ -137,6 +137,9 @@ export const groupMemorySchema = z
   .object({
     enabled: z.boolean().optional(),
     digest: z.boolean().optional(),
+    digestIdleMs: z.number().int().min(60_000).max(86_400_000).optional(),
+    digestMinMessages: z.number().int().min(5).max(1000).optional(),
+    digestMaxPerDay: z.number().int().min(0).max(1000).optional(),
   })
   .strict();
 
@@ -151,6 +154,12 @@ export const groupReplySchema = z
 export const aiPersonaSchema = z
   .object({
     scope: z.enum(["strict", "flexible"]).optional(),
+  })
+  .strict();
+
+export const aiRetrievalSchema = z
+  .object({
+    enabled: z.boolean().optional(),
   })
   .strict();
 
@@ -195,6 +204,7 @@ export const aiConfigSchema = z
     credentialsJson: z.string().max(8000).optional(),
     sendMessage: aiSendMessageSchema.optional(),
     persona: aiPersonaSchema.optional(),
+    retrieval: aiRetrievalSchema.optional(),
     webSearch: aiWebSearchSchema.optional(),
     vision: aiVisionSchema.optional(),
     otpFilter: otpFilterSchema.optional(),
