@@ -125,6 +125,7 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "replyIncoming",
     "manageGroups",
     "viewGroups",
+    "viewMemory",
   ]),
   assistant: new Set([
     "viewSessions",
@@ -133,7 +134,6 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
     "sendOutbound",
     "viewGroups",
     "viewSettings",
-    "viewMemory",
   ]),
 };
 

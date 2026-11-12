@@ -19,6 +19,7 @@ import {
   saveMemory,
   scopeKey,
   shouldRunDigest,
+  shouldSummarize,
 } from "@/services/aiMemory";
 
 const originalDir = config.aiMemory.dir;
@@ -342,6 +343,27 @@ describe("log bounds", () => {
     } finally {
       config.aiMemory.rawMaxBytes = originalBytes;
       config.aiMemory.rawMaxMessages = originalMax;
+    }
+  });
+});
+
+describe("summary trigger", () => {
+  test("needs either enough messages or enough text", () => {
+    const originalEvery = config.aiMemory.summaryEvery;
+    const originalChars = config.aiMemory.summaryMinChars;
+    config.aiMemory.summaryEvery = 50;
+    config.aiMemory.summaryMinChars = 4000;
+    try {
+      // Twenty short messages used to trigger a call; now they do not.
+      expect(shouldSummarize(20, 600)).toBe(false);
+      expect(shouldSummarize(49, 3999)).toBe(false);
+      // Either bound is enough.
+      expect(shouldSummarize(50, 100)).toBe(true);
+      expect(shouldSummarize(5, 4000)).toBe(true);
+      expect(shouldSummarize(0, 0)).toBe(false);
+    } finally {
+      config.aiMemory.summaryEvery = originalEvery;
+      config.aiMemory.summaryMinChars = originalChars;
     }
   });
 });

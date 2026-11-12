@@ -150,6 +150,7 @@ const {
   AI_MEMORY_ENABLED,
   AI_MEMORY_MODEL,
   AI_MEMORY_SUMMARY_EVERY,
+  AI_MEMORY_SUMMARY_MIN_CHARS,
   AI_MEMORY_SUMMARY_MAX_MESSAGES,
   AI_MEMORY_SUMMARY_MAX_CHARS,
   AI_MEMORY_SUMMARY_TIMEOUT_MS,
@@ -413,7 +414,10 @@ const config = {
     dir: "data/ai-memory",
     /** Empty means "use the main AI model", like the vision model setting. */
     model: (AI_MEMORY_MODEL ?? "").trim(),
-    summaryEvery: clampNumber(AI_MEMORY_SUMMARY_EVERY, 5, 200, 20),
+    // A count alone wasted tokens on many short messages; a size threshold
+    // fires when the conversation actually carries enough content.
+    summaryEvery: clampNumber(AI_MEMORY_SUMMARY_EVERY, 5, 200, 50),
+    summaryMinChars: clampNumber(AI_MEMORY_SUMMARY_MIN_CHARS, 200, 50_000, 4000),
     summaryMaxMessages: clampNumber(AI_MEMORY_SUMMARY_MAX_MESSAGES, 5, 200, 40),
     summaryMaxChars: clampNumber(AI_MEMORY_SUMMARY_MAX_CHARS, 200, 4000, 1200),
     summaryTimeoutMs: clampNumber(AI_MEMORY_SUMMARY_TIMEOUT_MS, 2000, 120000, 30000),

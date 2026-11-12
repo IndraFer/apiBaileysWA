@@ -88,7 +88,7 @@
           perm("limited", "Single messages allowed; Bulk Send is hidden for assistants."),
         ],
         ["AI & Routing", perm("allow"), perm("allow"), perm("deny")],
-        ["Memory", perm("allow"), perm("deny"), perm("allow")],
+        ["Memory", perm("allow"), perm("allow"), perm("deny")],
         ["Webhooks", perm("allow"), perm("allow"), perm("deny")],
         ["REST API", perm("allow"), perm("allow"), perm("deny")],
         ["Events", perm("allow"), perm("allow"), perm("deny")],

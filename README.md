@@ -325,9 +325,12 @@ on.
 - **Source of truth** is an append-only JSONL log per conversation. The summary
   and the fact table are derivatives: deleting them is always safe, and they are
   rebuilt from the log or from WhatsApp history.
-- **Rolling summary**: after `AI_MEMORY_SUMMARY_EVERY` unsummarised messages the
-  old summary is merged with the new batch, so the size stays constant instead of
-  growing. Details are recovered by facts and retrieval, not by a longer summary.
+- **Rolling summary**: the old summary is merged with the new batch, so its size
+  stays constant instead of growing. It fires when the pending batch reaches
+  **either** `AI_MEMORY_SUMMARY_EVERY` messages (50) or
+  `AI_MEMORY_SUMMARY_MIN_CHARS` characters (4000): many short greetings no longer
+  pay for a summarisation call. Details are recovered by facts and retrieval,
+  not by a longer summary.
 - **Facts** are short key/value entries with a TTL for relative statements
   ("tomorrow"). User facts are never shared across participants.
 - **Honesty about the block**: the summary is injected into the user turn inside
@@ -372,8 +375,7 @@ on.
   **Memory** page lists every stored scope for a session with search and
   pagination. Both show summary, facts and counters; group entries include the
   digest plus every member scope, so a leaking fact would be visible immediately.
-  The Memory page is available to `admin` and `assistant`; managers keep their
-  existing scope and do not get it.
+  The Memory page is available to `admin` and `manager`; assistants do not get it.
 
 **Deletion follows the chat.** Clearing a chat, deleting it, exiting and
 deleting a group, deleting a session, or using **End Chat** removes the matching

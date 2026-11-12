@@ -89,7 +89,7 @@
     memory: {
       title: "Memory",
       requires: "viewMemory",
-      roles: ["admin", "assistant"],
+      roles: ["admin", "manager"],
       needsSession: true,
       render: () => MemoryPage.render(),
       destroy: () => MemoryPage.destroy?.(),

@@ -584,7 +584,7 @@ export async function summarizeScope(
   const memory = await loadMemory(sessionId, scope);
   const pending = (await readLog(sessionId, scope)).filter((m) => m.ts > memory.summaryUntil);
   if (pending.length === 0) return false;
-  if (!options?.force && pending.length < config.aiMemory.summaryEvery) return false;
+  if (!options?.force && !shouldSummarize(pending.length, countChars(pending))) return false;
 
   const batch = pending.slice(0, config.aiMemory.summaryMaxMessages);
   const transcript = batch
@@ -883,6 +883,20 @@ export function shouldRunDigest(input: DigestDecision): boolean {
   if (input.now - input.lastActivityAt < input.idleMs) return false;
   if (input.maxPerDay > 0 && input.digestsToday >= input.maxPerDay) return false;
   return true;
+}
+
+function countChars(messages: MemoryMessage[]): number {
+  return messages.reduce((total, message) => total + message.text.length, 0);
+}
+
+/**
+ * A summary costs one model call, so it fires when the pending batch is worth
+ * it: enough messages, or enough text. Twenty short greetings should not pay
+ * for a summarisation round trip.
+ */
+export function shouldSummarize(messageCount: number, chars: number): boolean {
+  if (messageCount === 0) return false;
+  return messageCount >= config.aiMemory.summaryEvery || chars >= config.aiMemory.summaryMinChars;
 }
 
 const DIGEST_PROMPT = [
