@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-11-12
+
+### Fixed
+
+- persist read state, show bubble senders, and add a DM shortcut
+
 ## [1.36.1] - 2026-11-12
 
 ### Changed
