@@ -51,14 +51,16 @@ import {
   listMemoryScopes,
 } from "@/services/aiMemory";
 import { getAiMetrics, resetAiMetrics } from "@/services/aiMetrics";
-import { listApiCalls } from "@/services/apiAuditLog";
+import { getApiHealth, listApiCalls } from "@/services/apiAuditLog";
 import { createApiKey, listApiKeys, revokeApiKey } from "@/services/apiKeys";
 import {
   canonicalizeAutoReply,
   normalizeAutoReplyConfig,
   resolveAutoReplyConfig,
 } from "@/services/autoReply";
+import { listBroadcastJobs } from "@/services/broadcastQueue";
 import { applyBackup, buildBackup } from "@/services/dataMigration";
+import { getHealthSnapshot } from "@/services/healthMetrics";
 import { readDailyHistory } from "@/services/metricsHistory";
 import {
   clearDeadLetters,
@@ -375,6 +377,58 @@ dashboardApi.get("/overview", async (c) => {
     };
   }
 
+  const daily = readDailyHistory(days, sessionId);
+
+  // Operational diagnostics: admin only, because it exposes infrastructure.
+  let serverHealth = null;
+  if (role === "admin") {
+    const snapshot = getHealthSnapshot();
+    const apiDaily = readDailyHistory(days);
+    const apiRequests = apiDaily.reduce((total, row) => total + row.apiRequests, 0);
+    const apiServerErrors = apiDaily.reduce((total, row) => total + row.apiServerErrors, 0);
+    const apiSuccess = apiDaily.reduce((total, row) => total + row.apiSuccess, 0);
+
+    const statuses = sessionId
+      ? [connectionManager.getSessionStatus(sessionId)]
+      : visible.map((entry) => connectionManager.getSessionStatus(String(entry.sessionId || "")));
+    const open = statuses.filter((status) => status.connected).length;
+    const needsQr = statuses.filter((status) => !status.connected && status.qrCode).length;
+    const connecting = statuses.filter(
+      (status) => status.exists && !status.connected && !status.qrCode,
+    ).length;
+
+    const saved = await getSavedSessionsWithMetadata<SessionMetadata>().catch(() => []);
+    const liveIds = new Set(visible.map((entry) => String(entry.sessionId || "")));
+    const closed = saved.filter((entry) => !liveIds.has(entry.id)).length;
+
+    const jobs = listBroadcastJobs(sessionId);
+
+    serverHealth = {
+      api: getApiHealth(sessionId),
+      availability: {
+        days,
+        requests: apiRequests,
+        success: apiSuccess,
+        serverErrors: apiServerErrors,
+        percent:
+          apiRequests > 0
+            ? Number((((apiRequests - apiServerErrors) / apiRequests) * 100).toFixed(2))
+            : null,
+      },
+      send: snapshot.send,
+      inbound: snapshot.inbound,
+      failures: snapshot.failures,
+      reconnects: snapshot.reconnects,
+      sessions: { open, connecting, needsQr, closed },
+      queue: {
+        broadcast: jobs.filter((job) => job.status === "pending" || job.status === "running")
+          .length,
+        aiPending: visible.reduce((total, entry) => total + Number(entry.aiPending || 0), 0),
+        deadLetters: getDeadLetters(500, sessionId).length,
+      },
+    };
+  }
+
   return c.json({
     success: true,
     data: {
@@ -404,9 +458,10 @@ dashboardApi.get("/overview", async (c) => {
         ai: bucket.ai,
         skipped: bucket.human,
       })),
-      daily: readDailyHistory(days, sessionId),
+      daily,
       topSessions,
       health,
+      serverHealth,
       recent: metrics.recent.slice(0, 8).map((entry) => ({
         at: entry.at,
         sessionId: entry.sessionId,

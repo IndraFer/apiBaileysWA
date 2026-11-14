@@ -260,6 +260,7 @@ class ConnectionManager {
     rejectCalls: boolean | undefined;
     /** Epoch ms of the newest known chat activity, or null when never seen. */
     lastActiveAt: number | null;
+    aiPending: number;
   }> {
     return [...this.connections.entries()].map(([id, conn]) => {
       const secret = conn.getOptions().webhookSecret || "";
@@ -284,6 +285,7 @@ class ConnectionManager {
         autoMarkOnline: conn.getOptions().autoMarkOnline,
         rejectCalls: conn.getOptions().rejectCalls,
         lastActiveAt,
+        aiPending: conn.aiPending,
       };
     });
   }

@@ -64,6 +64,14 @@ import {
   resolveGroupReply,
   shouldReplyToGroupMessage,
 } from "@/services/groupReply";
+import {
+  recordDisconnect,
+  recordInboundSample,
+  recordReconnect,
+  recordReconnectFailure,
+  recordSendSample,
+  recordSendTimeout,
+} from "@/services/healthMetrics";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
 import { sendUnifiedMessage } from "@/services/messageSender";
@@ -487,7 +495,16 @@ export class BaileysConnection {
 
     // Message events
     this.socket.ev.on("messages.upsert", async (m) => {
-      await this.handleMessagesUpsert(m);
+      const startedAt = Date.now();
+      let ok = true;
+      try {
+        await this.handleMessagesUpsert(m);
+      } catch (error) {
+        ok = false;
+        throw error;
+      } finally {
+        recordInboundSample(Date.now() - startedAt, ok);
+      }
     });
 
     this.socket.ev.on("messages.update", async (m) => {
@@ -631,6 +648,7 @@ export class BaileysConnection {
       this._isConnected = true;
       this._qrCode = null;
       this.reconnectCount = 0;
+      recordReconnect(this.sessionId);
       logger.info("[%s] Connected successfully", this.sessionId);
       this.lidResolved.clear();
       await this.reconcileLidRooms();
@@ -650,6 +668,7 @@ export class BaileysConnection {
 
       if (shouldReconnect) {
         this.reconnectCount++;
+        recordDisconnect(this.sessionId);
         logger.info(
           "[%s] Reconnecting (attempt %d/%d)...",
           this.sessionId,
@@ -660,6 +679,7 @@ export class BaileysConnection {
         setTimeout(
           () => {
             this.connect().catch((err) => {
+              recordReconnectFailure();
               logger.error("[%s] Reconnection failed: %s", this.sessionId, errorToString(err));
             });
           },
@@ -1603,11 +1623,19 @@ export class BaileysConnection {
       await delay(paceMs);
     }
 
-    const sent = await this.safeSocket().sendMessage(receiver, message, {
-      quoted: options?.quoted,
-    });
-    this.rememberApiSent(sent?.key?.id);
-    return sent;
+    const sendStartedAt = Date.now();
+    try {
+      const sent = await this.safeSocket().sendMessage(receiver, message, {
+        quoted: options?.quoted,
+      });
+      recordSendSample(Date.now() - sendStartedAt, true);
+      this.rememberApiSent(sent?.key?.id);
+      return sent;
+    } catch (error) {
+      recordSendSample(Date.now() - sendStartedAt, false);
+      if (errorToString(error).toLowerCase().includes("timeout")) recordSendTimeout();
+      throw error;
+    }
   }
 
   async sendMessageWithDelay(receiver: string, message: AnyMessageContent, delayMs = 1000) {
@@ -1823,6 +1851,11 @@ export class BaileysConnection {
     } finally {
       if (this.lidReconcileInFlight === run) this.lidReconcileInFlight = null;
     }
+  }
+
+  /** Conversations waiting in the AI debounce queue. */
+  get aiPending(): number {
+    return this.aiRouter.pendingCount();
   }
 
   getStore(): MemoryStore {

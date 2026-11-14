@@ -178,6 +178,15 @@ export class ConversationRouter {
     return Boolean(state && state.mutedUntil > Date.now());
   }
 
+  /** Conversations with queued texts waiting for the debounce to flush. */
+  pendingCount(): number {
+    let pending = 0;
+    for (const state of this.conversations.values()) {
+      if (state.texts.length > 0 || state.flushing) pending += 1;
+    }
+    return pending;
+  }
+
   /** Drop all timers and pending state (session shutdown). */
   dispose(): void {
     for (const state of this.conversations.values()) {

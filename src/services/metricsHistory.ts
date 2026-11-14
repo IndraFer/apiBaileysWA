@@ -31,6 +31,10 @@ export interface DailyCounters {
   tokensOut: number;
   latencySum: number;
   latencyCount: number;
+  /** Inbound REST API calls, split by outcome for availability. */
+  apiRequests: number;
+  apiSuccess: number;
+  apiServerErrors: number;
 }
 
 const DIR = join(process.cwd(), "data", "metrics");
@@ -56,6 +60,9 @@ function emptyCounters(day: string, sessionId: string): DailyCounters {
     tokensOut: 0,
     latencySum: 0,
     latencyCount: 0,
+    apiRequests: 0,
+    apiSuccess: 0,
+    apiServerErrors: 0,
   };
 }
 
@@ -146,6 +153,18 @@ export interface DailySeries {
   failed: number;
   tokensIn: number;
   tokensOut: number;
+  apiRequests: number;
+  apiSuccess: number;
+  apiServerErrors: number;
+}
+
+/** One REST API call, for the availability figure. 5xx counts as unavailable. */
+export function recordDailyApi(status: number): void {
+  if (!config.metricsHistory.enabled) return;
+  const row = entryFor("api");
+  row.apiRequests += 1;
+  if (status >= 500) row.apiServerErrors += 1;
+  else if (status < 400) row.apiSuccess += 1;
 }
 
 /** Daily totals for the last `days` days, oldest first, including today. */
@@ -163,6 +182,9 @@ export function readDailyHistory(days: number, sessionId?: string): DailySeries[
       failed: 0,
       tokensIn: 0,
       tokensOut: 0,
+      apiRequests: 0,
+      apiSuccess: 0,
+      apiServerErrors: 0,
     };
     entry.ai += row.ai;
     entry.static += row.static;
@@ -170,6 +192,9 @@ export function readDailyHistory(days: number, sessionId?: string): DailySeries[
     entry.failed += row.failed;
     entry.tokensIn += row.tokensIn;
     entry.tokensOut += row.tokensOut;
+    entry.apiRequests += row.apiRequests ?? 0;
+    entry.apiSuccess += row.apiSuccess ?? 0;
+    entry.apiServerErrors += row.apiServerErrors ?? 0;
     byDay.set(row.day, entry);
   };
 

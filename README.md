@@ -54,6 +54,20 @@ The first dashboard page is an analytics view, not a status table:
 - **Top Sessions** (horizontal bars) and **Recent Decisions** (table).
 - **Health**: webhook delivery rate, dead letters, memory scopes, Redis — hidden
   for assistants, who have no integrations to monitor.
+- **Server Health** (admin): availability from the daily API history against a
+  99.5% target, and P50/P95/P99 latency split by surface — `API` (request to
+  response), `sendMessage` (Baileys promise) and `inbound` (message received to
+  handler finished) — plus send failures and timeouts, reconnect attempts with
+  success rate and last downtime, session counts (open / connecting / need QR /
+  closed) and queue depth (broadcast, AI debounce, dead letters).
+
+Percentage samples live in bounded rings (1024) and reset with the process, so
+they are labelled "since restart"; availability is aggregated from the daily
+metric file and therefore covers the selected range. Availability and API latency
+need `AUDIT_LOG_ENABLED=true`, because they are derived from the API audit ring.
+Deliberately not reported: CPU percentage, event-loop lag, GC pauses and file
+descriptors. Each needs a sampler or is platform-specific, and none of them helps
+diagnose a WhatsApp gateway more than reconnects and send latency do.
 
 Data honesty: in-process counters are labelled "since restart", because they reset
 with the process. The daily series is persisted to `data/metrics/daily.jsonl` with

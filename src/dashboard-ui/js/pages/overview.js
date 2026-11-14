@@ -116,6 +116,11 @@
           </div>
         </div>
 
+        <div class="card hidden" id="dash-server-health-card">
+          <div class="card-header"><h3>Server Health</h3></div>
+          <div id="dash-server-health"></div>
+        </div>
+
         <div class="card" id="dash-health-card">
           <div class="card-header"><h3>Health</h3></div>
           <div id="dash-health" class="dash-health"></div>
@@ -177,6 +182,7 @@
         ].join(""),
       );
 
+      this.renderServerHealth(data.serverHealth);
       this.renderHealth(data.health);
       this.renderCharts(data);
     },
@@ -198,6 +204,96 @@
           ${restricted ? "" : row("Memory (Heap)", `${(mem.heapUsed / 1024 / 1024).toFixed(1)} / ${(mem.heapTotal / 1024 / 1024).toFixed(1)} MB`)}
           ${row("Version", escapeHtml(stats.version))}
         </table>`,
+      );
+    },
+
+    renderServerHealth(health) {
+      const card = document.getElementById("dash-server-health-card");
+      const body = document.getElementById("dash-server-health");
+      if (!card || !body) return;
+      if (!health) {
+        card.classList.add("hidden");
+        return;
+      }
+      card.classList.remove("hidden");
+
+      const ms = (value) => (value > 0 ? `${value} ms` : "—");
+      const availability = health.availability;
+      const target = 99.5;
+      const tone =
+        availability.percent === null ? "muted" : availability.percent >= target ? "ok" : "bad";
+
+      const tiles = [
+        {
+          label: `Availability (${availability.days}d)`,
+          value: availability.percent === null ? "no data" : `${availability.percent}%`,
+          tone,
+          hint: `${availability.requests} call(s) · ${availability.serverErrors} 5xx`,
+        },
+        {
+          label: "Send failures",
+          value: String(health.failures.send),
+          tone: health.failures.send > 0 ? "warn" : "ok",
+          hint: `${health.failures.timeout} timeout`,
+        },
+        {
+          label: "Reconnects",
+          value: String(health.reconnects.attempts),
+          tone: health.reconnects.attempts > 0 ? "warn" : "ok",
+          hint:
+            health.reconnects.successRate === null
+              ? "no attempts"
+              : `${health.reconnects.successRate}% ok · last ${Math.round(health.reconnects.lastDowntimeMs / 1000)}s`,
+        },
+        {
+          label: "Queues",
+          value: `${health.queue.broadcast} / ${health.queue.aiPending}`,
+          tone: health.queue.deadLetters > 0 ? "warn" : "muted",
+          hint: `broadcast / AI · ${health.queue.deadLetters} dead`,
+        },
+      ];
+
+      const latencyRows = [
+        ["API", health.api.latency],
+        ["sendMessage", health.send],
+        ["inbound", health.inbound],
+      ];
+
+      UI.setHtml(
+        body,
+        `
+        <div class="dash-health">
+          ${tiles
+            .map(
+              (tile) => `<div class="dash-health-item">
+                <span class="text-muted text-xs">${escapeHtml(tile.label)}</span>
+                <strong class="dash-health-${tile.tone}">${escapeHtml(tile.value)}</strong>
+                <small class="text-muted text-xs">${escapeHtml(tile.hint)}</small>
+              </div>`,
+            )
+            .join("")}
+        </div>
+        <div class="table-wrapper u-mt-05"><table>
+          <thead><tr><th>Latency</th><th>P50</th><th>P95</th><th>P99</th><th>Samples</th></tr></thead>
+          <tbody>
+            ${latencyRows
+              .map(
+                ([label, values]) => `<tr>
+                  <td>${escapeHtml(label)}</td>
+                  <td>${escapeHtml(ms(values.p50))}</td>
+                  <td>${escapeHtml(ms(values.p95))}</td>
+                  <td>${escapeHtml(ms(values.p99))}</td>
+                  <td class="text-muted text-xs">${values.count ?? health.api.requests}</td>
+                </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table></div>
+        <p class="dash-note">
+          Sessions: ${health.sessions.open} open · ${health.sessions.connecting} connecting ·
+          ${health.sessions.needsQr} need QR · ${health.sessions.closed} closed.
+          Latency and failure counters are since restart; availability comes from the daily history.
+        </p>`,
       );
     },
 

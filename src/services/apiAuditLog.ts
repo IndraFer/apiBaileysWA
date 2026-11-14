@@ -13,6 +13,8 @@ import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import config from "@/config";
 import logger from "@/lib/logger";
+import { percentile } from "@/services/healthMetrics";
+import { recordDailyApi } from "@/services/metricsHistory";
 
 export interface ApiAuditEntry {
   timestamp: string;
@@ -74,6 +76,7 @@ export function maskReceiver(receiver: string): string {
 }
 
 export function recordApiCall(entry: ApiAuditEntry): void {
+  recordDailyApi(entry.status);
   if (!config.auditLog.enabled) return;
 
   const record: ApiAuditEntry = config.auditLog.body ? entry : { ...entry, body: undefined };
@@ -109,4 +112,36 @@ export function listApiCalls(filter: ApiAuditFilter = {}): ApiAuditEntry[] {
     })
     .slice(-limit)
     .reverse();
+}
+
+export interface ApiHealth {
+  requests: number;
+  serverErrors: number;
+  clientErrors: number;
+  availability: number | null;
+  latency: { p50: number; p95: number; p99: number };
+}
+
+/** Availability and latency percentiles from the in-memory ring (since restart). */
+export function getApiHealth(sessionId?: string): ApiHealth {
+  const scoped = sessionId ? ring.filter((entry) => entry.session === sessionId) : ring;
+  const requests = scoped.length;
+  const serverErrors = scoped.filter((entry) => entry.status >= 500).length;
+  const clientErrors = scoped.filter((entry) => entry.status >= 400 && entry.status < 500).length;
+  const latencies = scoped
+    .map((entry) => entry.latencyMs)
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    requests,
+    serverErrors,
+    clientErrors,
+    availability:
+      requests > 0 ? Number((((requests - serverErrors) / requests) * 100).toFixed(2)) : null,
+    latency: {
+      p50: percentile(latencies, 50),
+      p95: percentile(latencies, 95),
+      p99: percentile(latencies, 99),
+    },
+  };
 }
