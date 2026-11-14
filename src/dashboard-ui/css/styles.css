@@ -3019,3 +3019,22 @@ details[open] > summary::before {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Date separator between message groups, WhatsApp style. */
+.chat-day-sep {
+  display: flex;
+  justify-content: center;
+  /* The message list already has a 0.5rem gap between children. */
+  margin: 0.15rem 0;
+}
+
+.chat-day-sep span {
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

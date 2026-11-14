@@ -271,6 +271,50 @@
     });
   }
 
+  /** Calendar day of a message timestamp, or "" when it cannot be read. */
+  function dayKeyOf(seconds) {
+    if (!seconds) return "";
+    const date = new Date(seconds * 1000);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  }
+
+  /** WhatsApp-style separator: Today, Yesterday, then the full date. */
+  function formatDayLabel(seconds) {
+    const date = new Date(seconds * 1000);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const sameDay = (a, b) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    if (sameDay(date, today)) return "Today";
+    if (sameDay(date, yesterday)) return "Yesterday";
+    return date.toLocaleDateString(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  /** Full date and time, shown on hover so an old bubble is never ambiguous. */
+  function formatFullTimestamp(seconds) {
+    if (!seconds) return "";
+    const date = new Date(seconds * 1000);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function normalizeTimestampSeconds(ts) {
     if (!ts) return null;
     if (typeof ts === "number" && !Number.isNaN(ts)) return ts;
@@ -1879,6 +1923,10 @@
         return;
       }
 
+      // One separator per calendar day, like WhatsApp: bubbles keep only the
+      // time, so an old message is never ambiguous about its date.
+      let lastDayKey = "";
+
       UI.setHtml(
         messagesEl,
         visibleMessages
@@ -1888,6 +1936,14 @@
             const mentioned = msg?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
             const actionButtons = extractActionButtons(msg);
             const time = formatMessageTime(msg.messageTimestamp);
+            const tsSeconds = normalizeTimestampSeconds(msg.messageTimestamp) ?? 0;
+            const dayKey = dayKeyOf(tsSeconds);
+            let daySeparator = "";
+            if (dayKey && dayKey !== lastDayKey) {
+              daySeparator = `<div class="chat-day-sep"><span>${escapeHtml(formatDayLabel(tsSeconds))}</span></div>`;
+              lastDayKey = dayKey;
+            }
+            const fullTimestamp = formatFullTimestamp(tsSeconds);
 
             // Check if this message has a tracked status (sent/read/delivered)
             let statusClass = "";
@@ -1951,7 +2007,7 @@
             const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
             const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
 
-            return `
+            return `${daySeparator}
               <div class="${bubbleWrap}"${dataMessageKey}>
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
                   ${senderLine}
@@ -1975,7 +2031,7 @@
                           .join("")}</div>`
                       : ""
                   }
-                  <div class="msg-time">${time}${statusTag}</div>
+                  <div class="msg-time"${fullTimestamp ? ` title="${escapeHtml(fullTimestamp)}"` : ""}>${time}${statusTag}</div>
                 </div>
               </div>`;
           })
