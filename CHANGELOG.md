@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.0] - 2026-11-14
+
+### Added
+
+- server health with latency percentiles and availability
+
 ## [1.45.5] - 2026-11-14
 
 ### Fixed
