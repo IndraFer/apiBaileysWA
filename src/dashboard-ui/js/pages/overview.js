@@ -323,7 +323,7 @@
               y: {
                 stacked: true,
                 beginAtZero: true,
-                ticks: { color: color.text },
+                ticks: { color: color.text, precision: 0 },
                 grid: { color: color.grid },
               },
             },
@@ -359,7 +359,11 @@
             ...base,
             scales: {
               x: { ticks: { color: color.text }, grid: { display: false } },
-              y: { beginAtZero: true, ticks: { color: color.text }, grid: { color: color.grid } },
+              y: {
+                beginAtZero: true,
+                ticks: { color: color.text, precision: 0 },
+                grid: { color: color.grid },
+              },
             },
           },
         });
@@ -384,7 +388,11 @@
             indexAxis: "y",
             plugins: { legend: { display: false } },
             scales: {
-              x: { beginAtZero: true, ticks: { color: color.text }, grid: { color: color.grid } },
+              x: {
+                beginAtZero: true,
+                ticks: { color: color.text, precision: 0 },
+                grid: { color: color.grid },
+              },
               y: { ticks: { color: color.text }, grid: { display: false } },
             },
           },
