@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.5] - 2026-11-14
+
+### Fixed
+
+- whole-number ticks on the count axes
+
 ## [1.45.4] - 2026-11-14
 
 ### Added
