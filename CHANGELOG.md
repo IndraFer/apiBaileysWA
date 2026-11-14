@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.45.4] - 2026-11-14
+
+### Added
+
+- WhatsApp-style date separators in the conversation
+
 ## [1.45.3] - 2026-11-12
 
 ### Fixed
