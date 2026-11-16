@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.8] - 2026-11-16
+
+### Changed
+
+- record which policy fired in violation reports
+
 ## [1.46.7] - 2026-11-16
 
 ### Changed
