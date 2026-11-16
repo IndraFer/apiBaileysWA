@@ -1892,6 +1892,16 @@ dashboardApi.get("/sessions/:sessionId/memory", async (c) => {
  * GET /dashboard/api/sessions/:sessionId/chats/:jid/memory
  * Structured memory for the dashboard viewer: summary, facts and counters.
  */
+/** Structural summary of a payload, without putting the status text in logs. */
+function describeShape(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) return "none";
+  if (typeof value !== "object") return typeof value;
+  if (depth > 2) return Array.isArray(value) ? "array" : "object";
+  if (Array.isArray(value)) return `array(${value.length})`;
+  const keys = Object.keys(value as Record<string, unknown>);
+  return `{${keys.slice(0, 5).join(",")}}`;
+}
+
 /**
  * `fetchStatus` has returned different shapes across Baileys versions: a string,
  * `{ status }`, or `[{ status: { status, setAt } }]`. Walk the payload instead of
@@ -1948,7 +1958,19 @@ dashboardApi.get("/sessions/:sessionId/contacts/:jid/status", async (c) => {
   try {
     const session = connectionManager.getSession(sessionId);
     const result = await session.fetchStatus(jid);
-    return c.json({ success: true, data: { status: extractStatusText(result) } });
+    const status = extractStatusText(result);
+    if (!status) {
+      // Blank is ambiguous: privacy-restricted, genuinely empty, or a payload
+      // shape this build does not understand. Log the shape so the last case is
+      // diagnosable instead of silently looking like "no status".
+      logger.debug(
+        "[dashboard] fetchStatus returned no text (session=%s jid=%s shape=%s)",
+        sessionId,
+        jid,
+        describeShape(result),
+      );
+    }
+    return c.json({ success: true, data: { status } });
   } catch {
     // A contact with hidden or missing status is not an error.
     return c.json({ success: true, data: { status: "" } });
