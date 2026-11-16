@@ -118,5 +118,13 @@
   };
 
   // Auto-init toggles when auth screen loads
-  document.addEventListener("DOMContentLoaded", () => initPasswordToggles());
+  function initAuthFooter() {
+    const yearEl = document.getElementById("auth-footer-year");
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initPasswordToggles();
+    initAuthFooter();
+  });
 })();

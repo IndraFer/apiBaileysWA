@@ -8,7 +8,8 @@
  *
  * If absent or disabled, logs an info message. Never throws.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import type { Hono } from "hono";
 import config from "@/config";
@@ -18,6 +19,29 @@ import logger from "@/lib/logger";
 import { fileExists, serveFile } from "@/lib/runtime";
 
 const DASHBOARD_UI_DIR = join(process.cwd(), "src", "dashboard-ui");
+
+/** Version shown in the login footer; a placeholder keeps the markup static. */
+const APP_VERSION_PLACEHOLDER = "__APP_VERSION__";
+let cachedVersion = "v1.0.0";
+try {
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8")) as {
+    version?: string;
+  };
+  cachedVersion = `v${pkg.version || "1.0.0"}`;
+} catch {
+  /* keep the fallback */
+}
+
+/**
+ * Serve index.html with the package version substituted. Done here rather than
+ * with an inline script, which the dashboard CSP would refuse to run.
+ */
+async function serveIndex(htmlPath: string): Promise<Response> {
+  const html = await readFile(htmlPath, "utf-8");
+  return new Response(html.replaceAll(APP_VERSION_PLACEHOLDER, cachedVersion), {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -60,7 +84,7 @@ export function loadDashboard(app: Hono): boolean {
       }
       const indexPath = join(DASHBOARD_UI_DIR, "index.html");
       if (await fileExists(indexPath)) {
-        return serveFile(indexPath, "text/html; charset=utf-8");
+        return serveIndex(indexPath);
       }
     }
 
@@ -68,7 +92,7 @@ export function loadDashboard(app: Hono): boolean {
     const filePath = rawPath.replace(/^\/dashboard\//, "");
     if (!filePath) {
       const indexPath = join(DASHBOARD_UI_DIR, "index.html");
-      return serveFile(indexPath, "text/html; charset=utf-8");
+      return serveIndex(indexPath);
     }
 
     const fullPath = resolve(join(DASHBOARD_UI_DIR, filePath));
@@ -87,7 +111,7 @@ export function loadDashboard(app: Hono): boolean {
     // SPA fallback — return index.html for non-file routes (e.g. hash routes)
     const indexPath = join(DASHBOARD_UI_DIR, "index.html");
     if (await fileExists(indexPath)) {
-      return serveFile(indexPath, "text/html; charset=utf-8");
+      return serveIndex(indexPath);
     }
 
     return c.json({ success: false, message: "Not found" }, 404);

@@ -1913,12 +1913,13 @@ details[open] > summary::before {
   margin-bottom: 0.45rem;
 }
 
+/* One row per member. Wrapping rows side by side made the avatar rows collide
+ * and read as a jumble; a vertical list with a scroll area is predictable. */
 .group-members-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  max-height: 110px;
-  overflow: auto;
+  display: block;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-top: 0.35rem;
 }
 
 .msg-sender {
@@ -1971,6 +1972,10 @@ details[open] > summary::before {
   font: inherit;
   color: var(--accent);
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-member-link:hover {
@@ -2001,7 +2006,13 @@ details[open] > summary::before {
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.group-member-id .badge {
+  flex: 0 0 auto;
 }
 
 .group-member-role {
@@ -3122,4 +3133,37 @@ details[open] > summary::before {
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+/* ---- Chat rooms toolbar alignment ------------------------------------- */
+
+/* Inputs are pinned to 2.5rem, so the buttons next to them must match or the
+ * row looks ragged. */
+.chatrooms-toolbar .btn,
+.chatrooms-toolbar .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.chatrooms-new-message-group {
+  display: flex;
+  align-items: center;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border);
+}
+
+/* ---- Auth footer ------------------------------------------------------ */
+
+.auth-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }

@@ -845,13 +845,16 @@
 						</div>
 						<div class="chatrooms-toolbar-actions">
 							<div class="chatrooms-action-buttons">
-							<button class="btn btn-primary btn-sm" id="chatrooms-new-message" type="button">+ New Message</button>
-							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
-							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
-							${can("manageGroups") ? '<button class="btn btn-outline btn-sm hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
+							<button class="btn btn-outline" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
+							<button class="btn btn-outline" id="chatrooms-refresh">Refresh</button>
+							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
 							</div>
-							
+
 							<span class="badge badge-info" id="polling-mode-badge">POLL: ACTIVE</span>
+
+							<div class="chatrooms-new-message-group">
+								<button class="btn btn-primary" id="chatrooms-new-message" type="button">+ New Message</button>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -888,6 +891,12 @@
       const pollApplyBtn = document.getElementById("poll-apply-btn");
       const pollActiveInput = document.getElementById("poll-active-ms");
       const pollIdleInput = document.getElementById("poll-idle-ms");
+
+      // Bound before the empty-state return: starting a new message is still a
+      // valid intent without a session, and the submit explains what is missing.
+      document.getElementById("chatrooms-new-message").addEventListener("click", () => {
+        this.openNewMessageModal();
+      });
 
       if (!selectedSessionId) {
         UI.setHtml(
@@ -962,10 +971,6 @@
         pollIdleInput.value = String(next.idleMs);
         this.restartPollingSoon();
         Toast.success("Polling interval updated");
-      });
-
-      document.getElementById("chatrooms-new-message").addEventListener("click", () => {
-        this.openNewMessageModal();
       });
 
       document.getElementById("chatrooms-create-group")?.addEventListener("click", () => {
@@ -1674,6 +1679,10 @@
         const receiver = String(receiverInput.value || "").trim();
         const text = String(textInput.value || "").trim();
         if (!receiver || !text) return;
+        if (!selectedSessionId) {
+          Toast.error("Connect a session first, then send.");
+          return;
+        }
 
         // A group JID is unambiguous; otherwise fall back to the selected mode.
         const isGroup = receiver.endsWith("@g.us") || selectedMode === "groups";
@@ -1759,13 +1768,11 @@
               const isMe = m.isSelf === true;
               const role = m.admin ? String(m.admin) : "";
               return `<div class="group-member-row">
-                <div class="group-member-main">
                 ${Avatar.markup({ sessionId: selectedSessionId, jid: memberJid, name: label, size: "sm" })}
                 <div class="group-member-id">
                   <button type="button" class="group-member-link" data-member-jid="${escapeHtml(memberJid)}" title="Open this contact">${escapeHtml(label)}</button>
                   ${isMe ? '<span class="group-member-role">you</span>' : ""}
                   ${role ? `<span class="badge ${role === "superadmin" ? "badge-success" : "badge-info"}">${escapeHtml(role)}</span>` : ""}
-                </div>
                 </div>
                 ${
                   canKick && !isMe
