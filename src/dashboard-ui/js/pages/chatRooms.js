@@ -855,19 +855,19 @@
 									<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
 								</svg>
 							</button>
-							<button class="btn btn-outline btn-icon" id="chatrooms-refresh" title="Refresh chat list" aria-label="Refresh chat list">
+							<button class="btn btn-outline btn-icon" id="chatrooms-refresh" title="Refresh chat list" aria-label="Refresh chat list" ${selectedSessionId ? "" : "disabled"}>
 								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
 									<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
 								</svg>
 							</button>
-							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group" type="button" title="Create group" aria-label="Create group">+ Group</button>' : ""}
+							${can("manageGroups") ? `<button class="btn btn-outline hidden" id="chatrooms-create-group" type="button" title="Create group" aria-label="Create group" ${selectedSessionId ? "" : "disabled"}>+ Group</button>` : ""}
 						</div>
 							<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5 sec</span>
 						</div>
 					</div>
 
 					<div class="chatrooms-toolbar-primary">
-						<button class="btn btn-primary" id="chatrooms-new-message" type="button">+ New Message</button>
+						<button class="btn btn-primary" id="chatrooms-new-message" type="button" ${selectedSessionId ? "" : "disabled"}>+ New Message</button>
 					</div>
 				</div>
 
@@ -904,9 +904,7 @@
       const pollActiveInput = document.getElementById("poll-active-ms");
       const pollIdleInput = document.getElementById("poll-idle-ms");
 
-      // Bound before the empty-state return: starting a new message is still a
-      // valid intent without a session, and the submit explains what is missing.
-      document.getElementById("chatrooms-new-message").addEventListener("click", () => {
+      document.getElementById("chatrooms-new-message")?.addEventListener("click", () => {
         this.openNewMessageModal();
       });
 
@@ -1688,6 +1686,11 @@
             <textarea id="compose-text" rows="4" maxlength="2000" placeholder="Message text" required></textarea>
           </div>
           <p class="text-xs text-muted">Use a WhatsApp number for personal chat, or a Group JID when Groups mode is selected.</p>
+          ${
+            String(currentDashboardUser()?.role || "") === "assistant"
+              ? '<p class="text-xs text-muted">Your role can reply to conversations that already have an incoming message, and cannot send to groups or start a new conversation.</p>'
+              : ""
+          }
           <div class="flex gap-1 u-end">
             <button class="btn btn-outline" type="button" id="compose-cancel">Cancel</button>
             <button class="btn btn-primary" type="submit">Send</button>
