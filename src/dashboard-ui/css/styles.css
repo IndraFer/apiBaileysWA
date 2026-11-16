@@ -1543,7 +1543,7 @@ details[open] > summary::before {
 .chatrooms-toolbar {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -3149,11 +3149,44 @@ details[open] > summary::before {
   padding-bottom: 0;
 }
 
-.chatrooms-new-message-group {
+/* The primary action is its own toolbar cell, so it stays pinned to the right
+ * even when the controls wrap. It never rides along with the icon group. */
+.chatrooms-toolbar-primary {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  padding-left: 1rem;
-  border-left: 1px solid var(--border);
+  align-self: flex-end;
+}
+
+/* Groups stay whole when the toolbar wraps: a button never separates from the
+ * badge or the primary action it belongs to. */
+.chatrooms-toolbar-actions {
+  flex: 0 0 auto;
+  row-gap: 0.5rem;
+}
+
+.chatrooms-toolbar-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Auto margin (not space-between) so a wrapped line still aligns right. */
+  margin-right: auto;
+}
+
+.chatrooms-action-buttons {
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+}
+
+.chatrooms-toolbar .btn-icon {
+  width: 2.5rem;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#polling-mode-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Auth footer ------------------------------------------------------ */
