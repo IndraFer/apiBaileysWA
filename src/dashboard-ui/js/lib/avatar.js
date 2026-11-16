@@ -46,9 +46,13 @@
       .filter(Boolean);
 
     for (const part of parts) {
-      const bare = part.replace(/[^\p{L}\p{N}]+/gu, "");
+      // A raw JID ("1234@lid", "628...:12@s.whatsapp.net") carries letters in its
+      // domain; strip the domain and the device suffix before deciding.
+      const withoutDomain = part.includes("@") ? part.split("@")[0] : part;
+      const bare = withoutDomain.replace(/[^\p{L}\p{N}]+/gu, "");
       if (!bare) continue;
       if (TITLES.has(bare.toLowerCase())) continue;
+      // Digits alone are a phone number, not a name: no initials, blank avatar.
       if (!/\p{L}/u.test(bare)) continue;
       return bare;
     }

@@ -2001,18 +2001,52 @@ details[open] > summary::before {
   border-bottom: 0;
 }
 
-.group-member-id {
+.group-member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.group-member-line {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-  overflow: hidden;
 }
 
-.group-member-id .badge {
+.group-member-line .badge {
   flex: 0 0 auto;
+}
+
+.group-member-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.group-member-meta:empty {
+  display: none;
+}
+
+.group-member-phone,
+.group-member-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.group-member-status {
+  font-style: italic;
+}
+
+.group-member-status:empty {
+  display: none;
 }
 
 .group-member-role {
@@ -3175,12 +3209,6 @@ details[open] > summary::before {
 .chatrooms-action-buttons {
   flex-wrap: nowrap;
   flex: 0 0 auto;
-}
-
-.chatrooms-toolbar .btn-icon {
-  width: 2.5rem;
-  padding-left: 0;
-  padding-right: 0;
 }
 
 #polling-mode-badge {

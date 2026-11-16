@@ -13,6 +13,7 @@
   let isWindowFocused = true;
   let isSending = false;
   const draftByJid = new Map();
+  const memberStatusCache = new Map();
   const typingTimers = new Map();
   let outgoingTypingPauseTimer = null;
   let outgoingTypingStartTimer = null;
@@ -846,24 +847,12 @@
 					</div>
 
 					<div class="chatrooms-toolbar-actions">
-							<div class="chatrooms-action-buttons">
-							<button class="btn btn-outline btn-icon" id="chatrooms-polling-toggle" type="button" title="Polling settings" aria-label="Polling settings">
-								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-									<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-									<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-									<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-									<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
-								</svg>
-							</button>
-							<button class="btn btn-outline btn-icon" id="chatrooms-refresh" title="Refresh chat list" aria-label="Refresh chat list">
-								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-									<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-								</svg>
-							</button>
-							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group" type="button" title="Create group" aria-label="Create group">+ Group</button>' : ""}
-							</div>
-
-						<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5000 ms</span>
+						<div class="chatrooms-action-buttons">
+							<button class="btn btn-outline" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
+							<button class="btn btn-outline" id="chatrooms-refresh">Refresh</button>
+							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
+						</div>
+						<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5 sec</span>
 					</div>
 
 					<div class="chatrooms-toolbar-primary">
@@ -1037,9 +1026,16 @@
       const badge = document.getElementById("polling-mode-badge");
       if (!badge) return;
       const cfg = loadPollingConfig();
-      // The interval is configured in milliseconds; show that unit rather than a
-      // rounded "5s", which loses precision for values like 1500 ms.
-      const interval = (ms) => `${Math.max(0, Math.round(Number(ms) || 0))} ms`;
+      // Seconds above 1000 ms ("5 sec", "1.5 sec"), milliseconds below ("500 ms").
+      const interval = (ms) => {
+        const value = Math.max(0, Number(ms) || 0);
+        if (value >= 1000) {
+          const seconds = value / 1000;
+          const text = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1);
+          return `${text} sec`;
+        }
+        return `${Math.round(value)} ms`;
+      };
 
       if (!isWindowFocused || document.hidden) {
         badge.className = "badge badge-warning";
@@ -1722,6 +1718,47 @@
       });
     },
 
+    /**
+     * Fill the about text of the members that are rendered. Three at a time,
+     * cached for ten minutes, because each one is an extra IQ to the socket.
+     */
+    async hydrateMemberStatuses(container) {
+      const queue = [...container.querySelectorAll("[data-member-status]")];
+      if (!queue.length) return;
+
+      const worker = async () => {
+        while (queue.length) {
+          const cell = queue.shift();
+          const jid = cell?.dataset.memberStatus;
+          if (!jid || !container.isConnected) continue;
+          const text = await this.fetchMemberStatus(jid);
+          if (!container.isConnected || !text) continue;
+          cell.textContent = text;
+        }
+      };
+
+      await Promise.all([worker(), worker(), worker()]);
+    },
+
+    async fetchMemberStatus(jid) {
+      const key = `${selectedSessionId}:${jid}`;
+      const cached = memberStatusCache.get(key);
+      if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.text;
+
+      try {
+        const result = await API.get(
+          `/sessions/${encodeURIComponent(selectedSessionId)}/contacts/${encodeURIComponent(jid)}/status`,
+        );
+        const raw = result?.data?.status;
+        const text = typeof raw === "string" ? raw.trim() : "";
+        memberStatusCache.set(key, { text, at: Date.now() });
+        return text;
+      } catch {
+        memberStatusCache.set(key, { text: "", at: Date.now() });
+        return "";
+      }
+    },
+
     /** About text ("Available", "At work"). Groups have none. */
     async loadContactStatus(jid) {
       const el = document.getElementById("chatroom-about");
@@ -1781,18 +1818,24 @@
           ${members
             .map((m) => {
               const memberJid = String(m.id || "");
-              const label =
-                String(m.name || "").trim() ||
-                String(m.phone || "").trim() ||
-                jidPhoneOnly(memberJid);
+              const displayName = String(m.name || "").trim();
+              const phoneLabel = String(m.phone || "").trim() || jidPhoneOnly(memberJid);
+              const primaryText = displayName || phoneLabel || "Unknown contact";
+              const secondary = displayName ? phoneLabel : "";
               const isMe = m.isSelf === true;
               const role = m.admin ? String(m.admin) : "";
               return `<div class="group-member-row">
-                ${Avatar.markup({ sessionId: selectedSessionId, jid: memberJid, name: label, size: "sm" })}
-                <div class="group-member-id">
-                  <button type="button" class="group-member-link" data-member-jid="${escapeHtml(memberJid)}" title="Open this contact">${escapeHtml(label)}</button>
-                  ${isMe ? '<span class="group-member-role">you</span>' : ""}
-                  ${role ? `<span class="badge ${role === "superadmin" ? "badge-success" : "badge-info"}">${escapeHtml(role)}</span>` : ""}
+                ${Avatar.markup({ sessionId: selectedSessionId, jid: memberJid, name: displayName, size: "sm" })}
+                <div class="group-member-info">
+                  <div class="group-member-line">
+                    <button type="button" class="group-member-link" data-member-jid="${escapeHtml(memberJid)}" title="Open this contact">${escapeHtml(primaryText)}</button>
+                    ${isMe ? '<span class="group-member-role">you</span>' : ""}
+                    ${role ? `<span class="badge ${role === "superadmin" ? "badge-success" : "badge-info"}">${escapeHtml(role)}</span>` : ""}
+                  </div>
+                  <div class="group-member-meta">
+                    ${secondary ? `<span class="group-member-phone">${escapeHtml(secondary)}</span>` : ""}
+                    <span class="group-member-status" data-member-status="${escapeHtml(memberJid)}"></span>
+                  </div>
                 </div>
                 ${
                   canKick && !isMe
@@ -1806,6 +1849,7 @@
       );
 
       Avatar.hydrate(body);
+      void this.hydrateMemberStatuses(body);
 
       body.querySelectorAll(".group-member-link").forEach((button) => {
         button.addEventListener("click", () => {
