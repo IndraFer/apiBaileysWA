@@ -844,9 +844,8 @@
 							<label for="chatrooms-search">Search Chat</label>
 							<input type="text" id="chatrooms-search" placeholder="Search by name / JID" />
 						</div>
-					</div>
 
-					<div class="chatrooms-toolbar-actions">
+						<div class="chatrooms-toolbar-actions">
 						<div class="chatrooms-action-buttons">
 							<button class="btn btn-outline btn-icon" id="chatrooms-polling-toggle" type="button" title="Polling settings" aria-label="Polling settings">
 								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -863,7 +862,8 @@
 							</button>
 							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group" type="button" title="Create group" aria-label="Create group">+ Group</button>' : ""}
 						</div>
-						<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5 sec</span>
+							<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5 sec</span>
+						</div>
 					</div>
 
 					<div class="chatrooms-toolbar-primary">

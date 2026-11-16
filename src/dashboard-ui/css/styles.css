@@ -3196,20 +3196,28 @@ details[open] > summary::before {
   display: flex;
   align-items: center;
   align-self: flex-end;
+  /* The only element pinned to the right edge. */
+  margin-left: auto;
 }
 
 /* Groups stay whole when the toolbar wraps: a button never separates from the
  * badge or the primary action it belongs to. */
+/* Icon buttons and the polling badge belong to the field group: they follow the
+ * search input instead of floating at the right edge. */
 .chatrooms-toolbar-actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   row-gap: 0.5rem;
 }
 
 .chatrooms-toolbar-controls {
-  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
   min-width: 0;
-  /* Auto margin (not space-between) so a wrapped line still aligns right. */
-  margin-right: auto;
 }
 
 .chatrooms-action-buttons {
