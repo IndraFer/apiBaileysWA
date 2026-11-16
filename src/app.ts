@@ -384,6 +384,9 @@ app.post("/dashboard/csp-report", async (c) => {
     appLogger.warn(
       "[CSP-REPORT] %s",
       JSON.stringify({
+        // The fired policy itself: distinguishes a header policy from a <meta>
+        // one, which a header-only comparison cannot do.
+        policy: String(report["original-policy"] ?? report.originalPolicy ?? "").slice(0, 600),
         directive: report["effective-directive"] ?? report.effectiveDirective ?? "",
         blocked: String(
           report["blocked-uri"] ?? report.blockedURL ?? report.blockedURI ?? "",
