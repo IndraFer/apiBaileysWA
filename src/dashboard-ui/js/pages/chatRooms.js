@@ -1677,7 +1677,9 @@
         const result = await API.get(
           `/sessions/${encodeURIComponent(selectedSessionId)}/contacts/${encodeURIComponent(jid)}/status`,
         );
-        const status = String(result?.data?.status || "").trim();
+        const raw = result?.data?.status;
+        // Never stringify an object: that is how "[object Object]" reaches the UI.
+        const status = typeof raw === "string" ? raw.trim() : "";
         if (!status) return;
         // The chat may have changed while the request was in flight.
         if (selectedJid !== jid) return;

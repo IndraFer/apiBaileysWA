@@ -1892,6 +1892,24 @@ dashboardApi.get("/sessions/:sessionId/memory", async (c) => {
  * GET /dashboard/api/sessions/:sessionId/chats/:jid/memory
  * Structured memory for the dashboard viewer: summary, facts and counters.
  */
+/**
+ * `fetchStatus` has returned different shapes across Baileys versions: a string,
+ * `{ status }`, or `[{ status: { status, setAt } }]`. Walk the payload instead of
+ * assuming one shape, so the UI never renders "[object Object]".
+ */
+function extractStatusText(value: unknown, depth = 0): string {
+  if (depth > 3 || value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return extractStatusText(value[0], depth + 1);
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if ("status" in record) return extractStatusText(record.status, depth + 1);
+    // USync wraps its matches in `list`; some versions return the wrapper itself.
+    if (Array.isArray(record.list)) return extractStatusText(record.list[0], depth + 1);
+  }
+  return "";
+}
+
 dashboardApi.get("/sessions/:sessionId/avatars/:jid", async (c) => {
   const denied = requireCapability(c, "viewChats");
   if (denied) return denied;
@@ -1930,10 +1948,7 @@ dashboardApi.get("/sessions/:sessionId/contacts/:jid/status", async (c) => {
   try {
     const session = connectionManager.getSession(sessionId);
     const result = await session.fetchStatus(jid);
-    const first = Array.isArray(result) ? result[0] : result;
-    const status =
-      typeof first === "string" ? first : ((first as { status?: string } | null)?.status ?? "");
-    return c.json({ success: true, data: { status } });
+    return c.json({ success: true, data: { status: extractStatusText(result) } });
   } catch {
     // A contact with hidden or missing status is not an error.
     return c.json({ success: true, data: { status: "" } });
