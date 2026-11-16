@@ -3185,6 +3185,12 @@ details[open] > summary::before {
 
 /* The primary action is its own toolbar cell, so it stays pinned to the right
  * even when the controls wrap. It never rides along with the icon group. */
+.chatrooms-toolbar .btn-icon {
+  width: 2.5rem;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .chatrooms-toolbar-primary {
   flex: 0 0 auto;
   display: flex;

@@ -848,9 +848,20 @@
 
 					<div class="chatrooms-toolbar-actions">
 						<div class="chatrooms-action-buttons">
-							<button class="btn btn-outline" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
-							<button class="btn btn-outline" id="chatrooms-refresh">Refresh</button>
-							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
+							<button class="btn btn-outline btn-icon" id="chatrooms-polling-toggle" type="button" title="Polling settings" aria-label="Polling settings">
+								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+									<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+									<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+									<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+									<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+								</svg>
+							</button>
+							<button class="btn btn-outline btn-icon" id="chatrooms-refresh" title="Refresh chat list" aria-label="Refresh chat list">
+								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+									<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+								</svg>
+							</button>
+							${can("manageGroups") ? '<button class="btn btn-outline hidden" id="chatrooms-create-group" type="button" title="Create group" aria-label="Create group">+ Group</button>' : ""}
 						</div>
 						<span class="badge badge-info" id="polling-mode-badge" title="Polling interval">POLL 5 sec</span>
 					</div>
