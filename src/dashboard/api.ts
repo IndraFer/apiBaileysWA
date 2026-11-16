@@ -1896,8 +1896,14 @@ dashboardApi.get("/sessions/:sessionId/memory", async (c) => {
 function describeShape(value: unknown, depth = 0): string {
   if (value === null || value === undefined) return "none";
   if (typeof value !== "object") return typeof value;
-  if (depth > 2) return Array.isArray(value) ? "array" : "object";
-  if (Array.isArray(value)) return `array(${value.length})`;
+
+  if (Array.isArray(value)) {
+    // The element keys are what separates "one match without a status" from
+    // "one element we do not understand"; a bare length cannot.
+    const head = value.length > 0 && depth < 2 ? describeShape(value[0], depth + 1) : "";
+    return `array(${value.length})${head}`;
+  }
+
   const keys = Object.keys(value as Record<string, unknown>);
   return `{${keys.slice(0, 5).join(",")}}`;
 }
