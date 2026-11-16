@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.1] - 2026-11-16
+
+### Added
+
+- contact avatars with initials and blank fallback
+
 ## [1.46.0] - 2026-11-14
 
 ### Added
