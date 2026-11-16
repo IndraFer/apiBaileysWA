@@ -847,7 +847,7 @@
 
 						<div class="chatrooms-toolbar-actions">
 						<div class="chatrooms-action-buttons">
-							<button class="btn btn-outline btn-icon" id="chatrooms-polling-toggle" type="button" title="Polling settings" aria-label="Polling settings">
+							<button class="btn btn-outline btn-icon" id="chatrooms-polling-toggle" type="button" title="Polling settings" aria-label="Polling settings" ${selectedSessionId ? "" : "disabled"}>
 								<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
 									<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
 									<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
@@ -1068,12 +1068,19 @@
       this.stopPolling();
       this.updatePollingModeBadge();
       refreshTimer = setTimeout(async () => {
-        if (!selectedSessionId) return;
-        await this.loadChatList(false);
-        if (selectedJid) {
-          await this.refreshCurrentConversation(false);
+        try {
+          if (!selectedSessionId) return;
+          await this.loadChatList(false);
+          if (selectedJid) {
+            await this.refreshCurrentConversation(false);
+          }
+        } catch (error) {
+          // A disconnected socket or a failed request must not stop the loop:
+          // without this the page silently stopped updating until a reload.
+          console.warn("[chatrooms] polling round failed:", error);
+        } finally {
+          if (selectedSessionId) this.startPolling();
         }
-        this.startPolling();
       }, delayMs || this.getPollingIntervalMs());
     },
 
