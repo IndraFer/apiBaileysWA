@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.7] - 2026-11-16
+
+### Changed
+
+- log the effective policy once at startup
+
 ## [1.46.6] - 2026-11-16
 
 ### Fixed
