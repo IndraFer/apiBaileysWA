@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.4] - 2026-11-16
+
+### Fixed
+
+- include element keys in the blank-status shape log
+
 ## [1.46.3] - 2026-11-16
 
 ### Fixed
