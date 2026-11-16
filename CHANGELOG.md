@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.14] - 2026-11-16
+
+### Fixed
+
+- disable polling settings without a session and keep polling alive
+
 ## [1.46.13] - 2026-11-16
 
 ### Fixed
