@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.10] - 2026-11-16
+
+### Fixed
+
+- member rows show name, phone and status; revert toolbar extras
+
 ## [1.46.9] - 2026-11-16
 
 ### Fixed
