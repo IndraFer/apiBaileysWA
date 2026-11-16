@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.11] - 2026-11-16
+
+### Fixed
+
+- restore the icon controls
+
 ## [1.46.10] - 2026-11-16
 
 ### Fixed
