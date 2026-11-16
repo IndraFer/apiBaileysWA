@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.9] - 2026-11-16
+
+### Fixed
+
+- pin the new-message action right and shrink the toolbar
+
 ## [1.46.8] - 2026-11-16
 
 ### Changed
