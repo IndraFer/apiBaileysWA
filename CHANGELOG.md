@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.12] - 2026-11-16
+
+### Fixed
+
+- keep the icon cluster with the fields
+
 ## [1.46.11] - 2026-11-16
 
 ### Fixed
