@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.2] - 2026-11-16
+
+### Fixed
+
+- stop rendering "[object Object]" as contact status
+
 ## [1.46.1] - 2026-11-16
 
 ### Added
