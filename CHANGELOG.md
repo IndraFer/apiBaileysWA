@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.5] - 2026-11-16
+
+### Changed
+
+- move the new-message form into a modal
+
 ## [1.46.4] - 2026-11-16
 
 ### Fixed
