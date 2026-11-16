@@ -131,6 +131,11 @@ const CSP_HEADER = config.cspReportOnly
   ? "Content-Security-Policy-Report-Only"
   : "Content-Security-Policy";
 
+// Logged once so an operator can diff what this build produces against the
+// header a deployment actually returns. If the two differ, something in front of
+// the app rewrote the policy.
+appLogger.info("[CSP] %s: %s", CSP_HEADER, DASHBOARD_CSP);
+
 const CSP_REPORT_TO =
   '{"group":"csp","max_age":10800,"endpoints":[{"url":"/dashboard/csp-report"}]}';
 
