@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.13] - 2026-11-16
+
+### Fixed
+
+- disable session-bound actions without a session, keep new message for all roles
+
 ## [1.46.12] - 2026-11-16
 
 ### Fixed
