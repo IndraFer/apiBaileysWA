@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.6] - 2026-11-16
+
+### Fixed
+
+- working new-message button, one-row member list, login footer
+
 ## [1.46.5] - 2026-11-16
 
 ### Changed
