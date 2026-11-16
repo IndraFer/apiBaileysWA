@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.3] - 2026-11-16
+
+### Fixed
+
+- log the payload shape when the about status is blank
+
 ## [1.46.2] - 2026-11-16
 
 ### Fixed
