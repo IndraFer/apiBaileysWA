@@ -1342,7 +1342,8 @@
         filtered
           .map((chat) => {
             const jid = chat.id;
-            const name = escapeHtml(normalizeContactName(chat));
+            const rawName = normalizeContactName(chat);
+            const name = escapeHtml(rawName);
             const unread = Number(chat.unreadCount || 0);
             const time = formatMessageTime(chat.conversationTimestamp);
             const active = jid === selectedJid ? "active" : "";
@@ -1354,11 +1355,14 @@
             return `
             <div class="chatroom-row">
               <button class="chatroom-item ${active}" data-jid="${jid}">
-                <div class="chatroom-item-header">
-                  <span class="chatroom-name">${name}</span>
-                  <span class="chatroom-time">${time}</span>
+                ${Avatar.markup({ sessionId: selectedSessionId, jid, name: rawName })}
+                <div class="chatroom-item-body">
+                  <div class="chatroom-item-header">
+                    <span class="chatroom-name">${name}</span>
+                    <span class="chatroom-time">${time}</span>
+                  </div>
+                  <div class="chatroom-item-sub">${escapeHtml(subtitle)}</div>
                 </div>
-                <div class="chatroom-item-sub">${escapeHtml(subtitle)}</div>
                 ${unread > 0 ? `<span class="chatroom-unread">${unread}</span>` : ""}
               </button>
               <button class="chatroom-kebab chat-menu-trigger" type="button" data-jid="${jid}" title="Chat actions">⋯</button>
@@ -1366,6 +1370,8 @@
           })
           .join(""),
       );
+
+      Avatar.hydrate(sidebar);
 
       sidebar.querySelectorAll(".chatroom-kebab").forEach((btn) => {
         btn.addEventListener("click", (event) => {
@@ -1663,6 +1669,25 @@
       });
     },
 
+    /** About text ("Available", "At work"). Groups have none. */
+    async loadContactStatus(jid) {
+      const el = document.getElementById("chatroom-about");
+      if (!el) return;
+      try {
+        const result = await API.get(
+          `/sessions/${encodeURIComponent(selectedSessionId)}/contacts/${encodeURIComponent(jid)}/status`,
+        );
+        const status = String(result?.data?.status || "").trim();
+        if (!status) return;
+        // The chat may have changed while the request was in flight.
+        if (selectedJid !== jid) return;
+        el.textContent = status;
+        el.classList.remove("is-hidden");
+      } catch {
+        /* a contact without a public status is normal */
+      }
+    },
+
     async showGroupMembers(jid) {
       Modal.show(
         "Group Members",
@@ -1708,10 +1733,13 @@
               const isMe = m.isSelf === true;
               const role = m.admin ? String(m.admin) : "";
               return `<div class="group-member-row">
+                <div class="group-member-main">
+                ${Avatar.markup({ sessionId: selectedSessionId, jid: memberJid, name: label, size: "sm" })}
                 <div class="group-member-id">
                   <button type="button" class="group-member-link" data-member-jid="${escapeHtml(memberJid)}" title="Open this contact">${escapeHtml(label)}</button>
                   ${isMe ? '<span class="group-member-role">you</span>' : ""}
                   ${role ? `<span class="badge ${role === "superadmin" ? "badge-success" : "badge-info"}">${escapeHtml(role)}</span>` : ""}
+                </div>
                 </div>
                 ${
                   canKick && !isMe
@@ -1723,6 +1751,8 @@
             .join("")}
         </div>`,
       );
+
+      Avatar.hydrate(body);
 
       body.querySelectorAll(".group-member-link").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1775,9 +1805,11 @@
         main,
         `
         <div class="chatroom-header">
+          ${Avatar.markup({ sessionId: selectedSessionId, jid, name: jidLabel, size: "lg" })}
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
             <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(selectedSessionId)}</p>
+            <p class="chatroom-about is-hidden" id="chatroom-about"></p>
 						<span class="chatroom-read-status is-hidden" id="chatroom-read-status"></span>
 						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
           </div>
@@ -1792,6 +1824,9 @@
           <button class="btn btn-primary" type="submit">Send</button>
         </form>`,
       );
+
+      Avatar.hydrate(main);
+      if (!isGroupMode) void this.loadContactStatus(jid);
 
       document.getElementById("chatroom-menu").addEventListener("click", (event) => {
         event.stopPropagation();

@@ -58,6 +58,7 @@ import {
   normalizeAutoReplyConfig,
   resolveAutoReplyConfig,
 } from "@/services/autoReply";
+import { getAvatar } from "@/services/avatarCache";
 import { listBroadcastJobs } from "@/services/broadcastQueue";
 import { applyBackup, buildBackup } from "@/services/dataMigration";
 import { getHealthSnapshot } from "@/services/healthMetrics";
@@ -1891,6 +1892,54 @@ dashboardApi.get("/sessions/:sessionId/memory", async (c) => {
  * GET /dashboard/api/sessions/:sessionId/chats/:jid/memory
  * Structured memory for the dashboard viewer: summary, facts and counters.
  */
+dashboardApi.get("/sessions/:sessionId/avatars/:jid", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  if (!jid) return c.body(null, 404);
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    // "preview" is the small variant: enough for a list row, cheap to cache.
+    const image = await getAvatar(sessionId, jid, () => session.profilePictureUrl(jid, "preview"));
+    if (!image) return c.body(null, 404);
+    if (c.req.header("if-none-match") === image.etag) return c.body(null, 304);
+
+    return c.body(new Uint8Array(image.buffer), 200, {
+      "Content-Type": image.contentType,
+      "Cache-Control": "private, max-age=3600",
+      ETag: image.etag,
+    });
+  } catch {
+    return c.body(null, 404);
+  }
+});
+
+dashboardApi.get("/sessions/:sessionId/contacts/:jid/status", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const result = await session.fetchStatus(jid);
+    const first = Array.isArray(result) ? result[0] : result;
+    const status =
+      typeof first === "string" ? first : ((first as { status?: string } | null)?.status ?? "");
+    return c.json({ success: true, data: { status } });
+  } catch {
+    // A contact with hidden or missing status is not an error.
+    return c.json({ success: true, data: { status: "" } });
+  }
+});
+
 dashboardApi.get("/sessions/:sessionId/chats/:jid/memory", async (c) => {
   const denied = requireCapability(c, "viewChats");
   if (denied) return denied;
