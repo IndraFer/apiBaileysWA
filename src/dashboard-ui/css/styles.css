@@ -1730,33 +1730,19 @@ details[open] > summary::before {
   flex-wrap: wrap;
 }
 
-.chatrooms-compose-card {
-  padding-top: 0.85rem;
-  padding-bottom: 0.75rem;
+/* New-message form inside the modal. Fields stack; the modal is narrower than
+   the old toolbar card, so the three-column grid is gone. */
+.compose-form .form-group {
+  margin-bottom: 0.9rem;
 }
 
-.chatrooms-compose-form {
-  display: grid;
-  grid-template-columns: 230px 1fr auto;
-  gap: 0.5rem;
-  align-items: center;
+.compose-form textarea {
+  resize: vertical;
+  min-height: 96px;
 }
 
-.chatrooms-compose-form input {
-  width: 100%;
-  padding: 0.65rem 0.85rem;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  color: var(--text-primary);
-  font-family: var(--font);
-  font-size: 0.9rem;
-  outline: none;
-}
-
-.chatrooms-compose-form input:focus {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.compose-form .text-xs {
+  margin-bottom: 1rem;
 }
 
 .chatrooms-layout {
@@ -2307,10 +2293,6 @@ details[open] > summary::before {
   .chatrooms-toolbar {
     flex-wrap: wrap;
     overflow-x: visible;
-  }
-
-  .chatrooms-compose-form {
-    grid-template-columns: 1fr;
   }
 
   .chatrooms-polling-controls {

@@ -845,6 +845,7 @@
 						</div>
 						<div class="chatrooms-toolbar-actions">
 							<div class="chatrooms-action-buttons">
+							<button class="btn btn-primary btn-sm" id="chatrooms-new-message" type="button">+ New Message</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-polling-toggle" type="button">Polling Settings</button>
 							<button class="btn btn-outline btn-sm" id="chatrooms-refresh">Refresh</button>
 							${can("manageGroups") ? '<button class="btn btn-outline btn-sm hidden" id="chatrooms-create-group">+ Create Group</button>' : ""}
@@ -869,15 +870,6 @@
 							<p class="chatrooms-polling-help">Left input is for active tab interval, right input is for background interval.</p>
 						</div>
 					</div>
-				</div>
-
-				<div class="card chatrooms-compose-card">
-					<form id="chatrooms-compose-form" class="chatrooms-compose-form">
-						<input type="text" id="chatrooms-compose-receiver" placeholder="WA Number (62...) or Group JID" required />
-						<input type="text" id="chatrooms-compose-text" placeholder="Message text" maxlength="2000" required />
-						<button class="btn btn-primary" type="submit">Send</button>
-					</form>
-					<p class="text-xs text-muted mt-1">Use a WhatsApp number for personal chat, or a Group JID when Groups mode is selected.</p>
 				</div>
 
 				<div class="chatrooms-layout">
@@ -972,31 +964,8 @@
         Toast.success("Polling interval updated");
       });
 
-      document.getElementById("chatrooms-compose-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const receiverInput = document.getElementById("chatrooms-compose-receiver");
-        const textInput = document.getElementById("chatrooms-compose-text");
-        const receiver = receiverInput.value.trim();
-        const text = textInput.value.trim();
-        if (!receiver || !text) return;
-
-        if (selectedJid) {
-          await this.markRoomAsRead(selectedJid, false);
-        }
-
-        const sendResult = await API.post(
-          `/sessions/${encodeURIComponent(selectedSessionId)}/chats/send-text`,
-          { receiver, text, isGroup: selectedMode === "groups" },
-        );
-
-        if (!sendResult.success) {
-          Toast.error(sendResult.message || "Failed to send message");
-          return;
-        }
-
-        textInput.value = "";
-        Toast.success("Message sent");
-        await this.loadChatList(false);
+      document.getElementById("chatrooms-new-message").addEventListener("click", () => {
+        this.openNewMessageModal();
       });
 
       document.getElementById("chatrooms-create-group")?.addEventListener("click", () => {
@@ -1666,6 +1635,61 @@
           `/dashboard/api/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/memory/export`,
           `memory-${selectedSessionId}.json`,
         );
+      });
+    },
+
+    /**
+     * Start a conversation with a number or group JID. Lives in a modal so the
+     * chat room keeps the full height; the room already has its own composer.
+     */
+    openNewMessageModal() {
+      Modal.show(
+        "New Message",
+        `
+        <form id="compose-form" class="compose-form">
+          <div class="form-group">
+            <label for="compose-receiver">Receiver</label>
+            <input type="text" id="compose-receiver" placeholder="62... or group JID" autocomplete="off" required />
+          </div>
+          <div class="form-group">
+            <label for="compose-text">Message</label>
+            <textarea id="compose-text" rows="4" maxlength="2000" placeholder="Message text" required></textarea>
+          </div>
+          <p class="text-xs text-muted">Use a WhatsApp number for personal chat, or a Group JID when Groups mode is selected.</p>
+          <div class="flex gap-1 u-end">
+            <button class="btn btn-outline" type="button" id="compose-cancel">Cancel</button>
+            <button class="btn btn-primary" type="submit">Send</button>
+          </div>
+        </form>`,
+      );
+
+      const receiverInput = document.getElementById("compose-receiver");
+      const textInput = document.getElementById("compose-text");
+      receiverInput?.focus();
+
+      document.getElementById("compose-cancel")?.addEventListener("click", () => Modal.hide());
+
+      document.getElementById("compose-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const receiver = String(receiverInput.value || "").trim();
+        const text = String(textInput.value || "").trim();
+        if (!receiver || !text) return;
+
+        // A group JID is unambiguous; otherwise fall back to the selected mode.
+        const isGroup = receiver.endsWith("@g.us") || selectedMode === "groups";
+        const sendResult = await API.post(
+          `/sessions/${encodeURIComponent(selectedSessionId)}/chats/send-text`,
+          { receiver, text, isGroup },
+        );
+
+        if (!sendResult.success) {
+          Toast.error(sendResult.message || "Failed to send message");
+          return;
+        }
+
+        Modal.hide();
+        Toast.success("Message sent");
+        await this.loadChatList(false);
       });
     },
 
