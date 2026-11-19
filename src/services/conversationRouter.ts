@@ -187,6 +187,23 @@ export class ConversationRouter {
     return pending;
   }
 
+  /**
+   * Discard queued work for one conversation but keep the pause deadline.
+   * Used when a human takes over: the messages already queued must not be
+   * answered later, once the pause expires.
+   */
+  dropPending(conversationId: string): void {
+    const state = this.conversations.get(conversationId);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.texts = [];
+    state.media = [];
+    state.lastMessage = null;
+    state.firstAt = 0;
+    state.epoch += 1;
+  }
+
   /** Drop all timers and pending state (session shutdown). */
   dispose(): void {
     for (const state of this.conversations.values()) {

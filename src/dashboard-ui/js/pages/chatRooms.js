@@ -1050,7 +1050,10 @@
         badge.className = "badge badge-warning";
         badge.textContent = `POLL ${interval(cfg.idleMs)}`;
         badge.title = `Tab in background: polling every ${cfg.idleMs} ms`;
-        badge.setAttribute("aria-label", `Polling every ${cfg.idleMs} milliseconds while the tab is in background`);
+        badge.setAttribute(
+          "aria-label",
+          `Polling every ${cfg.idleMs} milliseconds while the tab is in background`,
+        );
         return;
       }
 

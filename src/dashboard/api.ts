@@ -1640,10 +1640,20 @@ dashboardApi.post("/sessions/:sessionId/chats/send-text", async (c) => {
         simulateTyping: false,
       },
     );
+
+    // A dashboard reply is a human takeover. The API-sent id is excluded from
+    // human-activity detection, so the pause has to be recorded explicitly.
+    let pausedUntil: number | null = null;
+    try {
+      pausedUntil = session.pauseForHumanActivity(jid);
+    } catch {
+      /* pausing is best-effort; the message was already sent */
+    }
+
     return c.json({
       success: true,
       message: "Message sent",
-      data: { key: result?.key, messageTimestamp: result?.messageTimestamp },
+      data: { key: result?.key, messageTimestamp: result?.messageTimestamp, pausedUntil },
     });
   } catch (err) {
     return error(c, (err as Error).message, 500);

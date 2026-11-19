@@ -282,7 +282,8 @@ export class BaileysConnection {
    * typed by a human (dashboard, phone, or WhatsApp Web), which is how human
    * activity is detected without a separate presence service.
    */
-  private apiSentIds = new Set<string>();
+  /** Ids of messages this API sent, with the time, so they age out by clock. */
+  private apiSentAt = new Map<string, number>();
   /** Consecutive blocked messages per conversation (abuse control). */
   private guardStrikes = new Map<string, number>();
   /** Per-conversation debounce and human-pause state machine. */
@@ -1010,12 +1011,16 @@ export class BaileysConnection {
     const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
     if (lastHumanAt !== null) {
       this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
+      // Queueing here held the message until the pause expired, so the AI
+      // answered a conversation a human had already handled.
+      this.aiRouter.dropPending(remoteJid);
       recordDecision({
         sessionId: this.sessionId,
         conversationId: remoteJid,
         route: "human",
         reason: "human_active",
       });
+      return true;
     }
 
     if (!this.isAiEligible()) {
@@ -1447,10 +1452,24 @@ export class BaileysConnection {
       const timestamp = toNumber(msg.messageTimestamp ?? 0) * 1000;
       if (timestamp < cutoff) continue;
       const id = msg.key.id ? String(msg.key.id) : "";
-      if (id && this.apiSentIds.has(id)) continue;
+      if (id && this.apiSentAt.has(id)) continue;
       return timestamp;
     }
     return null;
+  }
+
+  /**
+   * A human answered from the dashboard: hold the AI for the routing idle
+   * window and drop anything already queued. Dashboard replies arrive through
+   * the API, so `lastHumanActivityAt()` deliberately ignores them and the pause
+   * has to be set here instead.
+   */
+  pauseForHumanActivity(conversationId: string): number {
+    const routing = resolveRoutingConfig(this.options.routing);
+    const until = Date.now() + Math.max(60_000, routing.humanIdleMs);
+    this.aiRouter.pause(conversationId, until, "human_active");
+    this.aiRouter.dropPending(conversationId);
+    return until;
   }
 
   /**
@@ -1466,10 +1485,20 @@ export class BaileysConnection {
   /** Remember an API-sent message id so it is not mistaken for human activity. */
   private rememberApiSent(id: string | null | undefined) {
     if (!id) return;
-    this.apiSentIds.add(String(id));
-    if (this.apiSentIds.size > 500) {
-      const oldest = this.apiSentIds.values().next().value;
-      if (oldest) this.apiSentIds.delete(oldest);
+    const key = String(id);
+    this.apiSentAt.set(key, Date.now());
+    if (this.apiSentAt.size <= 200) return;
+
+    // Age out by clock. The old 500-entry FIFO dropped ids of answers we had
+    // sent ourselves, which then looked like human takeover to the next scan.
+    const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+    for (const [sentId, at] of this.apiSentAt) {
+      if (at < cutoff) this.apiSentAt.delete(sentId);
+    }
+    while (this.apiSentAt.size > 2000) {
+      const oldest = this.apiSentAt.keys().next().value;
+      if (!oldest) break;
+      this.apiSentAt.delete(oldest);
     }
   }
 
