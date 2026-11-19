@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.48.1] - 2026-11-19
+
+### Changed
+
+- state the agent-reply migration instead of implying parity
+
 ## [1.48.0] - 2026-11-19
 
 ### Added
