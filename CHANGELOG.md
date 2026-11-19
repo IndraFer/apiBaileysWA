@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.15] - 2026-11-19
+
+### Fixed
+
+- stop the AI answering after a human took over
+
 ## [1.46.14] - 2026-11-16
 
 ### Fixed
