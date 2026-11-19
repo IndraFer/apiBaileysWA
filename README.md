@@ -635,6 +635,15 @@ is deliberately separate from `/chats/:sessionId/send`: blocking the generic sen
 route during a takeover would also block legitimate transactional traffic, which
 cannot be told apart from an agent reply.
 
+> **Migration required.** The takeover check applies only to agents that call
+> this endpoint. An existing agent that keeps posting to
+> `/chats/:sessionId/send` still replies during a human takeover — that route
+> stays open for business traffic and cannot distinguish the two. When such a
+> send lands on a human-owned conversation the server logs a debug line naming
+> the receiver and the expected endpoint (`LOG_LEVEL=debug`), which is how to
+> find agents that have not migrated. The dispatch payload advertises
+> `reply.endpoint`, so an agent that reads it moves over without a config change.
+
 #### Prompt-injection & abuse control
 
 Layers, weakest to strongest:

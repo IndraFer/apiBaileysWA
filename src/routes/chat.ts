@@ -10,6 +10,7 @@ import { BaileysNotConnectedError } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
 import type { BroadcastMessage } from "@/baileys/types";
+import logger from "@/lib/logger";
 import { error, success } from "@/lib/response";
 import { authMiddleware } from "@/middleware/auth";
 import { bulkRateLimit, sendRateLimit } from "@/middleware/rateLimit";
@@ -113,6 +114,25 @@ chatRoutes.post("/:sessionId/send", sessionValidator, sendRateLimit, async (c) =
   const { receiver, message, isGroup, quoted } = parsed.data;
 
   try {
+    // This route cannot distinguish an agent reply from a business send, so it
+    // is not blocked during a takeover. Log it: an agent still calling this
+    // route instead of /agent/:sessionId/reply is the one case that bypasses a
+    // human claim, and this is how an operator can find it.
+    try {
+      const session = connectionManager.getSession(sessionId);
+      const ownedUntil = session.humanOwnedUntil(receiver);
+      if (ownedUntil > Date.now()) {
+        logger.debug(
+          "[Send] %s is human-owned until %s but a message arrived on the generic route; webhook agents should use /agent/%s/reply",
+          receiver,
+          new Date(ownedUntil).toISOString(),
+          sessionId,
+        );
+      }
+    } catch {
+      /* the send below reports the real error */
+    }
+
     const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
 
     return success(
