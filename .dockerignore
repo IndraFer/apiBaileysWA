@@ -3,6 +3,7 @@ dist/
 .env
 sessions/
 media/
+data/
 logs/
 *.log
 bun.lock

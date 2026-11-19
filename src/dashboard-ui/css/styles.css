@@ -397,6 +397,26 @@ a:active {
   color: #fff;
 }
 
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+  border-color: transparent;
+}
+.btn-warning:hover {
+  filter: brightness(0.93);
+  transform: translateY(-1px);
+}
+
+.btn-outline-warning {
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+.btn-outline-warning:hover {
+  background: var(--warning);
+  color: #fff;
+}
+
 .btn-outline {
   background: transparent;
   color: var(--text-secondary);
@@ -3272,7 +3292,6 @@ details[open] > summary::before {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  margin-left: 0.5rem;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
   /* Warning tone: a human claim changes who answers, so it must not read as
