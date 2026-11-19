@@ -301,6 +301,18 @@ export class ConversationRouter {
         media,
         participant: lastMessage?.key.participant ?? undefined,
       });
+      // A human may have taken over while the model was working. Every
+      // automated reply is stale from that moment, so check before both the
+      // fallback path and the delivery path.
+      if (state.pausedUntil > Date.now()) {
+        this.options.logger.debug(
+          "[%s] AI reply for %s discarded: conversation is human-owned",
+          this.options.sessionId,
+          conversationId,
+        );
+        return;
+      }
+
       if (!result.ok) {
         this.options.logger.warn(
           "[%s] AI reply failed for %s: %s",
