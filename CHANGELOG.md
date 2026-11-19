@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.46.16] - 2026-11-19
+
+### Fixed
+
+- discard an in-flight reply when a human takes over
+
 ## [1.46.15] - 2026-11-19
 
 ### Fixed
