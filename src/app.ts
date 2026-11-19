@@ -14,6 +14,7 @@ import { error, success } from "@/lib/response";
 import { serveFile } from "@/lib/runtime";
 import { authMiddleware } from "@/middleware/auth";
 import { generalRateLimit } from "@/middleware/rateLimit";
+import agentRoutes from "@/routes/agent";
 import chatRoutes from "@/routes/chat";
 import groupRoutes from "@/routes/group";
 import mediaRoutes from "@/routes/media";
@@ -409,6 +410,7 @@ app.route("/sessions", sessionRoutes);
 // Canonical versioned path, with the original /messages kept as an alias.
 app.route("/api/v1/messages", messageRoutes);
 app.route("/messages", messageRoutes);
+app.route("/agent", agentRoutes);
 app.route("/chats", chatRoutes);
 app.route("/groups", groupRoutes);
 app.route("/profile", profileRoutes);

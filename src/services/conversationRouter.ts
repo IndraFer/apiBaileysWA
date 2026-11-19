@@ -187,6 +187,13 @@ export class ConversationRouter {
     return pending;
   }
 
+  /** Active pause deadline for a conversation, or 0. */
+  pausedUntilFor(conversationId: string): number {
+    const state = this.conversations.get(conversationId);
+    if (!state) return 0;
+    return state.pausedUntil > Date.now() ? state.pausedUntil : 0;
+  }
+
   /** Release a human pause so the AI answers this conversation again. */
   resume(conversationId: string): void {
     const state = this.conversations.get(conversationId);

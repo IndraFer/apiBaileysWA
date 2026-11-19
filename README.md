@@ -596,10 +596,44 @@ POST /chats/:sessionId/handoff
 { "conversationId": "628xxx@s.whatsapp.net", "reason": "customer_minta_manusia", "pauseMinutes": 30 }
 ```
 
-While paused, inbound messages accumulate but the AI stays silent; when the
-pause expires the backlog is answered once. A human reply in the meantime
-extends the pause automatically. `pauseMinutes` is clamped to 1..1440 (default
-30).
+While paused the AI is silent, and messages that arrive during the pause are
+**not** queued: a human already handled that conversation, so answering the
+backlog after the pause would talk over them. A human reply — from the phone or
+from the dashboard — extends the pause for `humanIdleMs`. `pauseMinutes` is
+clamped to 1..1440 (default 30).
+
+A reply that is already being generated when the pause starts is discarded
+instead of delivered.
+
+#### Manual takeover
+
+An operator can hold a conversation outright, so the AI never answers it:
+
+```text
+POST   /dashboard/api/sessions/:id/chats/:jid/takeover   { "hours": 24 }
+DELETE /dashboard/api/sessions/:id/chats/:jid/takeover
+GET    /dashboard/api/sessions/:id/takeovers
+```
+
+Any role that can reply can take over and release. The claim lasts 24 hours by
+default (1..168) and is stored in `sessions/md_<sessionId>/takeover.json`, so it
+survives a restart — an in-memory flag would let the bot resume talking over
+staff after a deploy.
+
+#### Agent replies (webhook driver)
+
+With `ai.driver = "webhook"` the inbound event is handed to an external agent.
+That agent must answer through a route that re-checks ownership at send time:
+
+```text
+POST /agent/:sessionId/reply      Authorization: Bearer <AI_SERVICE_TOKEN>
+```
+
+It answers `409` with `{ humanOwned: true, humanOwnedUntil }` while a human owns
+the conversation, and is disabled (`404`) when `AI_SERVICE_TOKEN` is empty. This
+is deliberately separate from `/chats/:sessionId/send`: blocking the generic send
+route during a takeover would also block legitimate transactional traffic, which
+cannot be told apart from an agent reply.
 
 #### Prompt-injection & abuse control
 

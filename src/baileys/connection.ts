@@ -1196,7 +1196,12 @@ export class BaileysConnection {
           conversationId: input.conversationId,
           texts: input.texts,
           timestamp: Date.now(),
-          reply: { endpoint: `/chats/${this.sessionId}/send` },
+          // Agent replies go through a token-scoped route that re-checks
+          // ownership at send time; the generic send route cannot distinguish
+          // an agent from a business message.
+          reply: { endpoint: `/agent/${this.sessionId}/reply` },
+          humanOwned: this.humanOwnedUntil(input.conversationId) > Date.now(),
+          humanOwnedUntil: this.humanOwnedUntil(input.conversationId) || null,
         },
         config.ai.serviceToken,
         ai.timeoutMs,
@@ -1506,6 +1511,17 @@ export class BaileysConnection {
   /** Active manual takeover deadline, or 0. */
   takeoverUntil(conversationId: string): number {
     return getTakeoverUntil(this.sessionId, conversationId);
+  }
+
+  /**
+   * When a human owns this conversation, by whichever gate came last. The
+   * webhook agent path uses this to refuse a reply that would talk over staff.
+   */
+  humanOwnedUntil(conversationId: string): number {
+    return Math.max(
+      getTakeoverUntil(this.sessionId, conversationId),
+      this.aiRouter.pausedUntilFor(conversationId),
+    );
   }
 
   /**

@@ -44,7 +44,8 @@ const chatRoutes = new Hono();
 
 chatRoutes.use("*", authMiddleware);
 
-async function sendMessageHandler(
+/** Shared by the authenticated routes and the token-scoped agent reply route. */
+export async function sendMessageHandler(
   sessionId: string,
   payload: {
     receiver: string;

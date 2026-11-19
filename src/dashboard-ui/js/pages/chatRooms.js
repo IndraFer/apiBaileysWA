@@ -16,6 +16,8 @@
   const memberStatusCache = new Map();
   /** jid → epoch ms of an active manual takeover, for this session. */
   let takeoverMap = {};
+  let takeoverTicker = null;
+  let takeoverJid = "";
   const typingTimers = new Map();
   let outgoingTypingPauseTimer = null;
   let outgoingTypingStartTimer = null;
@@ -1790,9 +1792,7 @@
     },
 
     async fetchTakeovers() {
-      const result = await API.get(
-        `/sessions/${encodeURIComponent(selectedSessionId)}/takeovers`,
-      );
+      const result = await API.get(`/sessions/${encodeURIComponent(selectedSessionId)}/takeovers`);
       return result?.data?.takeovers || {};
     },
 
@@ -1804,20 +1804,71 @@
         return;
       }
 
-      const btn = document.getElementById("chatroom-takeover");
+      takeoverJid = jid;
+      this.paintTakeover(jid);
+      this.markTakeoverRows();
+    },
+
+    /** "23h 58m" / "58m 12s" / "42s" — compact, no rounding up. */
+    formatTakeoverRemaining(until) {
+      const ms = Math.max(0, until - Date.now());
+      const hours = Math.floor(ms / 3_600_000);
+      const minutes = Math.floor((ms % 3_600_000) / 60_000);
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      const seconds = Math.floor((ms % 60_000) / 1000);
+      return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+    },
+
+    paintTakeover(jid) {
       const until = Number(takeoverMap[jid] || 0);
       const active = until > Date.now();
+      const btn = document.getElementById("chatroom-takeover");
+      const chip = document.getElementById("chatroom-takeover-chip");
+
       if (btn) {
         btn.textContent = active ? "Release" : "Take over";
         btn.classList.toggle("btn-primary", active);
         btn.classList.toggle("btn-outline", !active);
+        btn.classList.toggle("is-active", active);
         btn.title = active
           ? `Human takeover until ${new Date(until).toLocaleString()}`
           : "Take this chat from the AI";
-        btn.classList.toggle("is-active", active);
       }
 
-      this.markTakeoverRows();
+      if (chip) {
+        if (active) {
+          chip.textContent = `Human takeover · ${this.formatTakeoverRemaining(until)}`;
+          chip.title = `Until ${new Date(until).toLocaleString()}`;
+          chip.classList.remove("is-hidden");
+        } else {
+          chip.textContent = "";
+          chip.classList.add("is-hidden");
+        }
+      }
+
+      this.syncTakeoverTicker(active);
+    },
+
+    /** One ticker for the open conversation; it stops itself when the claim ends. */
+    syncTakeoverTicker(active) {
+      if (!active) {
+        if (takeoverTicker) {
+          clearInterval(takeoverTicker);
+          takeoverTicker = null;
+        }
+        return;
+      }
+      if (takeoverTicker) return;
+      takeoverTicker = setInterval(() => {
+        const until = Number(takeoverMap[takeoverJid] || 0);
+        if (until <= Date.now()) {
+          delete takeoverMap[takeoverJid];
+          this.paintTakeover(takeoverJid);
+          this.markTakeoverRows();
+          return;
+        }
+        this.paintTakeover(takeoverJid);
+      }, 10_000);
     },
 
     markTakeoverRows() {
@@ -1999,7 +2050,7 @@
           ${Avatar.markup({ sessionId: selectedSessionId, jid, name: jidLabel, size: "lg" })}
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
-            <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(selectedSessionId)}</p>
+            <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(selectedSessionId)}<span class="takeover-chip is-hidden" id="chatroom-takeover-chip"></span></p>
             <p class="chatroom-about is-hidden" id="chatroom-about"></p>
 						<span class="chatroom-read-status is-hidden" id="chatroom-read-status"></span>
 						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
@@ -2331,6 +2382,10 @@
     },
 
     destroy() {
+      if (takeoverTicker) {
+        clearInterval(takeoverTicker);
+        takeoverTicker = null;
+      }
       this.stopPolling();
       this.stopPresenceStream();
       this.setReadSyncStatus();
