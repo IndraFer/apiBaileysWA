@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.48.3] - 2026-11-19
+
+### Changed
+
+- the endpoint check proves migration, not authorship
+
 ## [1.48.2] - 2026-11-19
 
 ### Changed
