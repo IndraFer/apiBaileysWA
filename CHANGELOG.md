@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.48.5] - 2026-11-19
+
+### Changed
+
+- use real yellow for the takeover control
+
 ## [1.48.4] - 2026-11-19
 
 ### Changed
