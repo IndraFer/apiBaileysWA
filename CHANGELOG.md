@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.48.0] - 2026-11-19
+
+### Added
+
+- agent reply route and takeover countdown
+
 ## [1.47.0] - 2026-11-19
 
 ### Added
