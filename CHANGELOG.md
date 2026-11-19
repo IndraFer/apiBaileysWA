@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.48.4] - 2026-11-19
+
+### Changed
+
+- warning-coloured takeover control and inline countdown
+
 ## [1.48.3] - 2026-11-19
 
 ### Changed
