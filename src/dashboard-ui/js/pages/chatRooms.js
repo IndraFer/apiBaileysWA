@@ -1830,8 +1830,8 @@
         // Warning in both states: taking the chat away from the AI is the
         // action that should catch the eye, and while held it stays amber so
         // the state is still obvious next to the countdown.
-        btn.classList.toggle("btn-warning", !active);
-        btn.classList.toggle("btn-outline-warning", active);
+        btn.classList.toggle("btn-takeover", !active);
+        btn.classList.toggle("btn-outline-takeover", active);
         btn.classList.toggle("is-active", active);
         btn.title = active
           ? `Human takeover until ${new Date(until).toLocaleString()}`
@@ -2060,7 +2060,7 @@
           </div>
           <div class="chatroom-header-actions">
             <span class="takeover-chip is-hidden" id="chatroom-takeover-chip"></span>
-            <button class="btn btn-warning btn-sm" id="chatroom-takeover" type="button" title="Take this chat from the AI">Take over</button>
+            <button class="btn btn-takeover btn-sm" id="chatroom-takeover" type="button" title="Take this chat from the AI">Take over</button>
             ${isGroupMode ? '<button class="btn btn-outline btn-sm" id="chatroom-load-members">Members</button>' : ""}
             <button class="btn btn-outline btn-sm chat-menu-trigger" id="chatroom-menu" type="button" title="Chat actions">⋯</button>
           </div>
