@@ -638,11 +638,14 @@ cannot be told apart from an agent reply.
 > **Migration required.** The takeover check applies only to agents that call
 > this endpoint. An existing agent that keeps posting to
 > `/chats/:sessionId/send` still replies during a human takeover — that route
-> stays open for business traffic and cannot distinguish the two. When such a
-> send lands on a human-owned conversation the server logs a debug line naming
-> the receiver and the expected endpoint (`LOG_LEVEL=debug`), which is how to
-> find agents that have not migrated. The dispatch payload advertises
-> `reply.endpoint`, so an agent that reads it moves over without a config change.
+> stays open for business traffic and cannot distinguish the two.
+>
+> A debug line (`LOG_LEVEL=debug`) marks any message that reaches the generic
+> route while the conversation is human-owned. It is an activity signal, not
+> attribution: a business notification produces the same line as an un-migrated
+> agent. To confirm which one it was, check the endpoint the agent is configured
+> to call — the dispatch payload advertises `reply.endpoint`, so an agent that
+> reads it moves over without a config change.
 
 #### Prompt-injection & abuse control
 
