@@ -643,9 +643,15 @@ cannot be told apart from an agent reply.
 > A debug line (`LOG_LEVEL=debug`) marks any message that reaches the generic
 > route while the conversation is human-owned. It is an activity signal, not
 > attribution: a business notification produces the same line as an un-migrated
-> agent. To confirm which one it was, check the endpoint the agent is configured
-> to call — the dispatch payload advertises `reply.endpoint`, so an agent that
-> reads it moves over without a config change.
+> agent.
+>
+> Checking the endpoint the agent is **configured** to call establishes its
+> migration status — whether it *can* be the sender of such a line — but it does
+> not identify the sender of a particular entry. If the agent still uses the
+> generic route, its messages are indistinguishable from business traffic in the
+> log. Per-message attribution would need the caller to identify itself, which
+> this API does not ask for. The dispatch payload advertises `reply.endpoint`, so
+> an agent that reads it moves over without a config change.
 
 #### Prompt-injection & abuse control
 
