@@ -59,6 +59,7 @@ import {
   resolveAutoReplyConfig,
 } from "@/services/autoReply";
 import { getAvatar } from "@/services/avatarCache";
+import { listTakeovers } from "@/services/manualTakeover";
 import { listBroadcastJobs } from "@/services/broadcastQueue";
 import { applyBackup, buildBackup } from "@/services/dataMigration";
 import { getHealthSnapshot } from "@/services/healthMetrics";
@@ -1935,6 +1936,57 @@ function extractStatusText(value: unknown, depth = 0): string {
   }
   return "";
 }
+
+dashboardApi.get("/sessions/:sessionId/takeovers", async (c) => {
+  const denied = requireCapability(c, "replyIncoming");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  return c.json({ success: true, data: { takeovers: listTakeovers(sessionId) } });
+});
+
+dashboardApi.post("/sessions/:sessionId/chats/:jid/takeover", async (c) => {
+  // Any role that may reply may also claim a conversation: the assistant needs
+  // it most, since that is how they stop the bot mid-thread.
+  const denied = requireCapability(c, "replyIncoming");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  const body = await c.req.json().catch(() => ({}));
+  const hours = Math.min(Math.max(Number(body?.hours ?? 24) || 24, 1), 168);
+  const until = Date.now() + hours * 60 * 60 * 1000;
+
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const by = getDashboardUserPayload(c)?.username || "dashboard";
+    const applied = session.setManualTakeover(jid, until, by);
+    return c.json({ success: true, data: { jid, until: applied, hours } });
+  } catch (err) {
+    return error(c, (err as Error).message, 400);
+  }
+});
+
+dashboardApi.delete("/sessions/:sessionId/chats/:jid/takeover", async (c) => {
+  const denied = requireCapability(c, "replyIncoming");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+
+  const jid = decodeURIComponent(c.req.param("jid"));
+  try {
+    const session = connectionManager.getSession(sessionId);
+    const removed = session.clearManualTakeover(jid);
+    return c.json({ success: true, data: { jid, released: removed } });
+  } catch (err) {
+    return error(c, (err as Error).message, 400);
+  }
+});
 
 dashboardApi.get("/sessions/:sessionId/avatars/:jid", async (c) => {
   const denied = requireCapability(c, "viewChats");

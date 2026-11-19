@@ -3242,3 +3242,26 @@ details[open] > summary::before {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ---- Manual takeover -------------------------------------------------- */
+
+/* Small marker on the list row: the AI is muted for this chat. */
+.chatroom-item.has-takeover::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+
+.chatroom-item.has-takeover {
+  border-color: var(--accent);
+}
+
+.chatroom-header-actions .btn.is-active {
+  font-weight: 600;
+}

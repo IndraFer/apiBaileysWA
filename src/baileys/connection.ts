@@ -74,6 +74,7 @@ import {
 } from "@/services/healthMetrics";
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
+import { clearTakeover, getTakeoverUntil, setTakeover } from "@/services/manualTakeover";
 import { sendUnifiedMessage } from "@/services/messageSender";
 import { matchOtpFilter, resolveOtpFilter } from "@/services/otpFilter";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
@@ -1008,6 +1009,21 @@ export class BaileysConnection {
     }
 
     // A human wrote in this chat → keep it human-owned for humanIdleMs.
+    // An operator holds this conversation explicitly; the AI stays away until
+    // the deadline, across restarts.
+    const takeoverUntil = getTakeoverUntil(this.sessionId, remoteJid);
+    if (takeoverUntil > Date.now()) {
+      this.aiRouter.pause(remoteJid, takeoverUntil, "manual_takeover");
+      this.aiRouter.dropPending(remoteJid);
+      recordDecision({
+        sessionId: this.sessionId,
+        conversationId: remoteJid,
+        route: "human",
+        reason: "manual_takeover",
+      });
+      return true;
+    }
+
     const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
     if (lastHumanAt !== null) {
       this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
@@ -1470,6 +1486,26 @@ export class BaileysConnection {
     this.aiRouter.pause(conversationId, until, "human_active");
     this.aiRouter.dropPending(conversationId);
     return until;
+  }
+
+  /** Claim a conversation for a human until `until`, and silence the AI. */
+  setManualTakeover(conversationId: string, until: number, by: string): number {
+    const entry = setTakeover(this.sessionId, conversationId, until, by);
+    this.aiRouter.pause(conversationId, entry.until, "manual_takeover");
+    this.aiRouter.dropPending(conversationId);
+    return entry.until;
+  }
+
+  /** Hand the conversation back to the AI. */
+  clearManualTakeover(conversationId: string): boolean {
+    const removed = clearTakeover(this.sessionId, conversationId);
+    this.aiRouter.resume(conversationId);
+    return removed;
+  }
+
+  /** Active manual takeover deadline, or 0. */
+  takeoverUntil(conversationId: string): number {
+    return getTakeoverUntil(this.sessionId, conversationId);
   }
 
   /**

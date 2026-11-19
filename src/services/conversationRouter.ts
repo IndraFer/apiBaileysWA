@@ -187,6 +187,19 @@ export class ConversationRouter {
     return pending;
   }
 
+  /** Release a human pause so the AI answers this conversation again. */
+  resume(conversationId: string): void {
+    const state = this.conversations.get(conversationId);
+    if (!state) return;
+    state.pausedUntil = 0;
+    state.epoch += 1;
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    if (state.texts.length > 0) {
+      this.arm(conversationId, Date.now() + this.options.getRouting().batchIdleMs);
+    }
+  }
+
   /**
    * Discard queued work for one conversation but keep the pause deadline.
    * Used when a human takes over: the messages already queued must not be

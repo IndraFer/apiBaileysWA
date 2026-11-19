@@ -14,6 +14,8 @@
   let isSending = false;
   const draftByJid = new Map();
   const memberStatusCache = new Map();
+  /** jid → epoch ms of an active manual takeover, for this session. */
+  let takeoverMap = {};
   const typingTimers = new Map();
   let outgoingTypingPauseTimer = null;
   let outgoingTypingStartTimer = null;
@@ -1256,6 +1258,9 @@
 
     async loadChatList(showToastOnError = true, forceGroupInventory = false) {
       if (!selectedSessionId) return;
+      // Refresh takeover state with the list so row markers and the header
+      // button agree without a second round trip per row.
+      void this.refreshTakeoverState(selectedJid || "");
       const searchInput = document.getElementById("chatrooms-search");
       const query = (searchInput?.value || "").trim().toLowerCase();
       const isGroupMode = selectedMode === "groups";
@@ -1381,6 +1386,7 @@
       );
 
       Avatar.hydrate(sidebar);
+      this.markTakeoverRows();
 
       sidebar.querySelectorAll(".chatroom-kebab").forEach((btn) => {
         btn.addEventListener("click", (event) => {
@@ -1783,6 +1789,70 @@
       }
     },
 
+    async fetchTakeovers() {
+      const result = await API.get(
+        `/sessions/${encodeURIComponent(selectedSessionId)}/takeovers`,
+      );
+      return result?.data?.takeovers || {};
+    },
+
+    /** Paint the header button and the list marker from the stored state. */
+    async refreshTakeoverState(jid) {
+      try {
+        takeoverMap = await this.fetchTakeovers();
+      } catch {
+        return;
+      }
+
+      const btn = document.getElementById("chatroom-takeover");
+      const until = Number(takeoverMap[jid] || 0);
+      const active = until > Date.now();
+      if (btn) {
+        btn.textContent = active ? "Release" : "Take over";
+        btn.classList.toggle("btn-primary", active);
+        btn.classList.toggle("btn-outline", !active);
+        btn.title = active
+          ? `Human takeover until ${new Date(until).toLocaleString()}`
+          : "Take this chat from the AI";
+        btn.classList.toggle("is-active", active);
+      }
+
+      this.markTakeoverRows();
+    },
+
+    markTakeoverRows() {
+      const now = Date.now();
+      document.querySelectorAll(".chatroom-item").forEach((item) => {
+        const until = Number(takeoverMap[item.dataset.jid || ""] || 0);
+        item.classList.toggle("has-takeover", until > now);
+      });
+    },
+
+    async toggleTakeover(jid) {
+      const btn = document.getElementById("chatroom-takeover");
+      const active = Number(takeoverMap[jid] || 0) > Date.now();
+      if (btn) btn.disabled = true;
+      try {
+        if (active) {
+          await API.del(
+            `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/takeover`,
+          );
+          Toast.success("AI is answering this chat again");
+        } else {
+          await API.post(
+            `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/takeover`,
+            { hours: 24 },
+          );
+          Toast.success("You own this chat for 24 hours");
+        }
+        await this.refreshTakeoverState(jid);
+      } catch (error) {
+        Toast.error(String(error?.message || "Failed to update takeover"));
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    },
+
     /** About text ("Available", "At work"). Groups have none. */
     async loadContactStatus(jid) {
       const el = document.getElementById("chatroom-about");
@@ -1935,6 +2005,7 @@
 						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
           </div>
           <div class="chatroom-header-actions">
+            <button class="btn btn-outline btn-sm" id="chatroom-takeover" type="button" title="Take this chat from the AI">Take over</button>
             ${isGroupMode ? '<button class="btn btn-outline btn-sm" id="chatroom-load-members">Members</button>' : ""}
             <button class="btn btn-outline btn-sm chat-menu-trigger" id="chatroom-menu" type="button" title="Chat actions">⋯</button>
           </div>
@@ -1948,6 +2019,11 @@
 
       Avatar.hydrate(main);
       if (!isGroupMode) void this.loadContactStatus(jid);
+
+      document.getElementById("chatroom-takeover")?.addEventListener("click", () => {
+        void this.toggleTakeover(jid);
+      });
+      void this.refreshTakeoverState(jid);
 
       document.getElementById("chatroom-menu").addEventListener("click", (event) => {
         event.stopPropagation();
