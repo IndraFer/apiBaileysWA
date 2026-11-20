@@ -562,66 +562,83 @@ dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
   return c.json({ success: true, data: users });
 });
 
-/**
- * Ownership follows access. When a user stops being able to reach a session they
- * owned — removed from the list, or the All Sessions grant revoked — the session
- * is handed to another user who still reaches it, or cleared when nobody does.
- * Adding a session to a second manager never moves ownership.
- */
-async function transferOrphanedOwnership(
-  previousOwnerId: string,
-  stillHasAccess: (id: string) => boolean,
-) {
-  if (!previousOwnerId) return;
+type SavedEntry = { id: string; metadata: Record<string, unknown> | null };
 
-  type SavedEntry = { id: string; metadata: Record<string, unknown> | null };
+/**
+ * Ownership follows access, with two rules:
+ *
+ * - A user who stops reaching a session they own hands it to a user that holds it
+ *   explicitly. An All Sessions grant is not evidence of whom the admin meant, so
+ *   it is never picked as recipient; when no single explicit holder exists the
+ *   owner is cleared and only admins can delete until someone claims it.
+ * - A session with no owner is claimed by the user it is assigned to. That keeps
+ *   the common flow working in either order: remove from A then add to B, or add
+ *   to B then remove from A.
+ */
+async function syncSessionOwnership(targetId: string, assigned: string[]): Promise<void> {
   const saved = await getSavedSessionsWithMetadata<Record<string, unknown>>().catch(
     () => [] as SavedEntry[],
   );
-  const owned = new Set<string>();
-  for (const session of connectionManager.listSessions()) {
-    if (session.ownerId === previousOwnerId) owned.add(session.sessionId);
-  }
-  for (const entry of saved) {
-    if (
-      String((entry.metadata as Record<string, unknown> | null)?.ownerId || "") === previousOwnerId
-    ) {
-      owned.add(entry.id);
-    }
-  }
+  const savedOwner = (id: string): string =>
+    String(
+      (saved.find((entry) => entry.id === id)?.metadata as Record<string, unknown> | null)
+        ?.ownerId || "",
+    );
+  const liveOwner = (id: string): string =>
+    connectionManager.listSessions().find((session) => session.sessionId === id)?.ownerId || "";
+  const currentOwner = (id: string): string => liveOwner(id) || savedOwner(id);
 
-  const revoked = [...owned].filter((id) => !stillHasAccess(id));
-  if (revoked.length === 0) return;
-
-  const users = loadUsers();
-  for (const sessionId of revoked) {
-    const nextOwner =
-      users.find(
-        (u) =>
-          u.id !== previousOwnerId &&
-          (u.allSessions === true || (u.assignedSessions || []).includes(sessionId)),
-      )?.id || "";
-
+  const applyOwner = async (sessionId: string, ownerId: string): Promise<void> => {
     const entry = saved.find((item) => item.id === sessionId);
     if (entry) {
       await updateSessionMetadata(sessionId, {
         ...((entry.metadata as Record<string, unknown> | null) || {}),
-        ownerId: nextOwner || undefined,
+        ownerId: ownerId || undefined,
       }).catch(() => {});
     }
-
     try {
-      connectionManager.getSession(sessionId).updateOptions({ ownerId: nextOwner || undefined });
+      connectionManager.getSession(sessionId).updateOptions({ ownerId: ownerId || undefined });
     } catch {
-      /* not connected right now; metadata is already updated */
+      /* not connected; metadata already updated */
     }
+  };
 
-    logger.info(
-      "[Dashboard] Session %s ownership transferred from %s to %s (access revoked)",
-      sessionId,
-      previousOwnerId,
-      nextOwner || "nobody",
+  const users = loadUsers();
+
+  // 1. Sessions this user owned but can no longer reach.
+  const ownedBefore = [
+    ...connectionManager
+      .listSessions()
+      .filter((session) => session.ownerId === targetId)
+      .map((session) => session.sessionId),
+    ...saved
+      .filter((entry) => String(entry.metadata?.ownerId || "") === targetId)
+      .map((entry) => entry.id),
+  ];
+
+  for (const sessionId of new Set(ownedBefore)) {
+    if (assigned.includes(sessionId)) continue;
+
+    const explicitHolders = users.filter(
+      (user) => user.id !== targetId && (user.assignedSessions || []).includes(sessionId),
     );
+    const nextOwner = explicitHolders.length === 1 ? explicitHolders[0].id : "";
+
+    await applyOwner(sessionId, nextOwner);
+    logger.info(
+      "[Dashboard] Session %s ownership %s (was %s, %d explicit holder(s))",
+      sessionId,
+      nextOwner ? `moved to ${nextOwner}` : "cleared",
+      targetId,
+      explicitHolders.length,
+    );
+  }
+
+  // 2. Sessions this user was just given that nobody owns yet.
+  for (const sessionId of assigned) {
+    if (currentOwner(sessionId)) continue;
+    await applyOwner(sessionId, targetId);
+    logger.info("[Dashboard] Session %s claimed by %s", sessionId, targetId);
   }
 }
 
@@ -647,13 +664,7 @@ dashboardAuth.put("/users/:id/sessions", dashboardAuthMiddleware, async (c) => {
   users[userIndex].allSessions = users[userIndex].role === "manager" && body.allSessions === true;
   saveUsers(users);
 
-  // Sessions this user owned but can no longer reach follow the access they lost.
-  await transferOrphanedOwnership(targetId, (sessionId) => {
-    const current = loadUsers().find((u) => u.id === targetId);
-    if (!current) return false;
-    if (current.allSessions === true) return true;
-    return (current.assignedSessions || []).includes(sessionId);
-  });
+  await syncSessionOwnership(targetId, assignedSessions);
 
   return c.json({ success: true, message: "Assigned sessions updated" });
 });

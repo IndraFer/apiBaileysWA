@@ -1048,8 +1048,12 @@ CSP_REPORT_ONLY=false
   delete the session. Deleting therefore needs both: access **and** ownership.
 - Ownership follows access. Adding a session to a second manager leaves
   `ownerId` alone; removing it from the owner (or revoking their All Sessions
-  grant) hands ownership to another user who still reaches it, or clears it when
-  nobody does — leaving the session deletable by admins only.
+  grant) hands ownership to the **single** user holding it explicitly — an All
+  Sessions grant is never used as evidence of intent. When there is no such user,
+  ownership is cleared and only admins can delete until someone claims it.
+- A session with no owner is claimed by the user it is assigned to, so the common
+  flow works in either order: remove from one manager then add another, or the
+  reverse. Assignment alone does not grant delete rights for an owned session.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 
