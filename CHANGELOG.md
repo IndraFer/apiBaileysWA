@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.52.0] - 2026-11-20
+
+### Changed
+
+- one owner field instead of ownership inferred from assignment
+
 ## [1.51.2] - 2026-11-20
 
 ### Fixed
