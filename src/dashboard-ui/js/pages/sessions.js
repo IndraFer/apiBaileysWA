@@ -436,9 +436,7 @@
         // Admins always reach every session and the owner is edited above, so
         // neither belongs in this list. Assistants do: assignment is how they see
         // anything at all.
-        const candidates = users.filter(
-          (u) => u.role !== "admin" && String(u.id) !== currentOwner,
-        );
+        const candidates = users.filter((u) => u.role !== "admin" && String(u.id) !== currentOwner);
 
         const rows = candidates
           .map(
@@ -542,7 +540,9 @@
             ? `${names
                 .slice(0, 3)
                 .map((name) => `<span class="assignee-chip">${escapeHtml(name)}</span>`)
-                .join("")}${names.length > 3 ? `<span class="assignee-chip">+${names.length - 3}</span>` : ""}`
+                .join(
+                  "",
+                )}${names.length > 3 ? `<span class="assignee-chip">+${names.length - 3}</span>` : ""}`
             : '<span class="text-muted text-xs">Nobody else</span>';
         }
         const count = document.getElementById("assignee-count");
@@ -557,7 +557,9 @@
       });
 
       document.getElementById("assignee-search")?.addEventListener("input", (event) => {
-        const query = String(event.target.value || "").toLowerCase().trim();
+        const query = String(event.target.value || "")
+          .toLowerCase()
+          .trim();
         document.querySelectorAll(".assignee-row").forEach((row) => {
           row.classList.toggle("hidden", query.length > 0 && !row.dataset.search?.includes(query));
         });

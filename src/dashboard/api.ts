@@ -587,8 +587,10 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
   const userPayload = getDashboardUserPayload(c);
-  const ownerId = String(userPayload?.sub || "");
   const role = getDashboardRole(c);
+  // An admin reaches every session anyway, so admin-created sessions stay
+  // unowned: ownership exists to grant access, and an admin needs none.
+  const ownerId = role === "admin" ? "" : String(userPayload?.sub || "");
 
   // A manager creating a brand-new id is not assigned to it yet, so access is
   // only required when this id already exists (re-create / fresh auth). Without
@@ -625,7 +627,7 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
     }
 
     const result = await connectionManager.createSession(sessionId, {
-      ownerId,
+      ownerId: ownerId || undefined,
       clientName: body.clientName,
       webhookUrl: body.webhookUrl,
       webhookSecret: body.webhookSecret,
