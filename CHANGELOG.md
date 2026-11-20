@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.51.1] - 2026-11-20
+
+### Added
+
+- ownership follows access when a session is unassigned
+
 ## [1.51.0] - 2026-11-20
 
 ### Added
