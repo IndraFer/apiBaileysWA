@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.50.3] - 2026-11-20
+
+### Added
+
+- group the behaviour card into a two-column grid
+
 ## [1.50.2] - 2026-11-20
 
 ### Added
