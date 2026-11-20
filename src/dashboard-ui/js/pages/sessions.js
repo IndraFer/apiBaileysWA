@@ -455,7 +455,7 @@
         assigneeBlock = `
           <div class="form-group">
             <div class="assignee-head">
-              <label>Also Visible To</label>
+              <label>Support Accounts</label>
               <button type="button" class="btn btn-outline btn-sm" id="assignee-toggle">Choose users</button>
             </div>
             <div class="assignee-summary" id="assignee-summary"></div>
@@ -468,7 +468,7 @@
                 <span class="text-muted text-xs" id="assignee-count"></span>
               </div>
             </div>
-            <p class="text-xs text-muted">These accounts can read the session but cannot delete it. Only the owner can.</p>
+            <p class="text-xs text-muted">These accounts can open the chats on this session and reply, but cannot delete it. Only the owner can.</p>
           </div>`;
       }
 
