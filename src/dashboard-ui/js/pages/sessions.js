@@ -20,6 +20,20 @@
     }
   }
 
+  /** id → username for the owner column; refreshed with the session list. */
+  let userNames = new Map();
+
+  async function loadUserNames() {
+    const result = await API.get("/auth/users").catch(() => null);
+    const users = result?.data || [];
+    userNames = new Map(users.map((u) => [String(u.id), String(u.username || u.id)]));
+  }
+
+  function ownerName(ownerId) {
+    if (!ownerId) return "Unassigned";
+    return userNames.get(String(ownerId)) || String(ownerId);
+  }
+
   function can(capability) {
     return Boolean(window.App?.hasCapability?.(currentUser(), capability));
   }
@@ -83,6 +97,8 @@
       }
 
       const sessions = result.data || [];
+      const isAdmin = currentUser().role === "admin";
+      if (isAdmin) await loadUserNames();
       if (sessions.length === 0) {
         UI.setHtml(
           el,
@@ -97,7 +113,7 @@
       UI.setHtml(
         el,
         `<div class="table-wrapper"><table>
-        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Owner</th>" : ""}<th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
             (s) => `
@@ -109,6 +125,7 @@
                 : '<span class="badge badge-danger"><span class="badge-dot"></span>DISCONNECTED</span>'
             }</td>
             <td class="text-muted">${escapeHtml(s.user?.id || s.phone || "—")}</td>
+            ${isAdmin ? `<td class="text-muted">${escapeHtml(ownerName(s.ownerId))}</td>` : ""}
             <td class="flex gap-1">
               ${!s.connected && can("reconnectSessions") ? `<button class="btn btn-outline btn-sm" data-action="reconnect" data-session-id="${escapeHtml(s.sessionId || s.id)}">Reconnect</button>` : ""}
 							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${escapeHtml(s.sessionId || s.id)}">Settings</button>
@@ -335,6 +352,34 @@
         ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep`
         : "Optional secret key";
 
+      // Ownership is admin-only: it decides access, not session behaviour.
+      const isAdmin = currentUser().role === "admin";
+      const currentOwner = String(session.ownerId || "");
+      let ownerSelect = "";
+      if (isAdmin) {
+        const usersRes = await API.get("/auth/users").catch(() => null);
+        const managers = (usersRes?.data || []).filter((u) => u.role === "manager");
+        const options = managers
+          .map(
+            (u) =>
+              `<option value="${escapeHtml(u.id)}" ${u.id === currentOwner ? "selected" : ""}>${escapeHtml(u.username)}</option>`,
+          )
+          .join("");
+        const orphan =
+          currentOwner && !managers.some((u) => u.id === currentOwner)
+            ? `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)} (no longer a manager)</option>`
+            : "";
+        ownerSelect = `
+          <div class="form-group">
+            <label for="update-owner">Session Owner</label>
+            <select id="update-owner">
+              <option value="" ${currentOwner ? "" : "selected"}>Unassigned (admins only)</option>
+              ${orphan}${options}
+            </select>
+            <p class="text-xs text-muted">The owner always sees this session and can delete it. Without an owner, only admins reach it.</p>
+          </div>`;
+      }
+
       Modal.show(
         `Update Settings — ${escapeHtml(sessionId)}`,
         `
@@ -369,6 +414,8 @@
 
           <div class="u-section-divider"></div>
 
+          ${ownerSelect}
+
           <div class="form-group">
             <label for="update-webhook">Webhook URL</label>
             <input type="url" id="update-webhook" placeholder="https://your-server.com/webhook" value="${escapeHtml(session.webhookUrl || "")}" />
@@ -389,7 +436,9 @@
       window.initPasswordToggles?.(document.getElementById("modal-body"));
       document.getElementById("update-session-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        const ownerField = document.getElementById("update-owner");
         const body = {
+          ...(ownerField ? { ownerId: ownerField.value } : {}),
           webhookUrl: document.getElementById("update-webhook").value.trim(),
           webhookSecret: document.getElementById("update-secret").value.trim(),
           autoReadMessages: Boolean(document.getElementById("update-autoread")?.checked),

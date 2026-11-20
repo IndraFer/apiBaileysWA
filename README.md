@@ -1043,17 +1043,19 @@ CSP_REPORT_ONLY=false
 - Managers receive a **Reconnect** action for disconnected assigned sessions;
   reconnect preserves persisted webhook/AI/routing settings and never deletes
   credentials.
-- Sessions record their creator (`ownerId`) for quotas and audit. Ownership does
-  not widen **read** access beyond the assignment list; it only decides who may
-  delete the session. Deleting therefore needs both: access **and** ownership.
-- Ownership follows access. Adding a session to a second manager leaves
-  `ownerId` alone; removing it from the owner (or revoking their All Sessions
-  grant) hands ownership to the **single** user holding it explicitly — an All
-  Sessions grant is never used as evidence of intent. When there is no such user,
-  ownership is cleared and only admins can delete until someone claims it.
-- A session with no owner is claimed by the user it is assigned to, so the common
-  flow works in either order: remove from one manager then add another, or the
-  reverse. Assignment alone does not grant delete rights for an owned session.
+- Every session has one **owner**, stored in `data/session-owners.json`. Ownership
+  is access: the owner always sees the session and gets the Delete action. A
+  manager who creates a session becomes its owner; nothing is added to their
+  assignment list.
+- An admin changes the owner from the session settings modal — pick another
+  manager, or clear it. An unowned session is reachable by admins only, which is
+  how a session is parked without deleting it.
+- Assignment still exists and still grants **read** access (used for assistants
+  and for extra managers who should see a session without owning it), but it never
+  grants delete rights.
+- Ownership survives a restart in `data/session-owners.json` rather than in session
+  metadata, because a session that was created but never paired has no credentials
+  directory yet.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 

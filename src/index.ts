@@ -4,6 +4,7 @@ import { cleanupOrphanSessionFiles } from "@/baileys/authState/file";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { hasUsers } from "@/dashboard/auth";
+import { loadSessionOwners } from "@/dashboard/sessionOwners";
 import logger, { deepSanitizeObject } from "@/lib/logger";
 import { initializeRedis } from "@/lib/redis";
 import { isBun } from "@/lib/runtime";
@@ -24,6 +25,9 @@ const mediaCleanup = new MediaCleanupService();
 
 // ── Start Server ────────────────────────────────────
 async function startServer() {
+  // Ownership decides dashboard access, so it has to be in memory before the
+  // first request rather than read from disk per check.
+  await loadSessionOwners();
   let hostname: string;
   let port: number;
 

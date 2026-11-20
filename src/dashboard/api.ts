@@ -22,12 +22,9 @@ import type {
   SessionMetadata,
 } from "@/baileys/types";
 import config from "@/config";
-import {
-  assignSessionToUser,
-  dashboardAuthMiddleware,
-  findDashboardUserById,
-} from "@/dashboard/auth";
+import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
+import { forgetSessionOwner, getSessionOwner, setSessionOwner } from "@/dashboard/sessionOwners";
 import logger from "@/lib/logger";
 import { error } from "@/lib/response";
 import { isBun } from "@/lib/runtime";
@@ -204,7 +201,28 @@ function hasSessionAccess(c: Context, sessionId: string): boolean {
   // same assignment list as assistants.
   if (role === "manager" && user?.allSessions === true) return true;
 
+  // Ownership is access: whoever owns a session sees it without being assigned.
+  const owner = getSessionOwner(sessionId);
+  if (owner && owner === String(userPayload?.sub || "")) return true;
+
   return (user?.assignedSessions || []).includes(sessionId);
+}
+
+/**
+ * Persisted metadata for a session, including one that was created but never
+ * paired. The auth-state listing is keyed on stored credentials, so an unpaired
+ * session is missing there even though its metadata file exists.
+ */
+async function readSessionMetadata(sessionId: string): Promise<SessionMetadata | null> {
+  const saved = await getSavedSessionsWithMetadata<SessionMetadata>().catch(() => []);
+  const hit = saved.find((entry) => entry.id === sessionId);
+  if (hit) return hit.metadata ?? null;
+  try {
+    const file = path.join(process.cwd(), "sessions", `md_${sessionId}`, "metadata.json");
+    return JSON.parse(fs.readFileSync(file, "utf-8")) as SessionMetadata;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -567,9 +585,9 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       autoReply: normalizeAutoReplyConfig(body.autoReply),
     });
 
-    // The creator must be able to manage what they just made. Admin pays no
-    // attention to assignments, so this is only needed for the other roles.
-    if (role !== "admin") assignSessionToUser(ownerId, sessionId);
+    // Ownership is what grants access, so the creator sees it immediately
+    // without an assignment entry.
+    if (ownerId) await setSessionOwner(sessionId, ownerId);
 
     return c.json({
       success: true,
@@ -650,6 +668,7 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
 
   try {
     await connectionManager.deleteSession(sessionId);
+    forgetSessionOwner(sessionId);
     await forgetSession(sessionId);
     return c.json({ success: true, message: "Session deleted" });
   } catch (err) {
@@ -670,20 +689,20 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
 
-  const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
+  const rawBody = await c.req.json().catch(() => ({}));
+  const parsed = createSessionSchema.safeParse(rawBody);
   if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
   const body = parsed.data ?? {};
+  // Owner is admin-only and lives outside the session schema: it decides access,
+  // not session behaviour.
+  const wantsOwnerChange = Object.hasOwn(rawBody ?? {}, "ownerId");
 
   try {
     const live = connectionManager.hasSession(sessionId)
       ? connectionManager.getSession(sessionId)
       : null;
-    const saved = live
-      ? null
-      : (await getSavedSessionsWithMetadata<SessionMetadata>()).find(
-          (entry) => entry.id === sessionId,
-        )?.metadata;
-    const current: SessionMetadata | null = live?.getOptions() ?? saved ?? null;
+    const current: SessionMetadata | null =
+      live?.getOptions() ?? (await readSessionMetadata(sessionId));
     if (!current) return error(c, "Session not found", 404);
 
     const next: SessionMetadata = {
@@ -701,7 +720,26 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
 
     if (live) await connectionManager.updateSessionSettings(sessionId, next);
     else await updateSessionMetadata(sessionId, next);
-    return c.json({ success: true, message: "Session settings updated" });
+
+    if (wantsOwnerChange) {
+      if (getDashboardRole(c) !== "admin") {
+        return c.json(
+          { success: false, message: "Forbidden: only an admin can change the owner" },
+          403,
+        );
+      }
+      const ownerId = String(rawBody?.ownerId ?? "").trim();
+      if (ownerId && !findDashboardUserById(ownerId)) {
+        return c.json({ success: false, message: "Owner does not exist" }, 400);
+      }
+      await setSessionOwner(sessionId, ownerId);
+    }
+
+    return c.json({
+      success: true,
+      message: "Session settings updated",
+      data: wantsOwnerChange ? { ownerId: getSessionOwner(sessionId) } : undefined,
+    });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }

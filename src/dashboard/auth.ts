@@ -117,22 +117,6 @@ export function hasUsers(): boolean {
   return loadUsers().length > 0;
 }
 
-/**
- * Give a user access to a session without going through the admin UI. Used when
- * a manager creates a session: the creator is not in `assignedSessions` until
- * this runs, so without it the new session would be invisible to them.
- */
-export function assignSessionToUser(userId: string, sessionId: string): void {
-  if (!userId || !sessionId) return;
-  const users = loadUsers();
-  const index = users.findIndex((u) => u.id === userId);
-  if (index === -1) return;
-  const assigned = users[index].assignedSessions || [];
-  if (assigned.includes(sessionId)) return;
-  users[index].assignedSessions = [...assigned, sessionId];
-  saveUsers(users);
-}
-
 export function findDashboardUserById(userId: string): DashboardUser | undefined {
   return loadUsers().find((user) => user.id === userId);
 }
@@ -562,86 +546,6 @@ dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
   return c.json({ success: true, data: users });
 });
 
-type SavedEntry = { id: string; metadata: Record<string, unknown> | null };
-
-/**
- * Ownership follows access, with two rules:
- *
- * - A user who stops reaching a session they own hands it to a user that holds it
- *   explicitly. An All Sessions grant is not evidence of whom the admin meant, so
- *   it is never picked as recipient; when no single explicit holder exists the
- *   owner is cleared and only admins can delete until someone claims it.
- * - A session with no owner is claimed by the user it is assigned to. That keeps
- *   the common flow working in either order: remove from A then add to B, or add
- *   to B then remove from A.
- */
-async function syncSessionOwnership(targetId: string, assigned: string[]): Promise<void> {
-  const saved = await getSavedSessionsWithMetadata<Record<string, unknown>>().catch(
-    () => [] as SavedEntry[],
-  );
-  const savedOwner = (id: string): string =>
-    String(
-      (saved.find((entry) => entry.id === id)?.metadata as Record<string, unknown> | null)
-        ?.ownerId || "",
-    );
-  const liveOwner = (id: string): string =>
-    connectionManager.listSessions().find((session) => session.sessionId === id)?.ownerId || "";
-  const currentOwner = (id: string): string => liveOwner(id) || savedOwner(id);
-
-  const applyOwner = async (sessionId: string, ownerId: string): Promise<void> => {
-    const entry = saved.find((item) => item.id === sessionId);
-    if (entry) {
-      await updateSessionMetadata(sessionId, {
-        ...((entry.metadata as Record<string, unknown> | null) || {}),
-        ownerId: ownerId || undefined,
-      }).catch(() => {});
-    }
-    try {
-      connectionManager.getSession(sessionId).updateOptions({ ownerId: ownerId || undefined });
-    } catch {
-      /* not connected; metadata already updated */
-    }
-  };
-
-  const users = loadUsers();
-
-  // 1. Sessions this user owned but can no longer reach.
-  const ownedBefore = [
-    ...connectionManager
-      .listSessions()
-      .filter((session) => session.ownerId === targetId)
-      .map((session) => session.sessionId),
-    ...saved
-      .filter((entry) => String(entry.metadata?.ownerId || "") === targetId)
-      .map((entry) => entry.id),
-  ];
-
-  for (const sessionId of new Set(ownedBefore)) {
-    if (assigned.includes(sessionId)) continue;
-
-    const explicitHolders = users.filter(
-      (user) => user.id !== targetId && (user.assignedSessions || []).includes(sessionId),
-    );
-    const nextOwner = explicitHolders.length === 1 ? explicitHolders[0].id : "";
-
-    await applyOwner(sessionId, nextOwner);
-    logger.info(
-      "[Dashboard] Session %s ownership %s (was %s, %d explicit holder(s))",
-      sessionId,
-      nextOwner ? `moved to ${nextOwner}` : "cleared",
-      targetId,
-      explicitHolders.length,
-    );
-  }
-
-  // 2. Sessions this user was just given that nobody owns yet.
-  for (const sessionId of assigned) {
-    if (currentOwner(sessionId)) continue;
-    await applyOwner(sessionId, targetId);
-    logger.info("[Dashboard] Session %s claimed by %s", sessionId, targetId);
-  }
-}
-
 /**
  * PUT /dashboard/api/auth/users/:id/sessions
  * Update lightweight dashboard-only session assignments (Admin only)
@@ -663,8 +567,6 @@ dashboardAuth.put("/users/:id/sessions", dashboardAuthMiddleware, async (c) => {
   // Only managers can be granted every session; assistants always use the list.
   users[userIndex].allSessions = users[userIndex].role === "manager" && body.allSessions === true;
   saveUsers(users);
-
-  await syncSessionOwnership(targetId, assignedSessions);
 
   return c.json({ success: true, message: "Assigned sessions updated" });
 });
