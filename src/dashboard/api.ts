@@ -2523,6 +2523,19 @@ dashboardApi.get("/config/simulation", (c) => {
       autoReadMessages: config.simulation.autoReadMessages,
       autoMarkOnline: config.simulation.autoMarkOnline,
       rejectCalls: config.simulation.rejectCalls,
+      typingProportional: config.humanize.typingProportional,
+      typingCpsMin: config.humanize.typingCpsMin,
+      typingCpsMax: config.humanize.typingCpsMax,
+      typingCapMinMs: config.humanize.typingCapMinMs,
+      typingCapMaxMs: config.humanize.typingCapMaxMs,
+      presence: {
+        startMinMs: config.humanize.presenceStartMinMs,
+        startMaxMs: config.humanize.presenceStartMaxMs,
+        offlineMinMs: config.humanize.presenceOfflineMinMs,
+        offlineMaxMs: config.humanize.presenceOfflineMaxMs,
+        idleMinMs: config.humanize.presenceIdleMinMs,
+        idleMaxMs: config.humanize.presenceIdleMaxMs,
+      },
     },
   });
 });

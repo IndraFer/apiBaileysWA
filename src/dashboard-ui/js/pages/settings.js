@@ -534,6 +534,27 @@
           val
             ? '<span class="badge badge-success">ON</span>'
             : '<span class="badge badge-warning">OFF</span>';
+        const ms = (value) => `${Math.round(Number(value) || 0)} ms`;
+        // One unit for both ends of a range, picked from the larger value, so a
+        // row never reads "30 s – 1.5 min".
+        const range = (minValue, maxValue) => {
+          const lo = Number(minValue) || 0;
+          const hi = Number(maxValue) || 0;
+          const useMinutes = hi >= 120_000;
+          const fmt = (v) =>
+            useMinutes
+              ? `${Math.round((v / 60_000) * 10) / 10} min`
+              : `${Math.round((v / 1000) * 10) / 10} s`;
+          return `${fmt(lo)} – ${fmt(hi)}`;
+        };
+        const presence = d.presence || {};
+        const globalOffline =
+          Number(presence.idleMaxMs || 0) > 0
+            ? `<strong>${range(presence.idleMinMs, presence.idleMaxMs)}</strong> <span class="text-muted text-sm">(randomized idle)</span>`
+            : '<span class="badge badge-warning">OFF</span> <span class="text-muted text-sm">(never goes offline)</span>';
+        const typingRow = d.typingProportional
+          ? `<strong>${d.typingCpsMin}–${d.typingCpsMax} char/s</strong> <span class="text-muted text-sm">(randomized)</span>`
+          : `<strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(legacy, randomized)</span>`;
 
         UI.setHtml(
           card,
@@ -541,9 +562,17 @@
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
 				  <table>
 					<tr><td class="text-muted u-w-200">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
-					<tr><td class="text-muted">Typing Delay</td><td><strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
+					<tr><td class="text-muted">Typing ${d.typingProportional ? "Speed" : "Delay"}</td><td>${typingRow}</td></tr>
+					${
+            d.typingProportional
+              ? `<tr><td class="text-muted">Typing Ceiling</td><td><strong>${range(d.typingCapMinMs, d.typingCapMaxMs)}</strong> <span class="text-muted text-sm">(randomized per message)</span></td></tr>`
+              : ""
+          }
 					<tr><td class="text-muted">Auto-Read Messages</td><td>${badge(d.autoReadMessages)}</td></tr>
 					<tr><td class="text-muted">Auto-Mark Online</td><td>${badge(d.autoMarkOnline)}</td></tr>
+					<tr><td class="text-muted">Online → Typing Gap</td><td><strong>${ms(presence.startMinMs)}</strong> – <strong>${ms(presence.startMaxMs)}</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
+					<tr><td class="text-muted">Offline After Reply (per chat)</td><td><strong>${range(presence.offlineMinMs, presence.offlineMaxMs)}</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
+					<tr><td class="text-muted">Offline Global (idle)</td><td>${globalOffline}</td></tr>
 					<tr><td class="text-muted">Auto-Reject Calls</td><td>${badge(d.rejectCalls)}</td></tr>
 				  </table>
 				  <p class="text-muted text-sm u-p-075-1"><span class="u-text-warning-bold">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
