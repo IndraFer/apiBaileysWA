@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.50.1] - 2026-11-20
+
+### Changed
+
+- warn that the legacy cap silently overrides the new range
+
 ## [1.50.0] - 2026-11-20
 
 ### Added
