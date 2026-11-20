@@ -1793,7 +1793,7 @@ baileys-wa-api/
 | `HUMANIZE_THINK_MIN_MS`                   | `800`                            | Min random "thinking" gap before typing starts (ms)                     |
 | `HUMANIZE_THINK_MAX_MS`                   | `2000`                           | Max random "thinking" gap before typing starts (ms)                     |
 | `HUMANIZE_TYPING_CPS_MIN` / `_MAX_MS` | `3` / `5` | Proportional typing speed in characters per second, random per message |
-| `HUMANIZE_TYPING_CAP_MIN_MS` / `_MAX_MS` | `5000` / `15000` | Random ceiling for proportional typing; a fixed cap would end every long reply on the same duration |
+| `HUMANIZE_TYPING_CAP_MIN_MS` / `_MAX_MS` | `5000` / `15000` | Random ceiling for proportional typing; a fixed cap would end every long reply on the same duration. The older `HUMANIZE_TYPING_MAX_MS` still overrides `_CAP_MAX_MS` while set — remove it when migrating |
 | `HUMANIZE_PRESENCE_START_MIN_MS` / `_MAX_MS` | `300` / `900` | Random gap between "available" and "composing" (ms) |
 | `HUMANIZE_PRESENCE_OFFLINE_MIN_MS` / `_MAX_MS` | `30000` / `90000` | Random delay before clearing "online" for a chat (ms) |
 | `HUMANIZE_PRESENCE_IDLE_MIN_MS` / `_MAX_MS` | `300000` / `900000` | Quiet period after which the account goes offline entirely (ms). Set **both** to `0` to disable |
