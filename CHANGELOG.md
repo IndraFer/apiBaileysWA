@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.51.0] - 2026-11-20
+
+### Added
+
+- managers can create sessions and delete only their own
+
 ## [1.50.4] - 2026-11-20
 
 ### Added
