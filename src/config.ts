@@ -697,8 +697,12 @@ const config = {
     /** Characters per second range for proportional typing. */
     typingCpsMin: humanTypingCps.minMs,
     typingCpsMax: humanTypingCps.maxMs,
-    /** Hard cap for proportional typing, so long replies stay bounded (ms). */
-    typingMaxMs: HUMANIZE_TYPING_MAX_MS ? Number(HUMANIZE_TYPING_MAX_MS) : 12000,
+    /**
+     * Hard cap for proportional typing. Defaults to the legacy typing ceiling so
+     * enabling the mode does not make long replies wait longer than before;
+     * raise it deliberately if realistic pacing matters more than speed.
+     */
+    typingMaxMs: HUMANIZE_TYPING_MAX_MS ? Number(HUMANIZE_TYPING_MAX_MS) : typingDelay.maxMs,
     /** Random gap between "available" and "composing" (ms). */
     presenceStartMinMs: humanPresenceStart.minMs,
     presenceStartMaxMs: humanPresenceStart.maxMs,
