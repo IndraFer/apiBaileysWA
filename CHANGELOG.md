@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.50.4] - 2026-11-20
+
+### Added
+
+- behaviour switches in the session settings modal
+
 ## [1.50.3] - 2026-11-20
 
 ### Added
