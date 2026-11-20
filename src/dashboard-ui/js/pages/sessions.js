@@ -114,7 +114,7 @@
       UI.setHtml(
         el,
         `<div class="table-wrapper"><table>
-        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Supports</th><th>Owner</th>" : ""}<th>Actions</th></tr></thead>
+        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Assigned</th><th>Owner</th>" : ""}<th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
             (s) => `
