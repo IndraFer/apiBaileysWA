@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.55.1] - 2026-11-21
+
+### Fixed
+
+- keep the Assigned header, rename only the badge
+
 ## [1.55.0] - 2026-11-21
 
 ### Added
