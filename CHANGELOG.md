@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.55.3] - 2026-11-21
+
+### Fixed
+
+- admin-created sessions stay unowned, and clean up old ones
+
 ## [1.55.2] - 2026-11-21
 
 ### Changed
