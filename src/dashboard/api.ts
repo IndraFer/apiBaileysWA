@@ -803,8 +803,17 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
         );
       }
       const ownerId = String(rawBody?.ownerId ?? "").trim();
-      if (ownerId && !findDashboardUserById(ownerId)) {
-        return c.json({ success: false, message: "Owner does not exist" }, 400);
+      if (ownerId && ownerId !== getSessionOwner(sessionId)) {
+        const target = findDashboardUserById(ownerId);
+        if (!target) {
+          return c.json({ success: false, message: "Owner does not exist" }, 400);
+        }
+        // A new owner must be a manager: admins reach everything anyway and an
+        // assistant has no delete right to hand out. An existing owner of another
+        // role is left alone so re-saving the form never fails.
+        if (target.role !== "manager") {
+          return c.json({ success: false, message: "Owner must be a manager, or unassigned" }, 400);
+        }
       }
       await setSessionOwner(sessionId, ownerId);
     }

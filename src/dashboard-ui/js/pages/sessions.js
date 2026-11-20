@@ -389,19 +389,27 @@
         const users = usersRes?.data || [];
         const byId = new Map(users.map((u) => [String(u.id), u]));
 
-        const ownerOptions = users
+        // Only managers can be picked as owner. Admins reach every session anyway,
+        // and an assistant has no delete rights to hand out.
+        const managers = users.filter((u) => u.role === "manager");
+        const ownerOptions = managers
           .map(
             (u) =>
-              `<option value="${escapeHtml(u.id)}" ${u.id === currentOwner ? "selected" : ""}>${escapeHtml(u.username)} (${escapeHtml(u.role)})</option>`,
+              `<option value="${escapeHtml(u.id)}" ${u.id === currentOwner ? "selected" : ""}>${escapeHtml(u.username)}</option>`,
           )
           .join("");
 
-        // An owner whose account was removed still owns the session; keep the
-        // value instead of silently clearing it on save.
-        const ownerMissing = currentOwner && !byId.has(currentOwner);
-        const ownerFallback = ownerMissing
-          ? `<option value="${escapeHtml(currentOwner)}" selected>Unknown user (deleted account)</option>`
-          : "";
+        // Keep a stored owner that is not a manager (created by an admin, or an
+        // account that was deleted) visible and unchanged unless the admin moves it.
+        const currentUserRecord = currentOwner ? byId.get(currentOwner) : null;
+        const ownerFallback =
+          currentOwner && !managers.some((u) => u.id === currentOwner)
+            ? `<option value="${escapeHtml(currentOwner)}" selected>${
+                currentUserRecord
+                  ? `${escapeHtml(currentUserRecord.username)} (${escapeHtml(currentUserRecord.role)}) — current`
+                  : "Unknown user (deleted account)"
+              }</option>`
+            : "";
 
         ownerSelect = `
           <div class="form-group">
@@ -415,22 +423,42 @@
 
         const assigneesRes = await API.get(`/sessions/${sessionId}/assignees`).catch(() => null);
         const assigned = new Set((assigneesRes?.data?.userIds || []).map(String));
-        const candidates = users.filter((u) => String(u.id) !== currentOwner);
-        const rows = candidates.length
-          ? candidates
-              .map(
-                (u) => `<label class="checkbox-label">
-                  <input type="checkbox" class="update-assignee" value="${escapeHtml(u.id)}" ${assigned.has(String(u.id)) ? "checked" : ""} />
-                  ${escapeHtml(u.username)} <span class="text-muted text-xs">(${escapeHtml(u.role)})</span>
-                </label>`,
-              )
-              .join("")
-          : '<p class="text-muted text-xs">No other accounts to assign.</p>';
+
+        // Admins always reach every session and the owner is edited above, so
+        // neither belongs in this list. Assistants do: assignment is how they see
+        // anything at all.
+        const candidates = users.filter(
+          (u) => u.role !== "admin" && String(u.id) !== currentOwner,
+        );
+
+        const rows = candidates
+          .map(
+            (u) => `<label class="assignee-row" data-search="${escapeHtml(
+              `${u.username} ${u.role}`.toLowerCase(),
+            )}">
+              <input type="checkbox" class="update-assignee" value="${escapeHtml(u.id)}" ${assigned.has(String(u.id)) ? "checked" : ""} data-name="${escapeHtml(u.username)}" />
+              <span class="assignee-name">${escapeHtml(u.username)}</span>
+              <span class="assignee-role">${escapeHtml(u.role)}</span>
+            </label>`,
+          )
+          .join("");
 
         assigneeBlock = `
           <div class="form-group">
-            <label>Also Visible To</label>
-            <div class="update-assignees">${rows}</div>
+            <div class="assignee-head">
+              <label>Also Visible To</label>
+              <button type="button" class="btn btn-outline btn-sm" id="assignee-toggle">Choose users</button>
+            </div>
+            <div class="assignee-summary" id="assignee-summary"></div>
+            <div class="assignee-picker hidden" id="assignee-picker">
+              <input type="search" id="assignee-search" placeholder="Search name or role" autocomplete="off" />
+              <div class="assignee-list">${rows || '<p class="text-muted text-xs u-p-05">No other accounts to assign.</p>'}</div>
+              <div class="assignee-actions">
+                <button type="button" class="btn btn-outline btn-sm" id="assignee-all">Select all</button>
+                <button type="button" class="btn btn-outline btn-sm" id="assignee-none">Clear</button>
+                <span class="text-muted text-xs" id="assignee-count"></span>
+              </div>
+            </div>
             <p class="text-xs text-muted">These accounts can read the session but cannot delete it. Only the owner can.</p>
           </div>`;
       }
@@ -490,6 +518,58 @@
       );
 
       window.initPasswordToggles?.(document.getElementById("modal-body"));
+
+      // Assignee picker: collapsed summary, searchable list, live count.
+      const assigneePicker = document.getElementById("assignee-picker");
+      const assigneeToggle = document.getElementById("assignee-toggle");
+      const assigneeSummary = document.getElementById("assignee-summary");
+      const assigneeInputs = () => [...document.querySelectorAll(".update-assignee")];
+
+      const paintAssignees = () => {
+        const picked = assigneeInputs().filter((el) => el.checked);
+        const names = picked.map((el) => el.dataset.name || "?").sort();
+        if (assigneeSummary) {
+          assigneeSummary.innerHTML = names.length
+            ? `${names
+                .slice(0, 3)
+                .map((name) => `<span class="assignee-chip">${escapeHtml(name)}</span>`)
+                .join("")}${names.length > 3 ? `<span class="assignee-chip">+${names.length - 3}</span>` : ""}`
+            : '<span class="text-muted text-xs">Nobody else</span>';
+        }
+        const count = document.getElementById("assignee-count");
+        if (count) count.textContent = `${picked.length} selected`;
+      };
+
+      assigneeToggle?.addEventListener("click", () => {
+        const open = !assigneePicker?.classList.contains("hidden");
+        assigneePicker?.classList.toggle("hidden", open);
+        assigneeToggle.textContent = open ? "Choose users" : "Done";
+        document.getElementById("assignee-search")?.focus();
+      });
+
+      document.getElementById("assignee-search")?.addEventListener("input", (event) => {
+        const query = String(event.target.value || "").toLowerCase().trim();
+        document.querySelectorAll(".assignee-row").forEach((row) => {
+          row.classList.toggle("hidden", query.length > 0 && !row.dataset.search?.includes(query));
+        });
+      });
+
+      document.getElementById("assignee-all")?.addEventListener("click", () => {
+        document.querySelectorAll(".assignee-row:not(.hidden) .update-assignee").forEach((el) => {
+          el.checked = true;
+        });
+        paintAssignees();
+      });
+
+      document.getElementById("assignee-none")?.addEventListener("click", () => {
+        assigneeInputs().forEach((el) => {
+          el.checked = false;
+        });
+        paintAssignees();
+      });
+
+      assigneeInputs().forEach((el) => el.addEventListener("change", paintAssignees));
+      paintAssignees();
       document.getElementById("update-session-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const ownerField = document.getElementById("update-owner");

@@ -3390,19 +3390,114 @@ details[open] > summary::before {
   }
 }
 
-/* Session settings: assignee list, one account per row. */
-.update-assignees {
+/* Session settings: assignee picker. */
+.assignee-head {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.5rem 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.assignee-head label {
+  margin-bottom: 0;
+}
+
+.assignee-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 1.6rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.assignee-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.assignee-picker {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
-  max-height: 180px;
+  padding: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.assignee-picker input[type="search"] {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.4rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.assignee-picker input[type="search"]:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.assignee-list {
+  max-height: 190px;
   overflow-y: auto;
 }
 
-.update-assignees .checkbox-label {
+.assignee-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.35rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-weight: 400;
   margin: 0;
+}
+
+.assignee-row:hover {
+  background: var(--bg-card-hover);
+}
+
+.assignee-row + .assignee-row {
+  border-top: 1px solid var(--border);
+}
+
+.assignee-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignee-role {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.assignee-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.35rem;
+}
+
+.assignee-actions span {
+  margin-left: auto;
 }
