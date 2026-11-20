@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-11-20
+
+### Added
+
+- proportional typing by default with a randomised ceiling
+
 ## [1.49.2] - 2026-11-20
 
 ### Fixed
