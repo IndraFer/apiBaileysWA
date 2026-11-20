@@ -327,9 +327,30 @@
         <form id="update-session-form">
           <div>
             <h4 class="u-fs-09-mb-1">Behaviour</h4>
-            <label class="checkbox-label"><input type="checkbox" id="update-autoread" ${session.autoReadMessages === true ? "checked" : ""} /> Auto-Read Messages</label>
-            <label class="checkbox-label"><input type="checkbox" id="update-autoonline" ${session.autoMarkOnline !== false ? "checked" : ""} /> Auto-Mark Online</label>
-            <label class="checkbox-label"><input type="checkbox" id="update-rejectcalls" ${session.rejectCalls === true ? "checked" : ""} /> Auto-Reject Calls</label>
+            <label class="toggle-row">
+              <input type="checkbox" id="update-autoread" class="toggle-input" ${session.autoReadMessages === true ? "checked" : ""} />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Auto-Read Messages</strong>
+                <small>Mark incoming chats as read, like opening them in WhatsApp Web.</small>
+              </span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="update-autoonline" class="toggle-input" ${session.autoMarkOnline !== false ? "checked" : ""} />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Auto-Mark Online</strong>
+                <small>Appear online while replying. Presence still goes offline when idle.</small>
+              </span>
+            </label>
+            <label class="toggle-row">
+              <input type="checkbox" id="update-rejectcalls" class="toggle-input" ${session.rejectCalls === true ? "checked" : ""} />
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span class="toggle-copy">
+                <strong>Auto-Reject Calls</strong>
+                <small>Decline incoming calls automatically.</small>
+              </span>
+            </label>
           </div>
 
           <div class="u-section-divider"></div>
