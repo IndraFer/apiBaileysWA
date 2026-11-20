@@ -561,9 +561,20 @@ dashboardApi.get("/sessions", async (c) => {
       aiPending: 0,
     }));
 
-  const sessions = [...live, ...rest].filter((session) =>
-    hasSessionAccess(c, String(session.sessionId || "")),
-  );
+  // How many accounts were granted read access. Counts only, no identities.
+  const assignCounts = new Map<string, number>();
+  for (const user of listDashboardUsers()) {
+    for (const sessionId of user.assignedSessions || []) {
+      assignCounts.set(sessionId, (assignCounts.get(sessionId) || 0) + 1);
+    }
+  }
+
+  const sessions = [...live, ...rest]
+    .filter((session) => hasSessionAccess(c, String(session.sessionId || "")))
+    .map((session) => ({
+      ...session,
+      assignedCount: assignCounts.get(String(session.sessionId || "")) || 0,
+    }));
   return c.json({ success: true, data: sessions });
 });
 

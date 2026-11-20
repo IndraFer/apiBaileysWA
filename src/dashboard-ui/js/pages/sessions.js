@@ -114,7 +114,7 @@
       UI.setHtml(
         el,
         `<div class="table-wrapper"><table>
-        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Owner</th>" : ""}<th>Actions</th></tr></thead>
+        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Supports</th><th>Owner</th>" : ""}<th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
             (s) => `
@@ -128,7 +128,16 @@
                   : '<span class="badge badge-danger"><span class="badge-dot"></span>DISCONNECTED</span>'
             }</td>
             <td class="text-muted">${escapeHtml(s.user?.id || s.phone || "—")}</td>
-            ${isAdmin ? `<td class="text-muted">${escapeHtml(ownerName(s.ownerId))}</td>` : ""}
+            ${
+              isAdmin
+                ? `<td>${
+                    Number(s.assignedCount || 0) > 0
+                      ? `<span class="badge badge-info" title="${Number(s.assignedCount)} support account(s) with read access">${Number(s.assignedCount)} ${Number(s.assignedCount) === 1 ? "support" : "supports"}</span>`
+                      : '<span class="text-muted">—</span>'
+                  }</td>
+                   <td class="text-muted">${escapeHtml(ownerName(s.ownerId))}</td>`
+                : ""
+            }
             <td class="flex gap-1">
               ${
                 !s.connected && s.paired === false
