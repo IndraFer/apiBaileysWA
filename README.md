@@ -1045,7 +1045,11 @@ CSP_REPORT_ONLY=false
   credentials.
 - Sessions record their creator (`ownerId`) for quotas and audit. Ownership does
   not widen **read** access beyond the assignment list; it only decides who may
-  delete the session.
+  delete the session. Deleting therefore needs both: access **and** ownership.
+- Ownership follows access. Adding a session to a second manager leaves
+  `ownerId` alone; removing it from the owner (or revoking their All Sessions
+  grant) hands ownership to another user who still reaches it, or clears it when
+  nobody does — leaving the session deletable by admins only.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 

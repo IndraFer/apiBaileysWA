@@ -48,7 +48,7 @@
           admin:
             "Full system control, user approval, session/webhook management, outbound messaging, and monitoring.",
           manager:
-            "Handles assigned sessions: reconnect, session settings, webhooks, AI routing and REST API keys. Cannot create or delete sessions, or manage users.",
+            "Handles assigned sessions: reconnect, session settings, webhooks, AI routing and REST API keys. Can create sessions and delete only the ones they created; no user management.",
           assistant:
             "Chat and group support in assigned sessions. Settings is limited to your account/password and About; no role or system controls.",
         }[role] || "Limited operational access.";
@@ -67,7 +67,7 @@
           perm("allow"),
           perm(
             "limited",
-            "Assigned sessions only (or All Sessions when granted). Reconnect and edit settings; create/delete stay admin-only.",
+            "Assigned sessions only (or All Sessions when granted). Reconnect and edit settings. May create a session (auto-assigned to them) and delete only sessions they created; deleting an assigned session they did not create is refused.",
           ),
           perm("deny"),
         ],

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { type Context, Hono, type Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
+import { getSavedSessionsWithMetadata, updateSessionMetadata } from "@/baileys/authState";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import logger from "@/lib/logger";
@@ -562,6 +563,69 @@ dashboardAuth.get("/users", dashboardAuthMiddleware, (c) => {
 });
 
 /**
+ * Ownership follows access. When a user stops being able to reach a session they
+ * owned — removed from the list, or the All Sessions grant revoked — the session
+ * is handed to another user who still reaches it, or cleared when nobody does.
+ * Adding a session to a second manager never moves ownership.
+ */
+async function transferOrphanedOwnership(
+  previousOwnerId: string,
+  stillHasAccess: (id: string) => boolean,
+) {
+  if (!previousOwnerId) return;
+
+  type SavedEntry = { id: string; metadata: Record<string, unknown> | null };
+  const saved = await getSavedSessionsWithMetadata<Record<string, unknown>>().catch(
+    () => [] as SavedEntry[],
+  );
+  const owned = new Set<string>();
+  for (const session of connectionManager.listSessions()) {
+    if (session.ownerId === previousOwnerId) owned.add(session.sessionId);
+  }
+  for (const entry of saved) {
+    if (
+      String((entry.metadata as Record<string, unknown> | null)?.ownerId || "") === previousOwnerId
+    ) {
+      owned.add(entry.id);
+    }
+  }
+
+  const revoked = [...owned].filter((id) => !stillHasAccess(id));
+  if (revoked.length === 0) return;
+
+  const users = loadUsers();
+  for (const sessionId of revoked) {
+    const nextOwner =
+      users.find(
+        (u) =>
+          u.id !== previousOwnerId &&
+          (u.allSessions === true || (u.assignedSessions || []).includes(sessionId)),
+      )?.id || "";
+
+    const entry = saved.find((item) => item.id === sessionId);
+    if (entry) {
+      await updateSessionMetadata(sessionId, {
+        ...((entry.metadata as Record<string, unknown> | null) || {}),
+        ownerId: nextOwner || undefined,
+      }).catch(() => {});
+    }
+
+    try {
+      connectionManager.getSession(sessionId).updateOptions({ ownerId: nextOwner || undefined });
+    } catch {
+      /* not connected right now; metadata is already updated */
+    }
+
+    logger.info(
+      "[Dashboard] Session %s ownership transferred from %s to %s (access revoked)",
+      sessionId,
+      previousOwnerId,
+      nextOwner || "nobody",
+    );
+  }
+}
+
+/**
  * PUT /dashboard/api/auth/users/:id/sessions
  * Update lightweight dashboard-only session assignments (Admin only)
  */
@@ -570,7 +634,7 @@ dashboardAuth.put("/users/:id/sessions", dashboardAuthMiddleware, async (c) => {
   if (userPayload.role !== "admin")
     return c.json({ success: false, message: "Forbidden: Admin only" }, 403);
 
-  const targetId = c.req.param("id");
+  const targetId = c.req.param("id") ?? "";
   const body = await c.req.json().catch(() => ({}));
   const assignedSessions = normalizeAssignedSessions(body.assignedSessions);
 
@@ -582,6 +646,14 @@ dashboardAuth.put("/users/:id/sessions", dashboardAuthMiddleware, async (c) => {
   // Only managers can be granted every session; assistants always use the list.
   users[userIndex].allSessions = users[userIndex].role === "manager" && body.allSessions === true;
   saveUsers(users);
+
+  // Sessions this user owned but can no longer reach follow the access they lost.
+  await transferOrphanedOwnership(targetId, (sessionId) => {
+    const current = loadUsers().find((u) => u.id === targetId);
+    if (!current) return false;
+    if (current.allSessions === true) return true;
+    return (current.assignedSessions || []).includes(sessionId);
+  });
 
   return c.json({ success: true, message: "Assigned sessions updated" });
 });
