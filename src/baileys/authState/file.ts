@@ -67,6 +67,40 @@ export function getFileSavedSessionIds(): string[] {
   }
 }
 
+/**
+ * Every session directory that carries metadata, paired or not. A session created
+ * but never scanned has metadata and no credentials; the regular listing skips it,
+ * which used to make a manager's new session disappear on restart.
+ */
+export function listFileSessionsWithMetadata<T>(): Array<{
+  id: string;
+  metadata: T | null;
+  paired: boolean;
+}> {
+  ensureSessionsDir();
+  let names: string[] = [];
+  try {
+    names = readdirSync(SESSIONS_DIR).filter((name) => name.startsWith("md_"));
+  } catch {
+    return [];
+  }
+
+  return names.map((name) => {
+    const id = name.slice(3);
+    const dir = join(SESSIONS_DIR, name);
+    const metadataFile = join(dir, "metadata.json");
+    let metadata: T | null = null;
+    if (existsSync(metadataFile)) {
+      try {
+        metadata = decodeMetadataSecrets(JSON.parse(readFileSync(metadataFile, "utf-8")) as T) as T;
+      } catch {
+        metadata = null;
+      }
+    }
+    return { id, metadata, paired: existsSync(join(dir, "creds.json")) };
+  });
+}
+
 export function saveFileSessionMetadata(sessionId: string, metadata: unknown): void {
   ensureSessionsDir();
   const sessionDir = getSessionDir(sessionId);

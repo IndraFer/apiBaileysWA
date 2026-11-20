@@ -8,7 +8,11 @@ import path from "node:path";
 import type { proto, WAPresence } from "@whiskeysockets/baileys";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { getSavedSessionsWithMetadata, updateSessionMetadata } from "@/baileys/authState";
+import {
+  getSavedSessionsWithMetadata,
+  listKnownSessions,
+  updateSessionMetadata,
+} from "@/baileys/authState";
 import {
   buildWebhookHeaders,
   deliverWebhookOnce,
@@ -22,7 +26,12 @@ import type {
   SessionMetadata,
 } from "@/baileys/types";
 import config from "@/config";
-import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
+import {
+  dashboardAuthMiddleware,
+  findDashboardUserById,
+  listDashboardUsers,
+  setSessionAssignees,
+} from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import { forgetSessionOwner, getSessionOwner, setSessionOwner } from "@/dashboard/sessionOwners";
 import logger from "@/lib/logger";
@@ -515,12 +524,46 @@ dashboardApi.get("/overview", async (c) => {
  * GET /dashboard/api/sessions
  * List all sessions with detailed status.
  */
-dashboardApi.get("/sessions", (c) => {
+dashboardApi.get("/sessions", async (c) => {
   const denied = requireCapability(c, "viewSessions");
   if (denied) return denied;
-  const sessions = connectionManager
+
+  // Live connections first, then sessions that exist on disk but have no socket —
+  // including ones created but never paired. Without this, a manager's new session
+  // disappeared on restart before they could scan the QR.
+  const known = await listKnownSessions<SessionMetadata>().catch(() => []);
+  const knownById = new Map(known.map((entry) => [entry.id, entry]));
+
+  // A live socket does not imply paired: a session created moments ago has a
+  // connection and no credentials until the QR is scanned.
+  const live = connectionManager
     .listSessions()
-    .filter((session) => hasSessionAccess(c, String(session.sessionId || "")));
+    .map((session) => ({ ...session, paired: knownById.get(session.sessionId)?.paired ?? true }));
+  const liveIds = new Set(live.map((session) => session.sessionId));
+
+  const rest = known
+    .filter((entry) => !liveIds.has(entry.id))
+    .map((entry) => ({
+      sessionId: entry.id,
+      ownerId: getSessionOwner(entry.id) || entry.metadata?.ownerId || "",
+      connected: false,
+      paired: entry.paired,
+      user: null,
+      webhookUrl: entry.metadata?.webhookUrl || "",
+      hasWebhookSecret: Boolean(entry.metadata?.webhookSecret),
+      webhookSecretLast4: (entry.metadata?.webhookSecret || "").slice(-4),
+      webhookEvents: entry.metadata?.webhookEvents || [],
+      autoReply: entry.metadata?.autoReply,
+      autoReadMessages: entry.metadata?.autoReadMessages,
+      autoMarkOnline: entry.metadata?.autoMarkOnline,
+      rejectCalls: entry.metadata?.rejectCalls,
+      lastActiveAt: null,
+      aiPending: 0,
+    }));
+
+  const sessions = [...live, ...rest].filter((session) =>
+    hasSessionAccess(c, String(session.sessionId || "")),
+  );
   return c.json({ success: true, data: sessions });
 });
 
@@ -659,7 +702,7 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
       return c.json(
         {
           success: false,
-          message: "Forbidden: you can only delete sessions you created",
+          message: "Forbidden: you can only delete sessions you own",
         },
         403,
       );
@@ -674,6 +717,37 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
+});
+
+/**
+ * GET/PUT /dashboard/api/sessions/:sessionId/assignees
+ * Who may see this session without owning it. Admin only; ownership is separate.
+ */
+dashboardApi.get("/sessions/:sessionId/assignees", (c) => {
+  if (!isAdminUser(c)) {
+    return c.json({ success: false, message: "Forbidden: admin access required" }, 403);
+  }
+  const sessionId = c.req.param("sessionId");
+  const userIds = listDashboardUsers()
+    .filter((user) => (user.assignedSessions || []).includes(sessionId))
+    .map((user) => user.id);
+  return c.json({ success: true, data: { userIds } });
+});
+
+dashboardApi.put("/sessions/:sessionId/assignees", async (c) => {
+  if (!isAdminUser(c)) {
+    return c.json({ success: false, message: "Forbidden: admin access required" }, 403);
+  }
+  const sessionId = c.req.param("sessionId");
+  if (!isValidSessionId(sessionId))
+    return c.json({ success: false, message: "Invalid session id" }, 400);
+
+  const body = await c.req.json().catch(() => ({}));
+  const userIds = Array.isArray(body?.userIds)
+    ? body.userIds.map((id: unknown) => String(id)).filter(Boolean)
+    : [];
+  const applied = setSessionAssignees(sessionId, userIds);
+  return c.json({ success: true, data: { userIds: applied } });
 });
 
 /**

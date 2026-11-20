@@ -1052,7 +1052,12 @@ CSP_REPORT_ONLY=false
   how a session is parked without deleting it.
 - Assignment still exists and still grants **read** access (used for assistants
   and for extra managers who should see a session without owning it), but it never
-  grants delete rights.
+  grants delete rights. It can be edited from either side: per user, or per session
+  under **Also Visible To** in the session settings modal.
+- Sessions that were created but never paired are listed as **NOT PAIRED** with a
+  **Pair** action, and remain visible to their owner across restarts. The list is
+  built from live connections plus session directories on disk, not from the
+  credentials-backed listing alone.
 - Ownership survives a restart in `data/session-owners.json` rather than in session
   metadata, because a session that was created but never paired has no credentials
   directory yet.

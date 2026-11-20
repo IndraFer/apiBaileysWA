@@ -3389,3 +3389,20 @@ details[open] > summary::before {
     grid-column: auto;
   }
 }
+
+/* Session settings: assignee list, one account per row. */
+.update-assignees {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.update-assignees .checkbox-label {
+  margin: 0;
+}

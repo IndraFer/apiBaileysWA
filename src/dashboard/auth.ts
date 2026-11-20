@@ -117,6 +117,47 @@ export function hasUsers(): boolean {
   return loadUsers().length > 0;
 }
 
+/**
+ * Replace who may *see* a session without owning it. Admin-only caller; the owner
+ * is untouched because ownership is edited separately.
+ */
+export function setSessionAssignees(sessionId: string, userIds: string[]): string[] {
+  const wanted = new Set(userIds.filter(Boolean));
+  const users = loadUsers();
+  let changed = false;
+
+  for (const user of users) {
+    const assigned = user.assignedSessions || [];
+    const has = assigned.includes(sessionId);
+    const should = wanted.has(user.id);
+    if (has === should) continue;
+    user.assignedSessions = should
+      ? [...assigned, sessionId]
+      : assigned.filter((id) => id !== sessionId);
+    changed = true;
+  }
+
+  if (changed) saveUsers(users);
+  return users.filter((u) => (u.assignedSessions || []).includes(sessionId)).map((u) => u.id);
+}
+
+/** Lightweight user list for admin-side pickers (no hashes, no status logic). */
+export function listDashboardUsers(): Array<{
+  id: string;
+  username: string;
+  role: DashboardUser["role"];
+  assignedSessions: string[];
+  allSessions: boolean;
+}> {
+  return loadUsers().map((user) => ({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    assignedSessions: user.assignedSessions || [],
+    allSessions: user.allSessions === true,
+  }));
+}
+
 export function findDashboardUserById(userId: string): DashboardUser | undefined {
   return loadUsers().find((user) => user.id === userId);
 }

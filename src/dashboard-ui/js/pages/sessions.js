@@ -81,6 +81,7 @@
         if (!sessionId) return;
         const action = button.getAttribute("data-action");
         if (action === "reconnect") this.reconnectSession(sessionId);
+        else if (action === "pair") this.pairSession(sessionId);
         else if (action === "settings") this.showSettingsModal(sessionId);
         else if (action === "delete") this.deleteSession(sessionId);
       });
@@ -122,12 +123,20 @@
             <td>${
               s.connected
                 ? '<span class="badge badge-success"><span class="badge-dot pulse"></span>CONNECTED</span>'
-                : '<span class="badge badge-danger"><span class="badge-dot"></span>DISCONNECTED</span>'
+                : s.paired === false
+                  ? '<span class="badge badge-warning"><span class="badge-dot"></span>NOT PAIRED</span>'
+                  : '<span class="badge badge-danger"><span class="badge-dot"></span>DISCONNECTED</span>'
             }</td>
             <td class="text-muted">${escapeHtml(s.user?.id || s.phone || "—")}</td>
             ${isAdmin ? `<td class="text-muted">${escapeHtml(ownerName(s.ownerId))}</td>` : ""}
             <td class="flex gap-1">
-              ${!s.connected && can("reconnectSessions") ? `<button class="btn btn-outline btn-sm" data-action="reconnect" data-session-id="${escapeHtml(s.sessionId || s.id)}">Reconnect</button>` : ""}
+              ${
+                !s.connected && s.paired === false
+                  ? `<button class="btn btn-primary btn-sm" data-action="pair" data-session-id="${escapeHtml(s.sessionId || s.id)}">Pair</button>`
+                  : !s.connected && can("reconnectSessions")
+                    ? `<button class="btn btn-outline btn-sm" data-action="reconnect" data-session-id="${escapeHtml(s.sessionId || s.id)}">Reconnect</button>`
+                    : ""
+              }
 							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${escapeHtml(s.sessionId || s.id)}">Settings</button>
               ${canDeleteSession(s) ? `<button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>` : ""}
             </td>
@@ -205,6 +214,22 @@
           Toast.error(result.message || "Failed to create session");
         }
       });
+    },
+
+    /** A session created but never scanned has no credentials; pair it now. */
+    async pairSession(sessionId) {
+      const result = await API.post(`/sessions/${sessionId}`, {});
+      if (!result.success) {
+        Toast.error(result.message || "Failed to start pairing");
+        return;
+      }
+      await window.App?.refreshAvailability?.();
+      if (result.data?.pairingCode) {
+        this.showPairingCode(result.data.pairingCode);
+        return;
+      }
+      this.showQR(sessionId);
+      this.loadSessions();
     },
 
     async reconnectSession(sessionId) {
@@ -352,31 +377,61 @@
         ? `Configured (••••${session.webhookSecretLast4 || ""}) — leave blank to keep`
         : "Optional secret key";
 
-      // Ownership is admin-only: it decides access, not session behaviour.
+      // Ownership and visibility are admin-only: they decide who reaches the
+      // session, not how it behaves.
       const isAdmin = currentUser().role === "admin";
       const currentOwner = String(session.ownerId || "");
       let ownerSelect = "";
+      let assigneeBlock = "";
+
       if (isAdmin) {
         const usersRes = await API.get("/auth/users").catch(() => null);
-        const managers = (usersRes?.data || []).filter((u) => u.role === "manager");
-        const options = managers
+        const users = usersRes?.data || [];
+        const byId = new Map(users.map((u) => [String(u.id), u]));
+
+        const ownerOptions = users
           .map(
             (u) =>
-              `<option value="${escapeHtml(u.id)}" ${u.id === currentOwner ? "selected" : ""}>${escapeHtml(u.username)}</option>`,
+              `<option value="${escapeHtml(u.id)}" ${u.id === currentOwner ? "selected" : ""}>${escapeHtml(u.username)} (${escapeHtml(u.role)})</option>`,
           )
           .join("");
-        const orphan =
-          currentOwner && !managers.some((u) => u.id === currentOwner)
-            ? `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)} (no longer a manager)</option>`
-            : "";
+
+        // An owner whose account was removed still owns the session; keep the
+        // value instead of silently clearing it on save.
+        const ownerMissing = currentOwner && !byId.has(currentOwner);
+        const ownerFallback = ownerMissing
+          ? `<option value="${escapeHtml(currentOwner)}" selected>Unknown user (deleted account)</option>`
+          : "";
+
         ownerSelect = `
           <div class="form-group">
             <label for="update-owner">Session Owner</label>
             <select id="update-owner">
               <option value="" ${currentOwner ? "" : "selected"}>Unassigned (admins only)</option>
-              ${orphan}${options}
+              ${ownerFallback}${ownerOptions}
             </select>
             <p class="text-xs text-muted">The owner always sees this session and can delete it. Without an owner, only admins reach it.</p>
+          </div>`;
+
+        const assigneesRes = await API.get(`/sessions/${sessionId}/assignees`).catch(() => null);
+        const assigned = new Set((assigneesRes?.data?.userIds || []).map(String));
+        const candidates = users.filter((u) => String(u.id) !== currentOwner);
+        const rows = candidates.length
+          ? candidates
+              .map(
+                (u) => `<label class="checkbox-label">
+                  <input type="checkbox" class="update-assignee" value="${escapeHtml(u.id)}" ${assigned.has(String(u.id)) ? "checked" : ""} />
+                  ${escapeHtml(u.username)} <span class="text-muted text-xs">(${escapeHtml(u.role)})</span>
+                </label>`,
+              )
+              .join("")
+          : '<p class="text-muted text-xs">No other accounts to assign.</p>';
+
+        assigneeBlock = `
+          <div class="form-group">
+            <label>Also Visible To</label>
+            <div class="update-assignees">${rows}</div>
+            <p class="text-xs text-muted">These accounts can read the session but cannot delete it. Only the owner can.</p>
           </div>`;
       }
 
@@ -415,6 +470,7 @@
           <div class="u-section-divider"></div>
 
           ${ownerSelect}
+          ${assigneeBlock}
 
           <div class="form-group">
             <label for="update-webhook">Webhook URL</label>
@@ -448,6 +504,14 @@
 
         const result = await API.patch(`/sessions/${sessionId}/settings`, body);
         if (result.success) {
+          const assigneeInputs = [...document.querySelectorAll(".update-assignee")];
+          if (assigneeInputs.length > 0) {
+            const userIds = assigneeInputs.filter((el) => el.checked).map((el) => el.value);
+            const assignResult = await API.put(`/sessions/${sessionId}/assignees`, { userIds });
+            if (!assignResult.success) {
+              Toast.error(assignResult.message || "Settings saved, but visibility was not");
+            }
+          }
           Toast.success("Settings updated successfully");
           Modal.hide();
           this.loadSessions();

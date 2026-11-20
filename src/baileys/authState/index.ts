@@ -12,6 +12,7 @@ import {
   deleteFileAuthState,
   getFileSavedSessionIds,
   getFileSavedSessionsWithMetadata,
+  listFileSessionsWithMetadata,
   saveFileSessionMetadata,
   useFileAuthState,
 } from "./file";
@@ -219,6 +220,21 @@ export async function getSavedSessionIds(): Promise<string[]> {
 /**
  * Get saved session IDs with metadata (Redis only; file returns empty metadata).
  */
+/**
+ * Sessions known to storage, paired or not. File backend scans the directories;
+ * the Redis backend can only see keys it stores, so it falls back to the paired
+ * listing there.
+ */
+export async function listKnownSessions<T>(): Promise<
+  Array<{ id: string; metadata: T | null; paired: boolean }>
+> {
+  if ((await resolveBackend()) === "redis") {
+    const saved = await getRedisSavedSessionIds<T>();
+    return saved.map((entry) => ({ id: entry.id, metadata: entry.metadata, paired: true }));
+  }
+  return listFileSessionsWithMetadata<T>();
+}
+
 export async function getSavedSessionsWithMetadata<T>(): Promise<
   Array<{ id: string; metadata: T | null }>
 > {
