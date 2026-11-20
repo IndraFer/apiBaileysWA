@@ -1792,6 +1792,8 @@ baileys-wa-api/
 | `HUMANIZE_READ_DELAY_MAX_MS`              | `2500`                           | Max random "reading" gap before the read receipt (ms)                   |
 | `HUMANIZE_THINK_MIN_MS`                   | `800`                            | Min random "thinking" gap before typing starts (ms)                     |
 | `HUMANIZE_THINK_MAX_MS`                   | `2000`                           | Max random "thinking" gap before typing starts (ms)                     |
+| `HUMANIZE_TYPING_CPS_MIN` / `_MAX_MS` | `3` / `5` | Proportional typing speed range in characters per second (used only when `HUMANIZE_TYPING_PROPORTIONAL=true`) |
+| `HUMANIZE_TYPING_MAX_MS` | `12000` | Hard cap for proportional typing, so long replies stay bounded |
 | `HUMANIZE_PRESENCE_START_MIN_MS` / `_MAX_MS` | `300` / `900` | Random gap between "available" and "composing" (ms) |
 | `HUMANIZE_PRESENCE_OFFLINE_MIN_MS` / `_MAX_MS` | `30000` / `90000` | Random delay before clearing "online" for a chat (ms) |
 | `HUMANIZE_PRESENCE_IDLE_MIN_MS` / `_MAX_MS` | `300000` / `900000` | Quiet period after which the account goes offline entirely (ms). Set **both** to `0` to disable |

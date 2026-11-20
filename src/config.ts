@@ -100,6 +100,9 @@ const {
   HUMANIZE_THINK_MIN_MS,
   HUMANIZE_THINK_MAX_MS,
   HUMANIZE_TYPING_PROPORTIONAL,
+  HUMANIZE_TYPING_CPS_MIN,
+  HUMANIZE_TYPING_CPS_MAX,
+  HUMANIZE_TYPING_MAX_MS,
   HUMANIZE_PRESENCE_DEDUPE_MS,
   HUMANIZE_GLOBAL_PACING_MIN_MS,
   HUMANIZE_GLOBAL_PACING_MAX_MS,
@@ -229,6 +232,8 @@ const autoReadDelay = rangePair(AUTO_READ_DELAY_MIN_MS, AUTO_READ_DELAY_MAX_MS, 
 const humanReadDelay = rangePair(HUMANIZE_READ_DELAY_MIN_MS, HUMANIZE_READ_DELAY_MAX_MS, 800, 2500);
 const humanThinkDelay = rangePair(HUMANIZE_THINK_MIN_MS, HUMANIZE_THINK_MAX_MS, 800, 2000);
 const humanPacing = rangePair(HUMANIZE_GLOBAL_PACING_MIN_MS, HUMANIZE_GLOBAL_PACING_MAX_MS, 0, 0);
+/** Typing speed range in characters per second (proportional mode only). */
+const humanTypingCps = rangePair(HUMANIZE_TYPING_CPS_MIN, HUMANIZE_TYPING_CPS_MAX, 3, 5);
 /** Gap between going online and starting to type. Human, not instant. */
 const humanPresenceStart = rangePair(
   HUMANIZE_PRESENCE_START_MIN_MS,
@@ -689,6 +694,11 @@ const config = {
     globalPacingMaxMs: humanPacing.maxMs,
     /** Delay pattern for read/think gaps: `uniform` (legacy) or `human`. */
     delayDistribution: (HUMANIZE_DELAY_DISTRIBUTION || "uniform") as "uniform" | "human",
+    /** Characters per second range for proportional typing. */
+    typingCpsMin: humanTypingCps.minMs,
+    typingCpsMax: humanTypingCps.maxMs,
+    /** Hard cap for proportional typing, so long replies stay bounded (ms). */
+    typingMaxMs: HUMANIZE_TYPING_MAX_MS ? Number(HUMANIZE_TYPING_MAX_MS) : 12000,
     /** Random gap between "available" and "composing" (ms). */
     presenceStartMinMs: humanPresenceStart.minMs,
     presenceStartMaxMs: humanPresenceStart.maxMs,

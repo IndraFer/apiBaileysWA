@@ -83,7 +83,7 @@ import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
-import { asyncSleep, distributedDelay } from "@/utils/asyncSleep";
+import { asyncSleep, distributedDelay, randomDelay } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
 
 const msgRetryCounterCache = new NodeCache({
@@ -1649,11 +1649,12 @@ export class BaileysConnection {
         let delayMs: number;
         if (hz.typingProportional && msgLen > 0) {
           const base = 600;
-          const typed = (msgLen / 4) * 1000; // ~4 chars/sec human typing
-          delayMs = Math.min(
-            Math.max(base + typed, 800),
-            config.simulation.typingDelayMaxMs || 6000,
-          );
+          // Random typing speed: a constant rate is its own pattern, and the
+          // previous fixed clamp capped every long reply at the short-message
+          // range, which made the proportional mode pointless.
+          const cps = Math.max(1, randomDelay(hz.typingCpsMin, hz.typingCpsMax));
+          const typed = (msgLen / cps) * 1000;
+          delayMs = Math.min(Math.max(base + typed, 800), hz.typingMaxMs);
         } else {
           delayMs = Math.floor(
             Math.random() *
