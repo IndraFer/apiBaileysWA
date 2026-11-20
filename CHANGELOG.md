@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-11-21
+
+### Added
+
+- support-account column, admin-only owner and visibility fields
+
 ## [1.54.0] - 2026-11-20
 
 ### Added
