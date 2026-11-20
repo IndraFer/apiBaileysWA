@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.50.2] - 2026-11-20
+
+### Added
+
+- show presence timing in the WA Web Behavior card
+
 ## [1.50.1] - 2026-11-20
 
 ### Changed
