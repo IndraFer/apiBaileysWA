@@ -103,6 +103,12 @@ const {
   HUMANIZE_PRESENCE_DEDUPE_MS,
   HUMANIZE_GLOBAL_PACING_MIN_MS,
   HUMANIZE_GLOBAL_PACING_MAX_MS,
+  HUMANIZE_PRESENCE_START_MIN_MS,
+  HUMANIZE_PRESENCE_START_MAX_MS,
+  HUMANIZE_PRESENCE_OFFLINE_MIN_MS,
+  HUMANIZE_PRESENCE_OFFLINE_MAX_MS,
+  HUMANIZE_PRESENCE_IDLE_MIN_MS,
+  HUMANIZE_PRESENCE_IDLE_MAX_MS,
   HUMANIZE_DELAY_DISTRIBUTION,
   BROADCAST_TYPING_SIMULATION,
   BROADCAST_DELAY_DISTRIBUTION,
@@ -223,6 +229,27 @@ const autoReadDelay = rangePair(AUTO_READ_DELAY_MIN_MS, AUTO_READ_DELAY_MAX_MS, 
 const humanReadDelay = rangePair(HUMANIZE_READ_DELAY_MIN_MS, HUMANIZE_READ_DELAY_MAX_MS, 800, 2500);
 const humanThinkDelay = rangePair(HUMANIZE_THINK_MIN_MS, HUMANIZE_THINK_MAX_MS, 800, 2000);
 const humanPacing = rangePair(HUMANIZE_GLOBAL_PACING_MIN_MS, HUMANIZE_GLOBAL_PACING_MAX_MS, 0, 0);
+/** Gap between going online and starting to type. Human, not instant. */
+const humanPresenceStart = rangePair(
+  HUMANIZE_PRESENCE_START_MIN_MS,
+  HUMANIZE_PRESENCE_START_MAX_MS,
+  300,
+  900,
+);
+/** How long one chat keeps showing "online" after we touched it. */
+const humanPresenceOffline = rangePair(
+  HUMANIZE_PRESENCE_OFFLINE_MIN_MS,
+  HUMANIZE_PRESENCE_OFFLINE_MAX_MS,
+  30_000,
+  90_000,
+);
+/** Quiet period after which the account stops appearing online at all. */
+const humanPresenceIdle = rangePair(
+  HUMANIZE_PRESENCE_IDLE_MIN_MS,
+  HUMANIZE_PRESENCE_IDLE_MAX_MS,
+  300_000,
+  900_000,
+);
 const broadcastDelay = rangePair(BROADCAST_MIN_DELAY_MS, BROADCAST_MAX_DELAY_MS, 1500, 3000);
 
 function splitSources(value?: string): string[] {
@@ -662,6 +689,15 @@ const config = {
     globalPacingMaxMs: humanPacing.maxMs,
     /** Delay pattern for read/think gaps: `uniform` (legacy) or `human`. */
     delayDistribution: (HUMANIZE_DELAY_DISTRIBUTION || "uniform") as "uniform" | "human",
+    /** Random gap between "available" and "composing" (ms). */
+    presenceStartMinMs: humanPresenceStart.minMs,
+    presenceStartMaxMs: humanPresenceStart.maxMs,
+    /** Random delay before clearing "online" for a single chat (ms). */
+    presenceOfflineMinMs: humanPresenceOffline.minMs,
+    presenceOfflineMaxMs: humanPresenceOffline.maxMs,
+    /** Random idle window after which the account goes offline entirely (ms). */
+    presenceIdleMinMs: humanPresenceIdle.minMs,
+    presenceIdleMaxMs: humanPresenceIdle.maxMs,
   },
 
   autoReply: {

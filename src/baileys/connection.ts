@@ -83,7 +83,7 @@ import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
-import { asyncSleep } from "@/utils/asyncSleep";
+import { asyncSleep, distributedDelay } from "@/utils/asyncSleep";
 import { errorToString } from "@/utils/validation";
 
 const msgRetryCounterCache = new NodeCache({
@@ -276,6 +276,8 @@ export class BaileysConnection {
   private store: MemoryStore;
   private reconnectCount = 0;
   private clearOnlinePresenceTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Goes offline entirely after a quiet period, like closing the app. */
+  private presenceIdleTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Last time a "composing" presence was sent per chat (for presence dedupe). */
   private lastComposingAt = new Map<string, number>();
   /**
@@ -1345,7 +1347,14 @@ export class BaileysConnection {
 
     try {
       if (this.options.autoMarkOnline ?? config.simulation.autoMarkOnline) {
+        const hz = config.humanize;
         await this.sendPresenceUpdate("available", jid);
+        const startGap = distributedDelay(
+          hz.delayDistribution,
+          hz.presenceStartMinMs,
+          hz.presenceStartMaxMs,
+        );
+        if (startGap > 0) await delay(startGap);
       }
       await this.safeSocket().presenceSubscribe(jid);
       await this.sendPresenceUpdate("composing", jid);
@@ -1664,6 +1673,13 @@ export class BaileysConnection {
           // Mark as "available" first (like opening WA Web)
           if (this.options.autoMarkOnline ?? config.simulation.autoMarkOnline) {
             await this.sendPresenceUpdate("available", receiver);
+            // Humans show "online" a beat before the typing bubble appears.
+            const startGap = distributedDelay(
+              hz.delayDistribution,
+              hz.presenceStartMinMs,
+              hz.presenceStartMaxMs,
+            );
+            if (startGap > 0) await delay(startGap);
           }
           // Subscribe to presence & send "composing" indicator
           await this.safeSocket().presenceSubscribe(receiver);
@@ -1735,10 +1751,45 @@ export class BaileysConnection {
       this.clearOnlinePresenceTimeout = null;
     }
     if (type === "available") {
+      const hz = config.humanize;
+      // A fixed 60s clear is a pattern; humans close a chat after varying gaps.
+      const offlineIn = distributedDelay(
+        hz.delayDistribution,
+        hz.presenceOfflineMinMs,
+        hz.presenceOfflineMaxMs,
+      );
       this.clearOnlinePresenceTimeout = setTimeout(() => {
-        this.socket?.sendPresenceUpdate("unavailable", toJid);
-      }, 60000);
+        this.socket?.sendPresenceUpdate("unavailable", toJid).catch(() => {});
+      }, offlineIn);
+      this.schedulePresenceIdle();
     }
+  }
+
+  /**
+   * After a quiet period the account stops appearing online at all. Without
+   * this, every chat we ever replied to keeps a recent "available" and the
+   * account looks permanently online.
+   */
+  private schedulePresenceIdle(): void {
+    if (this.presenceIdleTimeout) {
+      clearTimeout(this.presenceIdleTimeout);
+      this.presenceIdleTimeout = null;
+    }
+    const hz = config.humanize;
+    if (hz.presenceIdleMaxMs <= 0) return;
+
+    const idleMs = distributedDelay(
+      hz.delayDistribution,
+      hz.presenceIdleMinMs,
+      hz.presenceIdleMaxMs,
+    );
+    this.presenceIdleTimeout = setTimeout(() => {
+      this.presenceIdleTimeout = null;
+      if (!this.socket) return;
+      // Any later send reschedules this, so a late message still shows online.
+      this.socket.sendPresenceUpdate("unavailable").catch(() => {});
+      logger.debug("[%s] Presence idle %dms reached — going offline", this.sessionId, idleMs);
+    }, idleMs);
   }
 
   async readMessages(keys: proto.IMessageKey[]) {
@@ -1957,6 +2008,10 @@ export class BaileysConnection {
     if (this.clearOnlinePresenceTimeout) {
       clearTimeout(this.clearOnlinePresenceTimeout);
       this.clearOnlinePresenceTimeout = null;
+    }
+    if (this.presenceIdleTimeout) {
+      clearTimeout(this.presenceIdleTimeout);
+      this.presenceIdleTimeout = null;
     }
     await this.store.destroy();
     this.aiRouter.dispose();
