@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.49.1] - 2026-11-20
+
+### Added
+
+- random typing speed and a real cap for proportional mode
+
 ## [1.49.0] - 2026-11-20
 
 ### Added
