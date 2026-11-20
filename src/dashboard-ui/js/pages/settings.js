@@ -556,25 +556,66 @@
           ? `<strong>${d.typingCpsMin}–${d.typingCpsMax} char/s</strong> <span class="text-muted text-sm">(randomized)</span>`
           : `<strong>${d.typingDelayMinMs}ms</strong> – <strong>${d.typingDelayMaxMs}ms</strong> <span class="text-muted text-sm">(legacy, randomized)</span>`;
 
+        // Grouped instead of one long column: the values fall into three
+        // families, and scanning nine rows vertically hid that structure.
+        const groups = [
+          {
+            title: "Typing",
+            rows: [
+              ["Auto-Typing Before Send", badge(d.typingBeforeSend)],
+              [d.typingProportional ? "Speed" : "Delay", typingRow],
+              ...(d.typingProportional
+                ? [["Ceiling", `${range(d.typingCapMinMs, d.typingCapMaxMs)} <span class="text-muted text-sm">per message</span>`]]
+                : []),
+            ],
+          },
+          {
+            title: "Presence",
+            rows: [
+              [
+                "Online → Typing Gap",
+                `${ms(presence.startMinMs)} – ${ms(presence.startMaxMs)}`,
+              ],
+              [
+                "Offline After Reply",
+                `${range(presence.offlineMinMs, presence.offlineMaxMs)} <span class="text-muted text-sm">per chat</span>`,
+              ],
+              ["Offline Global (idle)", globalOffline],
+            ],
+          },
+          {
+            title: "Behaviour",
+            wide: true,
+            rows: [
+              ["Auto-Read Messages", badge(d.autoReadMessages)],
+              ["Auto-Mark Online", badge(d.autoMarkOnline)],
+              ["Auto-Reject Calls", badge(d.rejectCalls)],
+            ],
+          },
+        ];
+
+        const groupHtml = groups
+          .map(
+            (group) => `
+            <section class="sim-group${group.wide ? " sim-group-wide" : ""}">
+              <h4>${group.title}</h4>
+              ${group.rows
+                .map(
+                  ([label, value]) => `<div class="sim-row">
+                    <span class="text-muted">${label}</span>
+                    <span class="sim-value">${value}</span>
+                  </div>`,
+                )
+                .join("")}
+            </section>`,
+          )
+          .join("");
+
         UI.setHtml(
           card,
           `
 				  <div class="card-header"><h3>🤖 WA Web Behavior Simulation</h3></div>
-				  <table>
-					<tr><td class="text-muted u-w-200">Auto-Typing Before Send</td><td>${badge(d.typingBeforeSend)}</td></tr>
-					<tr><td class="text-muted">Typing ${d.typingProportional ? "Speed" : "Delay"}</td><td>${typingRow}</td></tr>
-					${
-            d.typingProportional
-              ? `<tr><td class="text-muted">Typing Ceiling</td><td><strong>${range(d.typingCapMinMs, d.typingCapMaxMs)}</strong> <span class="text-muted text-sm">(randomized per message)</span></td></tr>`
-              : ""
-          }
-					<tr><td class="text-muted">Auto-Read Messages</td><td>${badge(d.autoReadMessages)}</td></tr>
-					<tr><td class="text-muted">Auto-Mark Online</td><td>${badge(d.autoMarkOnline)}</td></tr>
-					<tr><td class="text-muted">Online → Typing Gap</td><td><strong>${ms(presence.startMinMs)}</strong> – <strong>${ms(presence.startMaxMs)}</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
-					<tr><td class="text-muted">Offline After Reply (per chat)</td><td><strong>${range(presence.offlineMinMs, presence.offlineMaxMs)}</strong> <span class="text-muted text-sm">(randomized)</span></td></tr>
-					<tr><td class="text-muted">Offline Global (idle)</td><td>${globalOffline}</td></tr>
-					<tr><td class="text-muted">Auto-Reject Calls</td><td>${badge(d.rejectCalls)}</td></tr>
-				  </table>
+				  <div class="sim-grid">${groupHtml}</div>
 				  <p class="text-muted text-sm u-p-075-1"><span class="u-text-warning-bold">*</span> Settings are configured via <code>.env</code> file. Restart the server after changes.</p>
 				`,
         );
