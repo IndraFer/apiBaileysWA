@@ -1026,18 +1026,26 @@ CSP_REPORT_ONLY=false
 - `manager`: **assigned sessions** (or all sessions when the admin ticks
   **All Sessions**). Can reconnect, edit session settings, manage webhooks, AI
   routing and REST keys **for those sessions only**, plus chats/groups/outbound.
-  Cannot create or delete sessions and has no account/user controls.
+  Can create a session — it is assigned to them immediately — and delete **only
+  the sessions they created**. No account/user controls.
 - `assistant`: **only assigned sessions**, chat/group support with single-message
   outbound (Bulk Send is hidden). Can open Groups in view-only mode and Settings
   for account/password and About; role permissions, quick actions, Sessions, AI,
   webhooks, REST API, events and user management stay hidden. An empty
   assignment grants no session at all, so unassigned numbers never appear in
   dashboard or API responses.
-- Session creation/deletion is admin-only. Managers receive a **Reconnect**
-  action for disconnected assigned sessions; reconnect preserves persisted
-  webhook/AI/routing settings and never deletes credentials.
-- Sessions record their creator (`ownerId`) for quotas and audit, but ownership
-  does not widen a manager or assistant beyond its assignment.
+- Session creation is open to admin and manager, subject to the per-role session
+  limit. Access is required to re-create an id that already exists, so a manager
+  cannot take over a session they cannot see.
+- Deletion is narrower than access: admin deletes anything, manager deletes only
+  sessions whose `ownerId` matches their account. A session an admin assigned to
+  them stays visible but has no Delete button, and the API answers 403.
+- Managers receive a **Reconnect** action for disconnected assigned sessions;
+  reconnect preserves persisted webhook/AI/routing settings and never deletes
+  credentials.
+- Sessions record their creator (`ownerId`) for quotas and audit. Ownership does
+  not widen **read** access beyond the assignment list; it only decides who may
+  delete the session.
 - Admins can **add users**, change roles, approve pending accounts, and delete a
   user while optionally revoking every session they own (logout + credentials).
 

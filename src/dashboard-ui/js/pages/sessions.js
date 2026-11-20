@@ -24,6 +24,20 @@
     return Boolean(window.App?.hasCapability?.(currentUser(), capability));
   }
 
+  /**
+   * Capability says "may delete sessions"; ownership says "this one". A manager
+   * sees sessions assigned by an admin that they did not create, and those stay
+   * out of reach. The server enforces the same rule, this only avoids offering a
+   * button that would answer 403.
+   */
+  function canDeleteSession(session) {
+    if (!can("deleteSessions")) return false;
+    const user = currentUser();
+    if (user.role === "admin") return true;
+    const owner = String(session?.ownerId || "");
+    return Boolean(owner) && owner === String(user.id || "");
+  }
+
   window.SessionsPage = {
     async render() {
       const container = document.getElementById("page-content");
@@ -98,7 +112,7 @@
             <td class="flex gap-1">
               ${!s.connected && can("reconnectSessions") ? `<button class="btn btn-outline btn-sm" data-action="reconnect" data-session-id="${escapeHtml(s.sessionId || s.id)}">Reconnect</button>` : ""}
 							<button class="btn btn-outline btn-sm" data-action="settings" data-session-id="${escapeHtml(s.sessionId || s.id)}">Settings</button>
-              ${can("deleteSessions") ? `<button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>` : ""}
+              ${canDeleteSession(s) ? `<button class="btn btn-danger btn-sm" data-action="delete" data-session-id="${escapeHtml(s.sessionId || s.id)}">Delete</button>` : ""}
             </td>
           </tr>`,
           )

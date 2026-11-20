@@ -565,17 +565,19 @@
               ["Auto-Typing Before Send", badge(d.typingBeforeSend)],
               [d.typingProportional ? "Speed" : "Delay", typingRow],
               ...(d.typingProportional
-                ? [["Ceiling", `${range(d.typingCapMinMs, d.typingCapMaxMs)} <span class="text-muted text-sm">per message</span>`]]
+                ? [
+                    [
+                      "Ceiling",
+                      `${range(d.typingCapMinMs, d.typingCapMaxMs)} <span class="text-muted text-sm">per message</span>`,
+                    ],
+                  ]
                 : []),
             ],
           },
           {
             title: "Presence",
             rows: [
-              [
-                "Online → Typing Gap",
-                `${ms(presence.startMinMs)} – ${ms(presence.startMaxMs)}`,
-              ],
+              ["Online → Typing Gap", `${ms(presence.startMinMs)} – ${ms(presence.startMaxMs)}`],
               [
                 "Offline After Reply",
                 `${range(presence.offlineMinMs, presence.offlineMaxMs)} <span class="text-muted text-sm">per chat</span>`,

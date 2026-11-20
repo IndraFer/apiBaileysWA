@@ -116,6 +116,22 @@ export function hasUsers(): boolean {
   return loadUsers().length > 0;
 }
 
+/**
+ * Give a user access to a session without going through the admin UI. Used when
+ * a manager creates a session: the creator is not in `assignedSessions` until
+ * this runs, so without it the new session would be invisible to them.
+ */
+export function assignSessionToUser(userId: string, sessionId: string): void {
+  if (!userId || !sessionId) return;
+  const users = loadUsers();
+  const index = users.findIndex((u) => u.id === userId);
+  if (index === -1) return;
+  const assigned = users[index].assignedSessions || [];
+  if (assigned.includes(sessionId)) return;
+  users[index].assignedSessions = [...assigned, sessionId];
+  saveUsers(users);
+}
+
 export function findDashboardUserById(userId: string): DashboardUser | undefined {
   return loadUsers().find((user) => user.id === userId);
 }

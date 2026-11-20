@@ -22,7 +22,11 @@ import type {
   SessionMetadata,
 } from "@/baileys/types";
 import config from "@/config";
-import { dashboardAuthMiddleware, findDashboardUserById } from "@/dashboard/auth";
+import {
+  assignSessionToUser,
+  dashboardAuthMiddleware,
+  findDashboardUserById,
+} from "@/dashboard/auth";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import logger from "@/lib/logger";
 import { error } from "@/lib/response";
@@ -123,6 +127,8 @@ const ROLE_CAPABILITIES: Record<DashboardRole, Set<DashboardCapability>> = {
   ]),
   manager: new Set([
     "manageSessions",
+    "createSessions",
+    "deleteSessions",
     "reconnectSessions",
     "manageWebhooks",
     "manageApiKeys",
@@ -199,6 +205,17 @@ function hasSessionAccess(c: Context, sessionId: string): boolean {
   if (role === "manager" && user?.allSessions === true) return true;
 
   return (user?.assignedSessions || []).includes(sessionId);
+}
+
+/**
+ * Owner of a session, live or saved. Returns "" when unknown, which callers must
+ * treat as "not yours" rather than as "nobody owns it".
+ */
+async function sessionOwnerId(sessionId: string): Promise<string> {
+  const live = connectionManager.listSessions().find((entry) => entry.sessionId === sessionId);
+  if (live?.ownerId) return live.ownerId;
+  const saved = await getSavedSessionsWithMetadata<{ ownerId?: string }>().catch(() => []);
+  return String(saved.find((entry) => entry.id === sessionId)?.metadata?.ownerId || "");
 }
 
 function requireSessionAccess(c: Context, sessionId: string) {
@@ -497,12 +514,18 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
   const denied = requireCapability(c, "createSessions");
   if (denied) return denied;
   const sessionId = c.req.param("sessionId");
-  const sessionDenied = requireSessionAccess(c, sessionId);
-  if (sessionDenied) return sessionDenied;
-
   const userPayload = getDashboardUserPayload(c);
   const ownerId = String(userPayload?.sub || "");
   const role = getDashboardRole(c);
+
+  // A manager creating a brand-new id is not assigned to it yet, so access is
+  // only required when this id already exists (re-create / fresh auth). Without
+  // that guard anyone could "create" over a session they cannot see.
+  const savedBefore = await getSavedSessionsWithMetadata<Record<string, unknown>>().catch(() => []);
+  if (savedBefore.some((entry) => entry.id === sessionId)) {
+    const sessionDenied = requireSessionAccess(c, sessionId);
+    if (sessionDenied) return sessionDenied;
+  }
   if (role !== "admin") {
     const limit = role === "manager" ? config.maxSessionsPerManager : config.maxSessionsPerUser;
     if (limit > 0) {
@@ -543,6 +566,10 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
       rejectCalls: body.rejectCalls,
       autoReply: normalizeAutoReplyConfig(body.autoReply),
     });
+
+    // The creator must be able to manage what they just made. Admin pays no
+    // attention to assignments, so this is only needed for the other roles.
+    if (role !== "admin") assignSessionToUser(ownerId, sessionId);
 
     return c.json({
       success: true,
@@ -604,6 +631,23 @@ dashboardApi.delete("/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
+
+  // Delete is narrower than access: a manager sees assigned sessions they did
+  // not create, and those are not theirs to remove.
+  if (getDashboardRole(c) !== "admin") {
+    const owner = await sessionOwnerId(sessionId);
+    const me = String(getDashboardUserPayload(c)?.sub || "");
+    if (!owner || owner !== me) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden: you can only delete sessions you created",
+        },
+        403,
+      );
+    }
+  }
+
   try {
     await connectionManager.deleteSession(sessionId);
     await forgetSession(sessionId);

@@ -23,6 +23,8 @@
     manager: new Set([
       "viewSessions",
       "manageSessions",
+      "createSessions",
+      "deleteSessions",
       "reconnectSessions",
       "viewChats",
       "sendOutbound",
