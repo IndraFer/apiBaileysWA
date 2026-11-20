@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.51.2] - 2026-11-20
+
+### Fixed
+
+- transfer ownership to the intended holder, not the first match
+
 ## [1.51.1] - 2026-11-20
 
 ### Added
