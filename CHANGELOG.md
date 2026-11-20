@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.49.2] - 2026-11-20
+
+### Fixed
+
+- keep the legacy typing ceiling for proportional mode
+
 ## [1.49.1] - 2026-11-20
 
 ### Added
