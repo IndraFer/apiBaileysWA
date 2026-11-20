@@ -102,6 +102,8 @@ const {
   HUMANIZE_TYPING_PROPORTIONAL,
   HUMANIZE_TYPING_CPS_MIN,
   HUMANIZE_TYPING_CPS_MAX,
+  HUMANIZE_TYPING_CAP_MIN_MS,
+  HUMANIZE_TYPING_CAP_MAX_MS,
   HUMANIZE_TYPING_MAX_MS,
   HUMANIZE_PRESENCE_DEDUPE_MS,
   HUMANIZE_GLOBAL_PACING_MIN_MS,
@@ -234,6 +236,16 @@ const humanThinkDelay = rangePair(HUMANIZE_THINK_MIN_MS, HUMANIZE_THINK_MAX_MS, 
 const humanPacing = rangePair(HUMANIZE_GLOBAL_PACING_MIN_MS, HUMANIZE_GLOBAL_PACING_MAX_MS, 0, 0);
 /** Typing speed range in characters per second (proportional mode only). */
 const humanTypingCps = rangePair(HUMANIZE_TYPING_CPS_MIN, HUMANIZE_TYPING_CPS_MAX, 3, 5);
+/**
+ * Ceiling for proportional typing, itself a range: a fixed cap makes every long
+ * reply end on the same value, which is its own pattern.
+ */
+const humanTypingCap = rangePair(
+  HUMANIZE_TYPING_CAP_MIN_MS,
+  HUMANIZE_TYPING_CAP_MAX_MS ?? HUMANIZE_TYPING_MAX_MS,
+  5000,
+  15000,
+);
 /** Gap between going online and starting to type. Human, not instant. */
 const humanPresenceStart = rangePair(
   HUMANIZE_PRESENCE_START_MIN_MS,
@@ -685,8 +697,8 @@ const config = {
     /** Random "thinking" gap before typing starts (ms). */
     thinkMinMs: humanThinkDelay.minMs,
     thinkMaxMs: humanThinkDelay.maxMs,
-    /** Typing duration proportional to reply length when true. */
-    typingProportional: HUMANIZE_TYPING_PROPORTIONAL === "true",
+    /** Typing duration proportional to reply length (default on). */
+    typingProportional: HUMANIZE_TYPING_PROPORTIONAL !== "false",
     /** Min gap between repeated composing/paused to same chat (0 = send every time). */
     presenceDedupeMs: HUMANIZE_PRESENCE_DEDUPE_MS ? Number(HUMANIZE_PRESENCE_DEDUPE_MS) : 0,
     /** Global min/max gap between ANY outbound action within a session (0 = off). */
@@ -697,12 +709,9 @@ const config = {
     /** Characters per second range for proportional typing. */
     typingCpsMin: humanTypingCps.minMs,
     typingCpsMax: humanTypingCps.maxMs,
-    /**
-     * Hard cap for proportional typing. Defaults to the legacy typing ceiling so
-     * enabling the mode does not make long replies wait longer than before;
-     * raise it deliberately if realistic pacing matters more than speed.
-     */
-    typingMaxMs: HUMANIZE_TYPING_MAX_MS ? Number(HUMANIZE_TYPING_MAX_MS) : typingDelay.maxMs,
+    /** Random ceiling range for proportional typing (ms). */
+    typingCapMinMs: humanTypingCap.minMs,
+    typingCapMaxMs: humanTypingCap.maxMs,
     /** Random gap between "available" and "composing" (ms). */
     presenceStartMinMs: humanPresenceStart.minMs,
     presenceStartMaxMs: humanPresenceStart.maxMs,

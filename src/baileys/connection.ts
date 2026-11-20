@@ -1654,7 +1654,10 @@ export class BaileysConnection {
           // range, which made the proportional mode pointless.
           const cps = Math.max(1, randomDelay(hz.typingCpsMin, hz.typingCpsMax));
           const typed = (msgLen / cps) * 1000;
-          delayMs = Math.min(Math.max(base + typed, 800), hz.typingMaxMs);
+          // The ceiling varies per message too: a fixed one would truncate every
+          // long reply to the same duration.
+          const cap = randomDelay(hz.typingCapMinMs, hz.typingCapMaxMs);
+          delayMs = Math.min(Math.max(base + typed, 800), cap);
         } else {
           delayMs = Math.floor(
             Math.random() *
