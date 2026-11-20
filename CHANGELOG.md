@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.55.2] - 2026-11-21
+
+### Changed
+
+- rename "Also Visible To" to "Support Accounts"
+
 ## [1.55.1] - 2026-11-21
 
 ### Fixed
