@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-11-20
+
+### Added
+
+- human-like online window instead of staying online forever
+
 ## [1.48.5] - 2026-11-19
 
 ### Changed
