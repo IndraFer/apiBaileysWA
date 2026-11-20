@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.54.0] - 2026-11-20
+
+### Added
+
+- real user picker for "Also Visible To", managers-only owner
+
 ## [1.53.0] - 2026-11-20
 
 ### Added
