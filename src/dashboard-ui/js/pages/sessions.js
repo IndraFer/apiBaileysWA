@@ -579,7 +579,9 @@
         paintAssignees();
       });
 
-      assigneeInputs().forEach((el) => el.addEventListener("change", paintAssignees));
+      assigneeInputs().forEach((el) => {
+        el.addEventListener("change", paintAssignees);
+      });
       paintAssignees();
       document.getElementById("update-session-form").addEventListener("submit", async (e) => {
         e.preventDefault();

@@ -57,12 +57,26 @@ interface ConversationState {
   media: WAMessage[];
   lastMessage: WAMessage | null;
   firstAt: number;
+  /** Idle window drawn for the current batch, so the gap is not always the same. */
+  idleMs: number;
   pausedUntil: number;
   /** While set, inbound messages are ignored (abuse control). */
   mutedUntil: number;
   timer: ReturnType<typeof setTimeout> | null;
   epoch: number;
   flushing: boolean;
+}
+
+/**
+ * A fixed idle window is a fingerprint: every message would be answered exactly N
+ * seconds later. Draw the target from ±25% of the configured value instead.
+ */
+function humanIdleMs(baseMs: number): number {
+  const base = Math.max(0, baseMs);
+  if (base === 0) return 0;
+  const lo = base * 0.75;
+  const hi = base * 1.25;
+  return Math.round(lo + Math.random() * (hi - lo));
 }
 
 export class ConversationRouter {
@@ -99,7 +113,10 @@ export class ConversationRouter {
     state.texts.push(...texts);
     state.media.push(...media);
     state.lastMessage = lastMessage;
-    if (state.firstAt === 0) state.firstAt = now;
+    if (state.firstAt === 0) {
+      state.firstAt = now;
+      state.idleMs = humanIdleMs(routing.batchIdleMs);
+    }
     if (state.texts.length > routing.maxBatchMessages) {
       state.texts = state.texts.slice(-routing.maxBatchMessages);
     }
@@ -113,7 +130,7 @@ export class ConversationRouter {
     }
 
     // Idle debounce, but never beyond batchMaxWaitMs from the first message.
-    const idleTarget = now + routing.batchIdleMs;
+    const idleTarget = now + (state.idleMs || routing.batchIdleMs);
     const hardTarget = state.firstAt + routing.batchMaxWaitMs;
     this.arm(conversationId, Math.min(idleTarget, hardTarget));
 
@@ -203,7 +220,9 @@ export class ConversationRouter {
     if (state.timer) clearTimeout(state.timer);
     state.timer = null;
     if (state.texts.length > 0) {
-      this.arm(conversationId, Date.now() + this.options.getRouting().batchIdleMs);
+      const routing = this.options.getRouting();
+      state.idleMs = humanIdleMs(routing.batchIdleMs);
+      this.arm(conversationId, Date.now() + state.idleMs);
     }
   }
 
@@ -243,6 +262,7 @@ export class ConversationRouter {
       media: [],
       lastMessage: null,
       firstAt: 0,
+      idleMs: 0,
       pausedUntil: 0,
       mutedUntil: 0,
       timer: null,
@@ -267,9 +287,10 @@ export class ConversationRouter {
         this.arm(conversationId, state.pausedUntil);
         return;
       }
-      if (state.firstAt > 0 && now < state.firstAt + routing.batchIdleMs) {
+      const idleWindow = state.idleMs || routing.batchIdleMs;
+      if (state.firstAt > 0 && now < state.firstAt + idleWindow) {
         // A message arrived after the timer was armed: wait for the idle gap.
-        this.arm(conversationId, state.firstAt + routing.batchIdleMs);
+        this.arm(conversationId, state.firstAt + idleWindow);
         return;
       }
       void this.flush(conversationId);
@@ -303,6 +324,7 @@ export class ConversationRouter {
       state.texts = [];
       state.media = [];
       state.firstAt = 0;
+      state.idleMs = 0;
       return;
     }
 
@@ -313,6 +335,7 @@ export class ConversationRouter {
     state.texts = [];
     state.media = [];
     state.firstAt = 0;
+    state.idleMs = 0;
 
     try {
       const result = await this.options.generateReply({

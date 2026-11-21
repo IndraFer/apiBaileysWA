@@ -116,6 +116,7 @@ const {
   HUMANIZE_PRESENCE_IDLE_MAX_MS,
   HUMANIZE_DELAY_DISTRIBUTION,
   BROADCAST_TYPING_SIMULATION,
+  BROADCAST_MAX_RECIPIENTS_NO_REDIS,
   BROADCAST_DELAY_DISTRIBUTION,
   BROADCAST_BATCH_CHECK_WA,
   BROADCAST_CHECK_WA_BATCH_SIZE,
@@ -553,6 +554,14 @@ const config = {
       BROADCAST_TYPING_SIMULATION !== undefined ? BROADCAST_TYPING_SIMULATION === "true" : false,
     /** "uniform" (legacy) or "human" (mixed short/long gaps + jitter). */
     delayDistribution: (BROADCAST_DELAY_DISTRIBUTION || "uniform") as "uniform" | "human",
+    /**
+     * Ceiling for one broadcast when the queue lives in process memory. A thousand
+     * recipients at 1.5-3s each runs for the best part of an hour; with Redis the
+     * job survives a restart, without it the cap keeps a mistake bounded.
+     */
+    maxRecipientsNoRedis: BROADCAST_MAX_RECIPIENTS_NO_REDIS
+      ? Number(BROADCAST_MAX_RECIPIENTS_NO_REDIS)
+      : 100,
     /** Check WA registration in batches instead of 1-by-1 (fewer usync queries). */
     batchCheckWa: BROADCAST_BATCH_CHECK_WA === "true",
     checkWaBatchSize: BROADCAST_CHECK_WA_BATCH_SIZE ? Number(BROADCAST_CHECK_WA_BATCH_SIZE) : 50,

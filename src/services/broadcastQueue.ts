@@ -3,6 +3,7 @@ import connectionManager from "@/baileys/connectionManager";
 import type { BroadcastJob, BroadcastMessage } from "@/baileys/types";
 import config from "@/config";
 import logger from "@/lib/logger";
+import { isRedisAvailable } from "@/lib/redis";
 import { asyncSleep, distributedDelay } from "@/utils/asyncSleep";
 import { formatPhone } from "@/utils/phone";
 import { errorToString } from "@/utils/validation";
@@ -42,9 +43,16 @@ export async function createBroadcastJob(
   sessionId: string,
   messages: BroadcastMessage[],
 ): Promise<BroadcastJob> {
-  // Enforce max per-job limit
+  // Enforce max per-job limit. Without Redis the job lives in process memory, so
+  // a long run is also a long window where a restart loses the remainder.
   if (messages.length > 1000) {
     throw new Error("Maximum 1000 messages per broadcast job");
+  }
+  if (!isRedisAvailable() && messages.length > config.broadcast.maxRecipientsNoRedis) {
+    throw new Error(
+      `Maximum ${config.broadcast.maxRecipientsNoRedis} messages per broadcast without Redis ` +
+        "(BROADCAST_MAX_RECIPIENTS_NO_REDIS). Raise it or enable Redis for larger jobs.",
+    );
   }
 
   // Clean up old jobs before creating new ones

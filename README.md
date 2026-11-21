@@ -449,7 +449,7 @@ and the raw log). Group exports include the digest and every participant scope.
 | `AI_HISTORY_MAX_CHARS` | `8000` | Character budget for the history block |
 | `AI_GUARD_ENABLED` | `true` | Prompt-injection guard on/off |
 | `AI_GUARD_MAX_INPUT_CHARS` | `4000` | Input cap before refusal |
-| `ROUTING_BATCH_IDLE_MS` | `20000` | Debounce window per conversation |
+| `ROUTING_BATCH_IDLE_MS` | `20000` | Debounce window per conversation. The actual wait is drawn from ±25% of this value each batch (20s → 15–25s), so replies never land on the same interval |
 | `ROUTING_BATCH_MAX_WAIT_MS` | `60000` | Hard cap from the first message |
 | `ROUTING_HUMAN_IDLE_MS` | `900000` | Human-activity pause |
 
@@ -1783,6 +1783,7 @@ baileys-wa-api/
 | `WEBHOOK_RETRY_INTERVAL`                  | `5000`                           | Initial webhook retry delay (ms)                                         |
 | `WEBHOOK_BACKOFF_FACTOR`                  | `3`                              | Exponential backoff multiplier                                           |
 | `BROADCAST_MIN_DELAY_MS`                  | `1500`                           | Min delay between bulk messages                                          |
+| `BROADCAST_MAX_RECIPIENTS_NO_REDIS`       | `100`                            | Per-broadcast ceiling when Redis is unavailable (memory queue); with Redis the 1000-message limit applies |
 | `BROADCAST_MAX_DELAY_MS`                  | `3000`                           | Max delay between bulk messages                                          |
 | `BROADCAST_BATCH_SIZE`                    | `10`                             | Messages per batch before pause                                          |
 | `BROADCAST_BATCH_PAUSE_MS`                | `5000`                           | Pause between batches                                                    |

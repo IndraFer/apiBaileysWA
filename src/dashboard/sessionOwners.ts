@@ -14,7 +14,6 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { join } from "node:path";
 import { getSavedSessionsWithMetadata, updateSessionMetadata } from "@/baileys/authState";
 import connectionManager from "@/baileys/connectionManager";
-import { listDashboardUsers } from "@/dashboard/auth";
 import logger from "@/lib/logger";
 
 type SavedEntry = { id: string; metadata: Record<string, unknown> | null };
@@ -38,16 +37,6 @@ function persist(): void {
       "[Sessions] Failed to persist ownership: %s",
       error instanceof Error ? error.message : String(error),
     );
-  }
-}
-
-/** Metadata straight from disk, for sessions the auth-state listing skips. */
-function readMetadataFile(sessionId: string): Record<string, unknown> | null {
-  try {
-    const file = join(process.cwd(), "sessions", `md_${sessionId}`, "metadata.json");
-    return JSON.parse(readFileSync(file, "utf-8")) as Record<string, unknown>;
-  } catch {
-    return null;
   }
 }
 
@@ -80,31 +69,7 @@ export async function loadSessionOwners(): Promise<void> {
     owners.set(entry.id, ownerId);
     migrated += 1;
   }
-  // Ownership exists to grant access; an admin already reaches every session, so
-  // an admin as owner is a leftover from before this rule and is cleared here.
-  const adminIds = new Set(
-    listDashboardUsers()
-      .filter((user) => user.role === "admin")
-      .map((user) => user.id),
-  );
-  const cleared: string[] = [];
-  for (const [id, ownerId] of owners) {
-    if (!adminIds.has(ownerId)) continue;
-    owners.delete(id);
-    cleared.push(id);
-  }
-  for (const id of cleared) {
-    const base =
-      (saved.find((item) => item.id === id)?.metadata as Record<string, unknown> | null) ??
-      readMetadataFile(id) ??
-      {};
-    await updateSessionMetadata(id, { ...base, ownerId: undefined }).catch(() => {});
-  }
-  if (cleared.length > 0) {
-    logger.info("[Sessions] Cleared admin ownership on %d session(s)", cleared.length);
-  }
-
-  if (migrated > 0 || cleared.length > 0) persist();
+  if (migrated > 0) persist();
 
   loadedOnce = true;
   logger.debug("[Sessions] Loaded ownership for %d session(s)", owners.size);
