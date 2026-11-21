@@ -50,11 +50,10 @@ export async function createBroadcastJob(
   }
   const cap = config.broadcast.maxRecipientsNoRedis;
   if (!isRedisAvailable() && messages.length > cap) {
-    // Operator-facing wording: no env names, and a next step they can act on.
+    // Operator-facing wording: the count, the limit, the action. Why the limit
+    // exists (in-memory queue, Redis) belongs in the admin docs, not here.
     throw new Error(
-      `This broadcast has ${messages.length} recipients but the queue is in memory, ` +
-        `which allows ${cap} per broadcast. Split it into smaller batches, ` +
-        "or ask an administrator to enable Redis for larger jobs.",
+      `This broadcast has ${messages.length} recipients. Split it into batches of ${cap} or fewer.`,
     );
   }
 
