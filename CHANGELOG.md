@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.56.2] - 2026-11-21
+
+### Fixed
+
+- keep the limit message to the count and the action
+
 ## [1.56.1] - 2026-11-21
 
 ### Fixed
