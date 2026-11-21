@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.56.1] - 2026-11-21
+
+### Fixed
+
+- default the memory-queue cap to 50 and phrase it for operators
+
 ## [1.56.0] - 2026-11-21
 
 ### Fixed
