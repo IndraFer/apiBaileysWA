@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.56.0] - 2026-11-21
+
+### Fixed
+
+- don't rewrite history on boot, cap memory-queue broadcasts, jitter AI idle
+
 ## [1.55.3] - 2026-11-21
 
 ### Fixed
