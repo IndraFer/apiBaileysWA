@@ -1783,7 +1783,7 @@ baileys-wa-api/
 | `WEBHOOK_RETRY_INTERVAL`                  | `5000`                           | Initial webhook retry delay (ms)                                         |
 | `WEBHOOK_BACKOFF_FACTOR`                  | `3`                              | Exponential backoff multiplier                                           |
 | `BROADCAST_MIN_DELAY_MS`                  | `1500`                           | Min delay between bulk messages                                          |
-| `BROADCAST_MAX_RECIPIENTS_NO_REDIS`       | `100`                            | Per-broadcast ceiling when Redis is unavailable (memory queue); with Redis the 1000-message limit applies |
+| `BROADCAST_MAX_RECIPIENTS_NO_REDIS`       | `50`                             | Per-broadcast ceiling when Redis is unavailable (memory queue); with Redis the 1000-message limit applies |
 | `BROADCAST_MAX_DELAY_MS`                  | `3000`                           | Max delay between bulk messages                                          |
 | `BROADCAST_BATCH_SIZE`                    | `10`                             | Messages per batch before pause                                          |
 | `BROADCAST_BATCH_PAUSE_MS`                | `5000`                           | Pause between batches                                                    |

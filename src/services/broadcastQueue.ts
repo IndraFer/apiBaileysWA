@@ -48,10 +48,13 @@ export async function createBroadcastJob(
   if (messages.length > 1000) {
     throw new Error("Maximum 1000 messages per broadcast job");
   }
-  if (!isRedisAvailable() && messages.length > config.broadcast.maxRecipientsNoRedis) {
+  const cap = config.broadcast.maxRecipientsNoRedis;
+  if (!isRedisAvailable() && messages.length > cap) {
+    // Operator-facing wording: no env names, and a next step they can act on.
     throw new Error(
-      `Maximum ${config.broadcast.maxRecipientsNoRedis} messages per broadcast without Redis ` +
-        "(BROADCAST_MAX_RECIPIENTS_NO_REDIS). Raise it or enable Redis for larger jobs.",
+      `This broadcast has ${messages.length} recipients but the queue is in memory, ` +
+        `which allows ${cap} per broadcast. Split it into smaller batches, ` +
+        "or ask an administrator to enable Redis for larger jobs.",
     );
   }
 

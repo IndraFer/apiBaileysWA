@@ -561,7 +561,7 @@ const config = {
      */
     maxRecipientsNoRedis: BROADCAST_MAX_RECIPIENTS_NO_REDIS
       ? Number(BROADCAST_MAX_RECIPIENTS_NO_REDIS)
-      : 100,
+      : 50,
     /** Check WA registration in batches instead of 1-by-1 (fewer usync queries). */
     batchCheckWa: BROADCAST_BATCH_CHECK_WA === "true",
     checkWaBatchSize: BROADCAST_CHECK_WA_BATCH_SIZE ? Number(BROADCAST_CHECK_WA_BATCH_SIZE) : 50,
