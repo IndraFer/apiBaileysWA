@@ -2319,6 +2319,12 @@ details[open] > summary::before {
   background: color-mix(in oklch, var(--bg-input), var(--accent) 6%);
 }
 
+.msg-attachment-tray[data-media-kind="image"] {
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  place-content: center;
+  align-items: center;
+}
+
 .msg-attachment-tray[data-media-kind="document"] {
   min-block-size: 3.6rem;
   align-items: center;
