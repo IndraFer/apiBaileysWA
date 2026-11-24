@@ -1877,7 +1877,7 @@ baileys-wa-api/
 | `AI_TOOL_BLOCK_INTERNAL` | `false` | Refuse configured knowledge-endpoint URLs pointing at private hosts |
 | `WEBHOOK_RETRYABLE_STATUSES` | `408,425,429,500,502,503,504` | Statuses that trigger a retry |
 | `IGNORE_GROUP_MESSAGES` | `false` | Global switch that drops every group message before any policy runs |
-| — | — | WhatsApp's own messages (`0@s.whatsapp.net`, system notices, revokes, protocol messages) are skipped before any auto-reply runs. No configuration needed |
+| — | — | WhatsApp's own messages are skipped before any auto-reply runs, with no configuration: its official accounts (`0`, `16505361212`, Meta AI, the server JID — matched by number so `@c.us` and `@s.whatsapp.net` both count) plus any system notice or protocol message. Ordinary WhatsApp Business customers are unaffected |
 | `ALLOW_GROUP_SEND` | `false` | Allow outbound group sends through the API/tools |
 | `ALLOWED_GROUP_JIDS` | — | Comma-separated group allowlist when group sending is on |
 

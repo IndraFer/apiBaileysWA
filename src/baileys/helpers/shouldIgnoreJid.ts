@@ -6,12 +6,25 @@ import {
   isJidMetaAI,
   isJidNewsletter,
   isJidStatusBroadcast,
+  META_AI_JID,
+  OFFICIAL_BIZ_JID,
+  PSA_WID,
+  SERVER_JID,
 } from "@whiskeysockets/baileys";
 import config from "@/config";
 
 /**
  * Determine if messages from a JID should be ignored based on configuration.
  */
+/**
+ * WhatsApp's own accounts, by number. The same account is addressed as @c.us or
+ * @s.whatsapp.net depending on the payload, and Baileys keeps the constants in
+ * @c.us form, so compare the user part instead of the full JID.
+ */
+const WHATSAPP_OFFICIAL_NUMBERS = new Set(
+  [PSA_WID, OFFICIAL_BIZ_JID, META_AI_JID, SERVER_JID].map((entry) => entry.split("@")[0]),
+);
+
 export function shouldIgnoreJid(jid: string): boolean {
   const {
     ignoreGroupMessages,
@@ -22,9 +35,10 @@ export function shouldIgnoreJid(jid: string): boolean {
     ignoreMetaAiMessages,
   } = config.baileys;
 
-  // WhatsApp's own system account: order updates, security notices, account
-  // warnings. It is a normal-looking DM, so it needs an explicit rule.
-  if (jid === "0@s.whatsapp.net") return true;
+  // WhatsApp's own accounts. They send ordinary-looking DMs (support replies,
+  // account notices), so they need an explicit rule.
+  const userPart = jid.split("@")[0]?.split(":")[0] ?? "";
+  if (userPart && WHATSAPP_OFFICIAL_NUMBERS.has(userPart)) return true;
 
   const ignoredSenders = config.baileys.ignoredSenders;
   if (ignoredSenders.length > 0) {
