@@ -17,7 +17,7 @@ const safeMime: Record<MediaKind, readonly string[]> = {
     "audio/webm",
     "audio/amr",
   ],
-  document: [],
+  document: ["application/pdf"],
 };
 
 const mediaLabels: Record<MediaKind, string> = {
@@ -191,8 +191,18 @@ export function describeChatMessage(message: WAMessage) {
           kind: attachment.kind,
           name:
             ("fileName" in attachment.data && attachment.data.fileName) ||
-            mediaLabels[attachment.kind],
-          preview: mime ? (mime.startsWith("image/") ? "image" : attachment.kind) : null,
+            (attachment.kind === "audio" && attachment.data.ptt
+              ? "Voice Note"
+              : mediaLabels[attachment.kind]),
+          preview:
+            mime === "application/pdf"
+              ? "pdf"
+              : mime
+                ? mime.startsWith("image/")
+                  ? "image"
+                  : attachment.kind
+                : null,
+          ...(attachment.kind === "audio" ? { duration: attachment.data.seconds ?? 0 } : {}),
           available: Boolean(
             message.key.id &&
               attachment.data.mediaKey &&

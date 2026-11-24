@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-24
+
+### Fixed
+
+- Group Chat Rooms attachment controls inside preview cards and show filenames below the cards.
+- Open PDF previews in the browser and keep Download as a separate action. Play audio and voice notes directly in the message bubble. All media still loads only on demand.
+
+## [2.0.0] - 2026-11-24
+
 ### Added
 
 - Show attachments and supported call-to-action links in retained Chat Rooms messages. Fetch attachment bytes only on View or Download and keep them in a private disk cache for up to three days. End Chat and Clear Chat remove the room's cached attachments without exposing view-once media.

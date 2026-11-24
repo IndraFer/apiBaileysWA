@@ -127,6 +127,11 @@ function buildCsp(): string {
 }
 
 const DASHBOARD_CSP = buildCsp();
+// Chromium uses a same-origin object to start its native top-level PDF viewer.
+// Keep scripts, frames, and cross-origin resources blocked on the PDF response.
+const CHAT_PDF_CSP =
+  "default-src 'none'; object-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; style-src-attr 'unsafe-inline'";
+const CHAT_MEDIA_PATH = /^\/dashboard\/api\/sessions\/[^/]+\/chats\/[^/]+\/media\/[^/]+$/;
 
 const CSP_HEADER = config.cspReportOnly
   ? "Content-Security-Policy-Report-Only"
@@ -150,7 +155,11 @@ app.use("*", async (c, next) => {
     target.set("X-Content-Type-Options", "nosniff");
     target.set("Referrer-Policy", "no-referrer");
     target.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    target.set(CSP_HEADER, DASHBOARD_CSP);
+    const inlineChatPdf =
+      CHAT_MEDIA_PATH.test(c.req.path) &&
+      target.get("Content-Type") === "application/pdf" &&
+      target.get("Content-Disposition")?.startsWith("inline;");
+    target.set(CSP_HEADER, inlineChatPdf ? CHAT_PDF_CSP : DASHBOARD_CSP);
     target.set("Report-To", CSP_REPORT_TO);
     target.set("Reporting-Endpoints", CSP_REPORTING_ENDPOINTS);
     if (isSecureRequest(c)) {

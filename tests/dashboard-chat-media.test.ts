@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { createCipheriv, createHmac, randomUUID } from "node:crypto";
 import { getMediaKeys, type WAMessage } from "@whiskeysockets/baileys";
 import { sign } from "hono/jwt";
+import app from "@/app";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import dashboardApi from "@/dashboard/api";
@@ -39,14 +40,22 @@ function withPreconnect(
   return Object.assign(implementation, { preconnect: globalThis.fetch.preconnect });
 }
 
-async function fixture() {
-  const key = Buffer.alloc(32, 28);
-  const { cipherKey, iv, macKey } = await getMediaKeys(key, "image");
+const key = Buffer.alloc(32, 28);
+const pdfBytes = Buffer.from("%PDF-1.7\n%%EOF\n");
+
+async function encryptFixture(bytes: Buffer, kind: "image" | "document") {
+  const { cipherKey, iv, macKey } = await getMediaKeys(key, kind);
   if (!macKey) throw new Error("Fixture requires a MAC key");
   const cipher = createCipheriv("aes-256-cbc", cipherKey, iv);
-  const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
   const mac = createHmac("sha256", macKey).update(iv).update(ciphertext).digest().subarray(0, 10);
-  const wire = Buffer.concat([ciphertext, mac]);
+  return Buffer.concat([ciphertext, mac]);
+}
+
+async function fixture() {
+  const wire = await encryptFixture(plain, "image");
+  const pdf = await encryptFixture(pdfBytes, "document");
+  const mislabeled = await encryptFixture(Buffer.from("<html>Not a PDF</html>"), "document");
   const image = {
     message: {
       imageMessage: {
@@ -87,6 +96,29 @@ async function fixture() {
       key: { remoteJid: jid, id: "document" },
       message: { documentMessage: { fileName: "report.html", mimetype: "text/html" } },
     },
+    ...["pdf", "mislabeled"].map((id) => ({
+      key: { remoteJid: jid, id },
+      message: {
+        documentMessage: {
+          fileName: `${id}.pdf`,
+          mimetype: "application/pdf",
+          mediaKey: key,
+          directPath: `/v/${id}`,
+        },
+      },
+    })),
+    {
+      key: { remoteJid: jid, id: "voice" },
+      message: {
+        audioMessage: {
+          ptt: true,
+          seconds: 12,
+          mimetype: "audio/ogg; codecs=opus",
+          mediaKey: key,
+          directPath: "/v/voice",
+        },
+      },
+    },
     {
       key: { remoteJid: jid, id: "unknown" },
       message: { keepInChatMessage: {} },
@@ -113,7 +145,16 @@ async function fixture() {
     qrCode: null,
   });
   fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
-    withPreconnect(async () => new Response(wire)),
+    withPreconnect(
+      async (url) =>
+        new Response(
+          String(url).endsWith("/pdf")
+            ? pdf
+            : String(url).endsWith("/mislabeled")
+              ? mislabeled
+              : wire,
+        ),
+    ),
   );
   return { fetchSpy };
 }
@@ -144,9 +185,54 @@ describe("Chat Rooms attachment workflow", () => {
       expect.objectContaining({
         media: expect.objectContaining({ kind: "document", preview: null }),
       }),
+      ...["pdf", "mislabeled"].map((id) =>
+        expect.objectContaining({
+          media: expect.objectContaining({ kind: "document", preview: "pdf", name: `${id}.pdf` }),
+        }),
+      ),
+      expect.objectContaining({
+        media: expect.objectContaining({
+          kind: "audio",
+          preview: "audio",
+          name: "Voice Note",
+          duration: 12,
+        }),
+      }),
       expect.objectContaining({ text: "[Unsupported Message]" }),
     ]);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("opens genuine PDFs inline, saves them as attachments, and refuses a mislabeled PDF preview", async () => {
+    const { fetchSpy } = await fixture();
+    const headers = await auth();
+    try {
+      const responseCsp = config.cspReportOnly
+        ? "Content-Security-Policy-Report-Only"
+        : "Content-Security-Policy";
+      const apiPath = `/dashboard/api${path}/media`;
+      const preview = await app.request(`${apiPath}/pdf`, {
+        headers: { ...headers, Range: "bytes=0-7" },
+      });
+      expect(preview.status).toBe(206);
+      expect(preview.headers.get("Content-Type")).toBe("application/pdf");
+      expect(preview.headers.get("Content-Disposition")).toBe('inline; filename="pdf.pdf"');
+      expect(preview.headers.get(responseCsp)).toContain(
+        "default-src 'none'; object-src 'self'; frame-ancestors 'none'",
+      );
+      expect(await preview.text()).toBe("%PDF-1.7");
+      const download = await app.request(`${apiPath}/pdf?download=1`, { headers });
+      expect(download.headers.get("Content-Disposition")).toBe('attachment; filename="pdf.pdf"');
+      expect(download.headers.get(responseCsp)).toContain("object-src 'none'");
+      expect(Buffer.from(await download.arrayBuffer())).toEqual(pdfBytes);
+      const invalid = await app.request(`${apiPath}/mislabeled`, { headers });
+      expect(invalid.status).toBe(404);
+      expect(invalid.headers.get("Content-Type")).not.toBe("application/pdf");
+      expect(invalid.headers.get(responseCsp)).toContain("object-src 'none'");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      await endChat(headers);
+    }
   });
 
   test("scopes byte access, caches on demand, purges on End Chat and Clear Chat", async () => {

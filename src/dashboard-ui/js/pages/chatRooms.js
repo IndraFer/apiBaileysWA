@@ -199,20 +199,67 @@
     return window.MessageFormat?.render(raw) ?? escapeHtml(raw);
   }
 
-  function renderAttachment(media, id) {
+  const attachmentIcons = {
+    image:
+      '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+    video: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4Z"/>',
+    document: '<path d="M5 21V3h9l5 5v13ZM14 3v6h5M8 13h8m-8 4h6"/>',
+    audio:
+      '<path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
+    play: '<path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none"/>',
+    pause: '<path d="M9 5v14m6-14v14" stroke-width="3"/>',
+    download: '<path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/>',
+  };
+
+  function attachmentIcon(kind) {
+    return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${attachmentIcons[kind]}</svg>`;
+  }
+
+  function attachmentButton(action, id, label, content) {
+    return `<button type="button" class="msg-attachment-button" data-attachment="${action}" data-id="${escapeHtml(id)}" aria-label="${label}" title="${label}">${content}</button>`;
+  }
+
+  function audioTime(seconds) {
+    const time = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    return `${Math.floor(time / 60)}:${String(time % 60).padStart(2, "0")}`;
+  }
+
+  function attachmentUrl(sessionId, jid, id) {
+    return `/dashboard/api/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(jid)}/media/${encodeURIComponent(id)}`;
+  }
+
+  function attachmentView(media, id, url) {
+    if (media.preview === "pdf") {
+      return `<a class="msg-attachment-button" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="View PDF in a New Tab" title="View PDF in a New Tab">View</a>`;
+    }
+    return media.preview ? attachmentButton("view", id, "View", "View") : "";
+  }
+
+  function renderAttachment(media, id, sessionId, jid) {
     if (!media) return "";
     const available = media.available && Boolean(id);
-    return `<div class="msg-attachment">
-      <strong>${escapeHtml(media.name)}</strong>
-      ${
-        available
-          ? `<div class="msg-actions">
-            ${media.preview ? `<button type="button" class="btn btn-sm btn-outline" data-attachment="view" data-id="${escapeHtml(id)}">View</button>` : ""}
-            <button type="button" class="btn btn-sm btn-outline" data-attachment="download" data-id="${escapeHtml(id)}">Download</button>
-          </div>`
-          : '<span class="text-muted text-xs">Media Unavailable</span>'
-      }
-    </div>`;
+    const type =
+      media.kind === "video" ? "video" : media.kind === "document" ? "document" : "image";
+    const download = available
+      ? attachmentButton("download", id, "Download", attachmentIcon("download"))
+      : "";
+    const audio = media.kind === "audio";
+    const controls = audio
+      ? `<div class="msg-attachment-tray msg-audio-tray" data-audio-id="${escapeHtml(id)}">
+          ${available && media.preview ? attachmentButton("play", id, `Play ${escapeHtml(media.name)}`, attachmentIcon("play")) : attachmentIcon("audio")}
+          <div class="msg-audio-track">
+            <input type="range" min="0" max="${Number(media.duration) || 1}" step="0.1" value="0" aria-label="Audio Progress" disabled>
+            <span class="msg-audio-time" aria-live="off">${available ? audioTime(media.duration) : "Media Unavailable"}</span>
+          </div>
+          ${download}
+        </div>`
+      : `<div class="msg-attachment-tray" data-media-kind="${type}">
+          <div class="msg-attachment-symbol">${attachmentIcon(type)}${media.preview === "pdf" ? "<span>PDF</span>" : ""}</div>
+          ${available ? attachmentView(media, id, attachmentUrl(sessionId, jid, id)) : ""}
+          ${download}
+          ${available ? "" : '<span class="msg-attachment-unavailable">Media Unavailable</span>'}
+        </div>`;
+    return `<figure class="msg-attachment">${controls}<figcaption>${escapeHtml(media.name)}</figcaption></figure>`;
   }
 
   function renderActions(actions) {
@@ -230,6 +277,87 @@
   }
 
   let activeMediaPreview = null;
+  let activeAudio = null;
+
+  function updateAudioControls(state) {
+    const { audio, tray, media } = state;
+    if (!tray?.isConnected) return;
+    const button = tray.querySelector('[data-attachment="play"]');
+    const seek = tray.querySelector('input[type="range"]');
+    const time = tray.querySelector(".msg-audio-time");
+    const playing = !audio.paused && !audio.ended;
+    const label = `${playing ? "Pause" : "Play"} ${media.name}`;
+    if (button.getAttribute("aria-label") !== label) {
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      UI.setHtml(button, attachmentIcon(playing ? "pause" : "play"));
+    }
+    const ready = Number.isFinite(audio.duration) && audio.duration > 0;
+    seek.disabled = !ready;
+    seek.max = String(ready ? audio.duration : Number(media.duration) || 1);
+    seek.value = String(audio.currentTime);
+    time.textContent = state.error
+      ? "Media Unavailable"
+      : `${audioTime(audio.currentTime)} / ${audioTime(ready ? audio.duration : media.duration)}`;
+  }
+
+  function stopAudio() {
+    if (!activeAudio) return;
+    const state = activeAudio;
+    activeAudio = null;
+    state.audio.pause();
+    state.audio.removeAttribute("src");
+    state.audio.load();
+    updateAudioControls(state);
+  }
+
+  function bindAudio(state, tray) {
+    state.tray = tray;
+    tray.querySelector('input[type="range"]').oninput = (event) => {
+      state.audio.currentTime = Number(event.target.value);
+    };
+    updateAudioControls(state);
+  }
+
+  function toggleAudio(button, sessionId, jid, media, url) {
+    const id = button.dataset.id;
+    if (
+      activeAudio?.id === id &&
+      activeAudio.sessionId === sessionId &&
+      activeAudio.jid === jid &&
+      !activeAudio.error
+    ) {
+      if (!activeAudio.audio.paused) activeAudio.audio.pause();
+      else playAudio(activeAudio);
+      return;
+    }
+    stopAudio();
+    const audio = new Audio();
+    const state = { id, sessionId, jid, media, audio, tray: null, error: false };
+    activeAudio = state;
+    for (const event of ["play", "pause", "ended", "loadedmetadata", "timeupdate"]) {
+      audio.addEventListener(event, () => {
+        if (activeAudio === state) updateAudioControls(state);
+      });
+    }
+    audio.addEventListener("error", () => showAudioError(state));
+    bindAudio(state, button.closest(".msg-audio-tray"));
+    // Reuse the player across polling renders; no source exists until Play.
+    audio.src = url;
+    playAudio(state);
+  }
+
+  function showAudioError(state) {
+    if (activeAudio !== state) return;
+    state.error = true;
+    updateAudioControls(state);
+  }
+
+  function playAudio(state) {
+    state.audio.play().catch((error) => {
+      if (error.name !== "AbortError") showAudioError(state);
+    });
+  }
 
   function showMediaPreview(url, media) {
     const tag = { image: "img", video: "video", audio: "audio" }[media.preview];
@@ -414,8 +542,9 @@
     const { id, attachment: action } = button.dataset;
     const media = attachments.get(id);
     if (!media) return;
-    const url = `/dashboard/api/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(jid)}/media/${encodeURIComponent(id)}`;
+    const url = attachmentUrl(sessionId, jid, id);
     if (action === "view") showMediaPreview(url, media);
+    if (action === "play") toggleAudio(button, sessionId, jid, media, url);
     if (action === "download") void downloadFile(`${url}?download=1`, media.name, true);
   }
 
@@ -596,6 +725,7 @@
         Toast.error(result.message || "Failed to end chat");
         return;
       }
+      if (activeAudio?.jid === jid && activeAudio.sessionId === selectedSessionId) stopAudio();
       Toast.success("Chat ended; memory and attachments cleared");
       return;
     }
@@ -620,6 +750,7 @@
       groupInventoryCache.at = 0;
       Toast.success("Left and deleted the group");
       if (jid === selectedJid) {
+        stopAudio();
         selectedJid = "";
         UI.setHtml(
           document.getElementById("chatroom-messages"),
@@ -655,6 +786,7 @@
       return;
     }
 
+    if (activeAudio?.jid === jid && activeAudio.sessionId === selectedSessionId) stopAudio();
     if (isClear) {
       Toast.success(`Cleared ${result.data?.clearedMessages ?? 0} messages in this chat`);
       if (jid === selectedJid) await page.loadConversation(jid, false);
@@ -955,6 +1087,7 @@
 
       document.querySelectorAll(".chatrooms-mode-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {
+          stopAudio();
           selectedMode = btn.dataset.mode;
           selectedJid = "";
           document.querySelectorAll(".chatrooms-mode-btn").forEach((b) => {
@@ -970,6 +1103,7 @@
 
       sessionSelect.value = selectedSessionId;
       sessionSelect.addEventListener("change", async (e) => {
+        stopAudio();
         selectedSessionId = e.target.value;
         window.App?.setSelectedSessionId?.(selectedSessionId);
         selectedJid = "";
@@ -2068,6 +2202,7 @@
     async loadConversation(jid, showToastOnError = true) {
       const roomSession = selectedSessionId;
       if (!roomSession || !jid) return;
+      stopAudio();
       await this.pauseOutgoingTypingPresence();
       if (!isCurrentRoom(roomSession, jid)) return;
 
@@ -2233,6 +2368,7 @@
         messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 90;
 
       if (!messages.length) {
+        stopAudio();
         UI.setHtml(messagesEl, '<div class="chatrooms-empty">No messages in this chat.</div>');
         return;
       }
@@ -2320,7 +2456,7 @@
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
                   ${senderLine}
                   ${quotedBlock}
-                  ${renderAttachment(payload.media, id)}
+                  ${renderAttachment(payload.media, id, roomSession, jid)}
                   ${payload.text ? `<div class="msg-text">${renderTextWithMarkdown(payload.text)}</div>` : ""}
                   ${
                     mentionChips.length > 0
@@ -2339,6 +2475,20 @@
           .join(""),
       );
 
+      if (activeAudio) {
+        const tray = [...messagesEl.querySelectorAll("[data-audio-id]")].find(
+          (element) =>
+            element.dataset.audioId === activeAudio.id &&
+            element.querySelector('[data-attachment="play"]'),
+        );
+        if (
+          isCurrentRoom(activeAudio.sessionId, activeAudio.jid) &&
+          tray &&
+          attachments.has(activeAudio.id)
+        ) {
+          bindAudio(activeAudio, tray);
+        } else stopAudio();
+      }
       if (nearBottom) {
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
@@ -2407,6 +2557,7 @@
     },
 
     destroy() {
+      stopAudio();
       if (activeMediaPreview) {
         activeMediaPreview();
         window.Modal.hide();

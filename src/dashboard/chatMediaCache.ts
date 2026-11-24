@@ -1,9 +1,11 @@
 import { createDecipheriv, createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
+  closeSync,
   createReadStream,
   mkdirSync,
   openSync,
   readdirSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -288,7 +290,10 @@ export function chatMediaResponse(
   if (!cached.has(entry.name) || entry.expiresAt <= Date.now()) throw unavailable();
   const inline = !download && attachment.mime;
   const original = "fileName" in attachment.data ? attachment.data.fileName : null;
-  const extension = attachment.mime?.split("/")[1]?.replace("jpeg", "jpg") || "bin";
+  const extension =
+    attachment.mime === "application/pdf"
+      ? "pdf"
+      : attachment.mime?.split("/")[1]?.replace("jpeg", "jpg") || "bin";
   const fallback = `${attachment.kind}.${extension}`;
   const filename =
     original
@@ -318,6 +323,20 @@ export function chatMediaResponse(
   // a late-opening stream racing with a different fetch of the same message.
   const file = join(ROOT, entry.name);
   const fd = openSync(file, "r");
+  if (inline === "application/pdf") {
+    try {
+      // Use the same descriptor as the response, including for Range requests.
+      const prefix = Buffer.alloc(8);
+      if (
+        readSync(fd, prefix, 0, prefix.length, 0) !== prefix.length ||
+        !/^%PDF-[12]\.\d$/.test(prefix.toString("latin1"))
+      )
+        throw unavailable();
+    } catch (err) {
+      closeSync(fd);
+      throw err;
+    }
+  }
   const stream = createReadStream(file, { fd, ...(bounds ? { start, end } : {}) });
   // SAFETY: Readable.toWeb creates a WHATWG stream; Node and DOM declarations differ in BYOB overloads.
   return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {

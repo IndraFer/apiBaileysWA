@@ -2291,8 +2291,132 @@ details[open] > summary::before {
 .msg-attachment {
   display: grid;
   gap: 0.35rem;
-  margin-block-end: 0.25rem;
+  inline-size: clamp(11rem, 28vw, 17rem);
+  max-inline-size: 100%;
+  margin: 0 0 0.35rem;
+}
+
+.msg-attachment figcaption {
+  font-size: 0.8rem;
+  font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.msg-attachment-tray {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+
+.msg-attachment-tray:not(.msg-audio-tray) {
+  min-block-size: 7rem;
+  background: color-mix(in oklch, var(--bg-input), var(--accent) 6%);
+}
+
+.msg-attachment-tray[data-media-kind="document"] {
+  min-block-size: 3.6rem;
+  align-items: center;
+}
+
+.msg-attachment-symbol {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.msg-attachment-symbol svg {
+  inline-size: 2rem;
+}
+
+.msg-attachment-tray[data-media-kind="document"] .msg-attachment-symbol {
+  grid-column: 1;
+  justify-content: start;
+  padding-inline-start: 0.2rem;
+}
+
+.msg-attachment-button {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 2.5rem;
+  min-block-size: 2.5rem;
+  padding-inline: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.msg-attachment-button svg,
+.msg-audio-tray > svg {
+  inline-size: 1.1rem;
+}
+
+.msg-attachment-tray:not(.msg-audio-tray) .msg-attachment-button:not([data-attachment="download"]) {
+  grid-column: 2;
+}
+
+.msg-attachment-tray:not(.msg-audio-tray) [data-attachment="download"] {
+  grid-column: 3;
+}
+
+.msg-attachment-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.msg-attachment-button:active {
+  background: var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .msg-attachment-button:hover {
+    border-color: var(--accent);
+  }
+}
+
+.msg-attachment-unavailable {
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.msg-attachment-tray.msg-audio-tray {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.msg-audio-track {
+  display: grid;
+  text-align: start;
+}
+
+.msg-audio-track input[type="range"] {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.msg-audio-time {
+  min-block-size: 1em;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .chat-media-preview {
