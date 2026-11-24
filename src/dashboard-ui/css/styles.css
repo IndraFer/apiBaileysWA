@@ -2303,7 +2303,7 @@ details[open] > summary::before {
   overflow-wrap: anywhere;
 }
 
-.msg-attachment-tray[data-media-kind="image"] + figcaption {
+.msg-attachment-tray:is([data-media-kind="image"], [data-media-kind="video"]) + figcaption {
   text-align: center;
 }
 
@@ -2324,7 +2324,7 @@ details[open] > summary::before {
   background: color-mix(in oklch, var(--bg-input), var(--accent) 6%);
 }
 
-.msg-attachment-tray[data-media-kind="image"] {
+.msg-attachment-tray:is([data-media-kind="image"], [data-media-kind="video"]) {
   grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
   place-content: center;
   align-items: center;
@@ -2377,7 +2377,7 @@ details[open] > summary::before {
   min-inline-size: 3rem;
   min-block-size: 2.25rem;
   padding-inline: 0.65rem;
-  border-color: transparent;
+  border-color: color-mix(in oklch, var(--border), var(--accent) 45%);
   background: color-mix(in oklch, var(--bg-card), var(--accent) 18%);
 }
 

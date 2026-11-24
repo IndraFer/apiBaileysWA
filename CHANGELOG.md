@@ -10,8 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Center attachment cards within Chat Rooms bubbles, even when long captions widen the bubble. Center the controls and label on image cards while leaving message captions left-aligned.
-- Style View and Download as soft green pill buttons in light and dark themes.
+- Center attachment cards within Chat Rooms bubbles, even when long captions widen the bubble. Center the controls and labels on image and video cards while leaving message captions left-aligned.
+- Style View and Download as soft green pill buttons with a thin green border in light and dark themes.
 
 ## [2.0.1] - 2026-11-24
 
