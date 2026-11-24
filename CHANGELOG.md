@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.57.0] - 2026-11-24
+
+### Added
+
+- never auto-reply to WhatsApp's own accounts
+
 ## [1.56.2] - 2026-11-21
 
 ### Fixed
