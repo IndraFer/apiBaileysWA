@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.58.1] - 2026-11-24
+
+### Fixed
+
+- ignore WhatsApp's official accounts by default
+
 ## [1.58.0] - 2026-11-24
 
 ### Added
