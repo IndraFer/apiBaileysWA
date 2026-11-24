@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.58.0] - 2026-11-24
+
+### Added
+
+- ignore WhatsApp's own messages without configuration
+
 ## [1.57.0] - 2026-11-24
 
 ### Added
