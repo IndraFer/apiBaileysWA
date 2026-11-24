@@ -205,7 +205,8 @@ describe("Chat Rooms attachment workflow", () => {
 
   test("opens genuine PDFs inline, saves them as attachments, and refuses a mislabeled PDF preview", async () => {
     const { fetchSpy } = await fixture();
-    const headers = await auth();
+    // Simulate HTTPS terminated at a trusted reverse proxy.
+    const headers = { ...(await auth()), "x-forwarded-proto": "https" };
     try {
       const responseCsp = config.cspReportOnly
         ? "Content-Security-Policy-Report-Only"
