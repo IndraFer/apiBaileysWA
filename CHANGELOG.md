@@ -10,7 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Group Chat Rooms attachment controls inside preview cards and show filenames below the cards. Center View and Download on image cards.
+- Group Chat Rooms attachment controls inside preview cards and show filenames below the cards. Center View and Download on image cards and the Image label below them.
 - Open PDF previews in the browser and keep Download as a separate action. Play audio and voice notes directly in the message bubble. All media still loads only on demand.
 
 ## [2.0.0] - 2026-11-24

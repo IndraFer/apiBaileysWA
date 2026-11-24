@@ -2302,6 +2302,10 @@ details[open] > summary::before {
   overflow-wrap: anywhere;
 }
 
+.msg-attachment-tray[data-media-kind="image"] + figcaption {
+  text-align: center;
+}
+
 .msg-attachment-tray {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
