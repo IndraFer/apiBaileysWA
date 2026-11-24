@@ -1,3 +1,4 @@
+import type { WAMessage } from "@whiskeysockets/baileys";
 import {
   isJidBot,
   isJidBroadcast,
@@ -38,5 +39,18 @@ export function shouldIgnoreJid(jid: string): boolean {
   if (isJidBot(jid) && ignoreBotMessages) return true;
   if (isJidMetaAI(jid) && ignoreMetaAiMessages) return true;
 
+  return false;
+}
+
+/**
+ * System messages are notices from WhatsApp itself (security, account changes,
+ * revokes, E2E setup), not something a customer wrote. They must never be
+ * answered by the AI or by a static reply, whatever JID they arrive on.
+ */
+export function isSystemMessage(message: Partial<WAMessage> | null | undefined): boolean {
+  if (!message) return false;
+  if (message.messageStubType !== undefined && message.messageStubType !== null) return true;
+  if (message.message?.protocolMessage) return true;
+  if (message.message?.senderKeyDistributionMessage && !message.message?.conversation) return true;
   return false;
 }

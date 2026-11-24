@@ -25,7 +25,7 @@ import NodeCache from "node-cache";
 import { toDataURL } from "qrcode";
 import { type AuthStateResult, useAuthState } from "@/baileys/authState";
 import { downloadMediaFromMessages } from "@/baileys/helpers/downloadMedia";
-import { shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
+import { isSystemMessage, shouldIgnoreJid } from "@/baileys/helpers/shouldIgnoreJid";
 import { downloadImageForVision } from "@/baileys/helpers/visionMedia";
 import { humanizeReadBeforeReply, resolveHumanizeOptions } from "@/baileys/replyEngine";
 import { MemoryStore } from "@/baileys/store/memoryStore";
@@ -823,6 +823,9 @@ export class BaileysConnection {
     };
     const messages = data.messages
       .filter((m) => !m.key.fromMe && m.key.remoteJid && !shouldIgnoreJid(m.key.remoteJid))
+      // Notices from WhatsApp itself (security, account changes, revokes) are
+      // system messages, not conversations: never answer them.
+      .filter((m) => !isSystemMessage(m))
       .filter((m) => {
         const remoteJid = m.key.remoteJid;
         // Direct chats are unaffected: this policy is group-only.
