@@ -1877,6 +1877,7 @@ baileys-wa-api/
 | `AI_TOOL_BLOCK_INTERNAL` | `false` | Refuse configured knowledge-endpoint URLs pointing at private hosts |
 | `WEBHOOK_RETRYABLE_STATUSES` | `408,425,429,500,502,503,504` | Statuses that trigger a retry |
 | `IGNORE_GROUP_MESSAGES` | `false` | Global switch that drops every group message before any policy runs |
+| `IGNORED_SENDERS` | — | Comma-separated senders that never get an automatic reply (AI **or** static fallback). Bare numbers become `<number>@s.whatsapp.net`; full JIDs are accepted. `0@s.whatsapp.net` (WhatsApp itself) is always skipped |
 | `ALLOW_GROUP_SEND` | `false` | Allow outbound group sends through the API/tools |
 | `ALLOWED_GROUP_JIDS` | — | Comma-separated group allowlist when group sending is on |
 

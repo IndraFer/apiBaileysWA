@@ -45,6 +45,7 @@ const {
   IGNORE_NEWSLETTER_MESSAGES,
   IGNORE_BOT_MESSAGES,
   IGNORE_META_AI_MESSAGES,
+  IGNORED_SENDERS,
   WEBHOOK_URL,
   WEBHOOK_ALLOWED_EVENTS,
   WEBHOOK_RETRY_MAX,
@@ -270,6 +271,21 @@ const humanPresenceIdle = rangePair(
 );
 const broadcastDelay = rangePair(BROADCAST_MIN_DELAY_MS, BROADCAST_MAX_DELAY_MS, 1500, 3000);
 
+/** "62812, +62 813, 123@lid" → normalized JIDs. */
+function parseIgnoredSenders(value?: string): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      if (entry.includes("@")) return entry;
+      const digits = entry.replace(/\D/g, "");
+      return digits ? `${digits}@s.whatsapp.net` : "";
+    })
+    .filter(Boolean);
+}
+
 function splitSources(value?: string): string[] {
   return (value || "")
     .split(/[\s,]+/)
@@ -329,6 +345,12 @@ const config = {
       : true,
     ignoreBotMessages: IGNORE_BOT_MESSAGES ? IGNORE_BOT_MESSAGES === "true" : true,
     ignoreMetaAiMessages: IGNORE_META_AI_MESSAGES ? IGNORE_META_AI_MESSAGES === "true" : true,
+    /**
+     * Senders whose messages never trigger an automatic reply: WhatsApp itself,
+     * WhatsApp Business notices, or any number the operator adds. Accepts bare
+     * numbers or full JIDs.
+     */
+    ignoredSenders: parseIgnoredSenders(IGNORED_SENDERS),
   },
 
   webhook: {
