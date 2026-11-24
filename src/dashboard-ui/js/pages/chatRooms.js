@@ -199,69 +199,83 @@
     return window.MessageFormat?.render(raw) ?? escapeHtml(raw);
   }
 
-  function extractMessagePayload(msg) {
-    const m = msg?.message || {};
-
-    if (m.conversation) return { text: m.conversation, unsupported: false };
-    if (m.extendedTextMessage?.text)
-      return { text: m.extendedTextMessage.text, unsupported: false };
-    if (m.imageMessage?.caption) return { text: m.imageMessage.caption, unsupported: false };
-    if (m.videoMessage?.caption) return { text: m.videoMessage.caption, unsupported: false };
-    if (m.documentMessage)
-      return {
-        text: `[Document] ${m.documentMessage.fileName || "file"}`,
-        unsupported: false,
-      };
-    if (m.audioMessage) return { text: "[Audio]", unsupported: false };
-    if (m.stickerMessage) return { text: "[Sticker]", unsupported: false };
-    if (m.locationMessage) return { text: "[Location]", unsupported: false };
-    if (m.contactMessage || m.contactsArrayMessage)
-      return { text: "[Contact]", unsupported: false };
-    if (m.pollCreationMessage) return { text: "[Poll]", unsupported: false };
-    if (m.reactionMessage?.text)
-      return {
-        text: `[Reaction] ${m.reactionMessage.text}`,
-        unsupported: false,
-      };
-
-    if (m.buttonsMessage || m.listMessage || m.templateMessage)
-      return { text: "[Interactive Message]", unsupported: false };
-
-    // Ignore protocol/service payloads in dashboard UI.
-    return { text: "", unsupported: true };
+  function renderAttachment(media, id) {
+    if (!media) return "";
+    const available = media.available && Boolean(id);
+    return `<div class="msg-attachment">
+      <strong>${escapeHtml(media.name)}</strong>
+      ${
+        available
+          ? `<div class="msg-actions">
+            ${media.preview ? `<button type="button" class="btn btn-sm btn-outline" data-attachment="view" data-id="${escapeHtml(id)}">View</button>` : ""}
+            <button type="button" class="btn btn-sm btn-outline" data-attachment="download" data-id="${escapeHtml(id)}">Download</button>
+          </div>`
+          : '<span class="text-muted text-xs">Media Unavailable</span>'
+      }
+    </div>`;
   }
 
-  function extractActionButtons(msg) {
-    const m = msg?.message || {};
-    const output = [];
+  function renderActions(actions) {
+    if (!actions?.length) return "";
+    const pills = actions.map(({ label, href }) =>
+      href
+        ? `<a class="msg-action-pill msg-action-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+        : `<span class="msg-action-pill">${escapeHtml(label)}</span>`,
+    );
+    return `<div class="msg-actions">${pills.join("")}</div>`;
+  }
 
-    if (Array.isArray(m?.buttonsMessage?.buttons)) {
-      m.buttonsMessage.buttons.forEach((btn) => {
-        const label = btn?.buttonText?.displayText;
-        if (label) output.push(label);
-      });
+  function isCurrentRoom(sessionId, jid) {
+    return sessionId === selectedSessionId && jid === selectedJid;
+  }
+
+  let activeMediaPreview = null;
+
+  function showMediaPreview(url, media) {
+    const tag = { image: "img", video: "video", audio: "audio" }[media.preview];
+    if (!tag) return;
+    activeMediaPreview?.();
+    window.Modal.show(media.name, '<div class="chat-media-preview" id="chat-media-preview"></div>');
+    const container = document.getElementById("chat-media-preview");
+    const overlay = document.getElementById("modal-overlay");
+    if (!container || !overlay) return;
+
+    const element = document.createElement(tag);
+    if (tag === "img") {
+      element.alt = media.name;
+    } else {
+      element.controls = true;
+      element.preload = "metadata";
+      if (tag === "video") element.playsInline = true;
     }
-
-    const hydratedButtons = m?.templateMessage?.hydratedTemplate?.hydratedButtons;
-    if (Array.isArray(hydratedButtons)) {
-      hydratedButtons.forEach((btn) => {
-        const label =
-          btn?.quickReplyButton?.displayText ||
-          btn?.urlButton?.displayText ||
-          btn?.callButton?.displayText;
-        if (label) output.push(label);
-      });
-    }
-
-    if (m?.listMessage?.buttonText?.displayText) {
-      output.push(m.listMessage.buttonText.displayText);
-    }
-
-    if (m?.buttonsResponseMessage?.selectedDisplayText) {
-      output.push(`Selected: ${m.buttonsResponseMessage.selectedDisplayText}`);
-    }
-
-    return output;
+    element.addEventListener(
+      "error",
+      () => {
+        if (!container.isConnected) return;
+        container.textContent = "Preview unavailable. Try Download or retry later.";
+      },
+      { once: true },
+    );
+    const observer = new MutationObserver(() => {
+      if (!container.isConnected || overlay.classList.contains("hidden")) stop();
+    });
+    const stop = () => {
+      observer.disconnect();
+      element.removeAttribute("src");
+      if (tag !== "img") element.load();
+      container.replaceChildren();
+      if (activeMediaPreview === stop) activeMediaPreview = null;
+    };
+    activeMediaPreview = stop;
+    observer.observe(overlay, {
+      attributes: true,
+      attributeFilter: ["class"],
+      childList: true,
+      subtree: true,
+    });
+    container.append(element);
+    // Assigning src is the first request for this attachment, after View.
+    element.src = url;
   }
 
   function formatMessageTime(ts) {
@@ -365,11 +379,16 @@
   }
 
   /** Fetch a download endpoint with the session cookie and save the result. */
-  async function downloadFile(url, fallbackName) {
+  async function downloadFile(url, fallbackName, attachment = false) {
     try {
-      const response = await fetch(url, { credentials: "same-origin" });
+      const token = window.API.getToken();
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!response.ok) {
-        Toast.error("Download failed");
+        const failure = attachment ? await response.json().catch(() => ({})) : {};
+        Toast.error(failure.message || (attachment ? "Media Unavailable" : "Download failed"));
         return false;
       }
       const blob = await response.blob();
@@ -385,9 +404,19 @@
       URL.revokeObjectURL(href);
       return true;
     } catch {
-      Toast.error("Download failed");
+      Toast.error(attachment ? "Media Unavailable" : "Download failed");
       return false;
     }
+  }
+
+  function handleAttachmentAction(button, sessionId, jid, attachments) {
+    if (!isCurrentRoom(sessionId, jid)) return;
+    const { id, attachment: action } = button.dataset;
+    const media = attachments.get(id);
+    if (!media) return;
+    const url = `/dashboard/api/sessions/${encodeURIComponent(sessionId)}/chats/${encodeURIComponent(jid)}/media/${encodeURIComponent(id)}`;
+    if (action === "view") showMediaPreview(url, media);
+    if (action === "download") void downloadFile(`${url}?download=1`, media.name, true);
   }
 
   let chatMenuElement = null;
@@ -553,7 +582,7 @@
     if (action === "end") {
       const confirmed = await window.Modal.confirm(
         "End Chat",
-        "Forget the assistant memory for this chat? Messages stay, but the summary and facts are removed. A later message starts fresh.",
+        "Clear assistant memory and cached attachments? Messages stay, and attachments can be fetched again if WhatsApp still has them.",
         { confirmText: "End Chat", cancelText: "Cancel", variant: "danger" },
       );
       if (!confirmed) return;
@@ -567,7 +596,7 @@
         Toast.error(result.message || "Failed to end chat");
         return;
       }
-      Toast.success("Chat ended; memory cleared");
+      Toast.success("Chat ended; memory and attachments cleared");
       return;
     }
 
@@ -833,7 +862,7 @@
                   ? sessions
                       .map(
                         (s) =>
-                          `<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`,
+                          `<option value="${escapeHtml(s.sessionId || s.id)}">${escapeHtml(UI.sessionLabel(s, sessions))}</option>`,
                       )
                       .join("")
                   : "<option>No connected sessions</option>"
@@ -2037,8 +2066,10 @@
     },
 
     async loadConversation(jid, showToastOnError = true) {
-      if (!selectedSessionId || !jid) return;
+      const roomSession = selectedSessionId;
+      if (!roomSession || !jid) return;
       await this.pauseOutgoingTypingPresence();
+      if (!isCurrentRoom(roomSession, jid)) return;
 
       const main = document.getElementById("chatrooms-main");
       if (!main) return;
@@ -2053,7 +2084,7 @@
           ${Avatar.markup({ sessionId: selectedSessionId, jid, name: jidLabel, size: "lg" })}
           <div>
             <h3>${escapeHtml(jidLabel)}</h3>
-            <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(selectedSessionId)}</p>
+            <p class="text-sm text-muted">${identity.lid ? `LID: ${escapeHtml(identity.lid)} · ` : ""}Session: ${escapeHtml(document.getElementById("chatrooms-session")?.selectedOptions[0]?.textContent || "Unavailable Session")}</p>
             <p class="chatroom-about is-hidden" id="chatroom-about"></p>
 						<span class="chatroom-read-status is-hidden" id="chatroom-read-status"></span>
 						<span class="chatroom-typing-indicator is-hidden" id="chatroom-typing-indicator"></span>
@@ -2092,8 +2123,9 @@
       }
 
       const result = await API.get(
-        `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(jid)}/messages?limit=80`,
+        `/sessions/${encodeURIComponent(roomSession)}/chats/${encodeURIComponent(jid)}/messages?limit=80`,
       );
+      if (!isCurrentRoom(roomSession, jid)) return;
       if (!result.success) {
         if (showToastOnError) Toast.error(result.message || "Failed to load conversation");
         UI.setHtml(
@@ -2104,6 +2136,7 @@
       }
 
       await this.markRoomAsRead(jid, false);
+      if (!isCurrentRoom(roomSession, jid)) return;
       this.renderConversationMessages(jid, result.data || []);
 
       document.getElementById("chatroom-send-form").addEventListener("submit", async (e) => {
@@ -2191,22 +2224,16 @@
             (normalizeTimestampSeconds(b.messageTimestamp) ?? 0),
         );
 
-      const visibleMessages = messages.filter((msg) => {
-        const payload = extractMessagePayload(msg);
-        return !payload.unsupported;
-      });
-
+      const roomSession = selectedSessionId;
+      const attachments = new Map();
       const messagesEl = document.getElementById("chatroom-messages");
       if (!messagesEl) return;
 
       const nearBottom =
         messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 90;
 
-      if (!visibleMessages.length) {
-        UI.setHtml(
-          messagesEl,
-          '<div class="chatrooms-empty">No visible chat message (system payload skipped).</div>',
-        );
+      if (!messages.length) {
+        UI.setHtml(messagesEl, '<div class="chatrooms-empty">No messages in this chat.</div>');
         return;
       }
 
@@ -2216,12 +2243,12 @@
 
       UI.setHtml(
         messagesEl,
-        visibleMessages
+        messages
           .map((msg) => {
             const fromMe = !!msg?.key?.fromMe;
-            const payload = extractMessagePayload(msg);
-            const mentioned = msg?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            const actionButtons = extractActionButtons(msg);
+            const payload = msg.presentation || { text: "[Unsupported Message]" };
+            const id = msg.key?.id || "";
+            if (id && payload.media?.available) attachments.set(id, payload.media);
             const time = formatMessageTime(msg.messageTimestamp);
             const tsSeconds = normalizeTimestampSeconds(msg.messageTimestamp) ?? 0;
             const dayKey = dayKeyOf(tsSeconds);
@@ -2240,6 +2267,7 @@
               // Find matching sent message by text content
               for (const [key, statusObj] of sentMessageStatus.entries()) {
                 if (
+                  payload.text &&
                   key.startsWith(`${jid}:`) &&
                   key.includes(payload.text) &&
                   statusObj.status !== "sending"
@@ -2283,23 +2311,17 @@
                   </div>`
                 : "";
 
-            // Mentions resolved on the server; fall back to the raw JID form.
-            const mentionChips =
-              Array.isArray(msg?.mentions) && msg.mentions.length > 0
-                ? msg.mentions
-                : (Array.isArray(mentioned) ? mentioned : []).map((value) => ({
-                    jid: String(value),
-                    label: jidPhoneOnly(String(value)),
-                  }));
+            const mentionChips = Array.isArray(msg.mentions) ? msg.mentions : [];
             const bubbleWrap = `msg-bubble-wrap ${fromMe ? "from-me" : "from-them"}`;
-            const dataMessageKey = msgKey ? ` data-message-key="${msgKey}"` : "";
+            const dataMessageKey = msgKey ? ` data-message-key="${escapeHtml(msgKey)}"` : "";
 
             return `${daySeparator}
               <div class="${bubbleWrap}"${dataMessageKey}>
                 <div class="msg-bubble ${fromMe ? "from-me" : "from-them"}${statusClass}">
                   ${senderLine}
                   ${quotedBlock}
-                  <div class="msg-text">${renderTextWithMarkdown(payload.text || "(empty)")}</div>
+                  ${renderAttachment(payload.media, id)}
+                  ${payload.text ? `<div class="msg-text">${renderTextWithMarkdown(payload.text)}</div>` : ""}
                   ${
                     mentionChips.length > 0
                       ? `<div class="msg-mentions">Mentions: ${mentionChips
@@ -2309,15 +2331,7 @@
                           .join("")}</div>`
                       : ""
                   }
-                  ${
-                    actionButtons.length > 0
-                      ? `<div class="msg-actions">${actionButtons
-                          .map(
-                            (label) => `<span class="msg-action-pill">${escapeHtml(label)}</span>`,
-                          )
-                          .join("")}</div>`
-                      : ""
-                  }
+                  ${renderActions(payload.actions)}
                   <div class="msg-time"${fullTimestamp ? ` title="${escapeHtml(fullTimestamp)}"` : ""}>${time}${statusTag}</div>
                 </div>
               </div>`;
@@ -2331,7 +2345,13 @@
 
       // Delegated per render; the container is rebuilt on every refresh.
       messagesEl.onclick = (event) => {
-        const el = event.target instanceof Element ? event.target.closest(".msg-sender") : null;
+        if (!(event.target instanceof Element)) return;
+        const attachmentButton = event.target.closest("button[data-attachment]");
+        if (attachmentButton) {
+          handleAttachmentAction(attachmentButton, roomSession, jid, attachments);
+          return;
+        }
+        const el = event.target.closest(".msg-sender");
         if (!el) return;
         const senderJid = el.getAttribute("data-sender-jid") || "";
         if (!senderJid) return;
@@ -2368,13 +2388,14 @@
     },
 
     async refreshCurrentConversation(showToastOnError = false) {
-      if (!selectedSessionId || !selectedJid) return;
-      const messagesEl = document.getElementById("chatroom-messages");
-      if (!messagesEl) return;
+      const roomSession = selectedSessionId;
+      const jid = selectedJid;
+      if (!roomSession || !jid || !document.getElementById("chatroom-messages")) return;
 
       const result = await API.get(
-        `/sessions/${encodeURIComponent(selectedSessionId)}/chats/${encodeURIComponent(selectedJid)}/messages?limit=80`,
+        `/sessions/${encodeURIComponent(roomSession)}/chats/${encodeURIComponent(jid)}/messages?limit=80`,
       );
+      if (!isCurrentRoom(roomSession, jid)) return;
       if (!result.success) {
         if (showToastOnError) {
           Toast.error(result.message || "Failed to refresh conversation");
@@ -2382,10 +2403,14 @@
         return;
       }
 
-      this.renderConversationMessages(selectedJid, result.data || []);
+      this.renderConversationMessages(jid, result.data || []);
     },
 
     destroy() {
+      if (activeMediaPreview) {
+        activeMediaPreview();
+        window.Modal.hide();
+      }
       if (takeoverTicker) {
         clearInterval(takeoverTicker);
         takeoverTicker = null;

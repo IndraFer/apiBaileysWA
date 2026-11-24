@@ -82,5 +82,23 @@
     target.append(document.createTextNode(String(html ?? "")));
   }
 
-  window.UI = { setHtml, appendHtml, escapeHtml };
+  function sessionLabel(session, visibleSessions = []) {
+    const nameOf = (item) => item.sessionName || "Unnamed Session";
+    const phoneSuffix = (item) => {
+      const jid = String(item.user?.id || "");
+      return jid.match(/^(\d+)(?::\d+)?@s\.whatsapp\.net$/)?.[1]?.slice(-4) || "";
+    };
+    const name = nameOf(session);
+    const equalName = visibleSessions.filter(
+      (item) => nameOf(item)?.localeCompare(name, "en", { sensitivity: "base" }) === 0,
+    );
+    if (equalName.length < 2) return name;
+    const digits = phoneSuffix(session);
+    if (digits && equalName.filter((item) => phoneSuffix(item) === digits).length === 1) {
+      return `${name} · ••••${digits}`;
+    }
+    return `${name} (${equalName.indexOf(session) + 1})`;
+  }
+
+  window.UI = { setHtml, appendHtml, escapeHtml, sessionLabel };
 })();

@@ -61,7 +61,7 @@
                     (session) =>
                       `<option value="${escapeHtml(session.sessionId || session.id)}"${
                         (session.sessionId || session.id) === state.sessionId ? " selected" : ""
-                      }>${escapeHtml(session.clientName || session.sessionId || session.id)}</option>`,
+                      }>${escapeHtml(UI.sessionLabel(session, list))}</option>`,
                   )
                   .join("")}
               </select>

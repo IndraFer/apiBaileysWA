@@ -97,7 +97,7 @@
         `
         <div class="event-header">
           <span class="event-type">${UI.escapeHtml(ev.event)}</span>
-          <span class="event-session">${UI.escapeHtml(ev.sessionId)}</span>
+          <span class="event-session">${UI.escapeHtml(window.App.getSessionLabel(ev.sessionId))}</span>
           <span class="event-time">${time}</span>
         </div>
         <div class="event-detail">${UI.escapeHtml(JSON.stringify(ev.data, null, 2))}</div>`,

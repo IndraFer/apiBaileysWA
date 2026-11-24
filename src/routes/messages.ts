@@ -10,20 +10,14 @@
  * instead of retrying blindly.
  */
 import { type Context, Hono } from "hono";
-import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { success } from "@/lib/response";
-import { type AuthData, authMiddleware } from "@/middleware/auth";
+import { isValidSessionId } from "@/lib/sessionId";
+import { type AuthData, enforcedAuthMiddleware } from "@/middleware/auth";
 import { apiKeyRateLimit, sendRateLimit } from "@/middleware/rateLimit";
 import { unifiedSendJsonSchema, unifiedSendSchema } from "@/schemas/message";
 import { maskReceiver, recordApiCall } from "@/services/apiAuditLog";
-import { keyAllowsSession } from "@/services/apiKeys";
-import {
-  MessageSendError,
-  resolveSessionId,
-  sendUnifiedMessage,
-  withTimeout,
-} from "@/services/messageSender";
+import { MessageSendError, sendUnifiedMessage, withTimeout } from "@/services/messageSender";
 
 const messageRoutes = new Hono();
 
@@ -63,7 +57,7 @@ function failure(c: Context, extra: FailureExtra) {
   );
 }
 
-messageRoutes.use("*", authMiddleware);
+messageRoutes.use("*", enforcedAuthMiddleware);
 
 const inFlight = new Map<string, number>();
 
@@ -131,31 +125,25 @@ messageRoutes.post("/", apiKeyRateLimit, sendRateLimit, async (c) => {
   }
 
   const input = parsed.data;
-  let session: string | null = null;
+  const session = auth?.sessions?.length === 1 ? auth.sessions[0] : undefined;
+  if (!session || !isValidSessionId(session)) {
+    audit(403, { receiver: input.receiver, type: input.type });
+    return failure(c, {
+      status: 403,
+      code: "SESSION_KEY_REQUIRED",
+      message: "This endpoint requires an API key scoped to one session",
+      hint: "Create a key for the sending session in Dashboard → REST API.",
+      requestId,
+    });
+  }
 
   try {
-    session = resolveSessionId(input.from);
-
-    if (!keyAllowsSession(auth?.sessions, session)) {
-      audit(403, { session, receiver: input.receiver, type: input.type });
-      return failure(c, {
-        status: 403,
-        code: "KEY_NOT_SCOPED",
-        message: `API key is not scoped to session "${session}"`,
-        field: "from",
-        hint: "Use a `from` that this key allows, or ask an administrator to create a key scoped to this session.",
-        details: { allowed: auth?.sessions ?? ["*"], requested: session },
-        requestId,
-      });
-    }
-
     if (!acquireSlot(session)) {
       audit(429, { session, receiver: input.receiver, type: input.type });
       return failure(c, {
         status: 429,
         code: "SESSION_BUSY",
         message: `Session "${session}" already has ${config.send.maxConcurrent} sends in flight`,
-        field: "from",
         hint: "Retry after a short delay; consider queueing sends on your side instead of firing them concurrently.",
         details: { session, maxConcurrent: config.send.maxConcurrent },
         requestId,
@@ -163,7 +151,7 @@ messageRoutes.post("/", apiKeyRateLimit, sendRateLimit, async (c) => {
     }
 
     try {
-      const data = await withTimeout(sendUnifiedMessage(input), config.send.timeoutMs);
+      const data = await withTimeout(sendUnifiedMessage(session, input), config.send.timeoutMs);
       audit(200, { session, receiver: data.to, type: input.type });
       return success(c, data, "Message sent successfully");
     } finally {
@@ -173,24 +161,13 @@ messageRoutes.post("/", apiKeyRateLimit, sendRateLimit, async (c) => {
     if (err instanceof MessageSendError) {
       audit(err.status, { session, receiver: input.receiver, type: input.type });
 
-      const details =
-        err.code === "SESSION_NOT_FOUND"
-          ? {
-              ...err.details,
-              available: connectionManager
-                .listSessions()
-                .map((entry) => entry.sessionId)
-                .filter((id) => keyAllowsSession(auth?.sessions, id)),
-            }
-          : err.details;
-
       return failure(c, {
         status: err.status,
         code: err.code,
         message: err.message,
         field: err.field,
         hint: err.hint,
-        details,
+        details: err.details,
         requestId,
       });
     }

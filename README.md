@@ -1034,9 +1034,13 @@ CSP_REPORT_ONLY=false
   webhooks, REST API, events and user management stay hidden. An empty
   assignment grants no session at all, so unassigned numbers never appear in
   dashboard or API responses.
-- Session creation is open to admin and manager, subject to the per-role session
-  limit. Access is required to re-create an id that already exists, so a manager
-  cannot take over a session they cannot see.
+- Admins and managers can create sessions subject to their limits. Enter a
+  **Session Name**; multiple sessions can share that label. The server generates
+  a unique **Session ID** for new dashboard sessions. Existing IDs are unchanged.
+  Dashboard controls show the name, with a phone suffix or a list number when
+  names match. Webhook events still carry `sessionId`; use that field in reply
+  workflows instead of entering a name or ID manually. Only admins can use the
+  legacy create endpoint that accepts a chosen ID.
 - Deletion is narrower than access: admin deletes anything, manager deletes only
   sessions whose `ownerId` matches their account. A session an admin assigned to
   them stays visible but has no Delete button, and the API answers 403.
@@ -1180,9 +1184,9 @@ The token is shown **once** at creation and stored only as a SHA-256 hash. A
 leaked dump does not expose usable keys. Storage is flexible: every record is
 written to `data/api-keys.json`, and mirrored into Redis when it is available
 (reads merge both, deletes remove both) — Redis is not required. Legacy
-plaintext keys are migrated automatically on first use. Scope is enforced on
-`/api/v1/messages`: a key bound to `ROG8` gets `403` when `from` resolves to
-another session.
+plaintext keys are migrated automatically on first use. `/api/v1/messages`
+requires a key bound to exactly one session and sends only from that session.
+Global credentials cannot send through this endpoint.
 
 Every call is written to the audit log (Dashboard → REST API → Request log):
 time, key id/label, session, masked receiver, type, status, latency and IP. The
@@ -1239,9 +1243,9 @@ Base URL depends on where the API runs:
 
 So the canonical endpoint is `<BASE_URL>/api/v1/messages`; the older
 `<BASE_URL>/messages` stays available as an alias. One endpoint for widgets,
-chatbots and LLM tools. Authenticate with the same API
-key as the rest of the REST API (`Authorization: Bearer <API_KEY>` or
-`x-api-key`). `from` accepts a session id or the WhatsApp number bound to it.
+chatbots and LLM tools. Authenticate with the key for the sending session
+(`Authorization: Bearer <API_KEY>` or `x-api-key`). Do not send `from`: the
+server ignores it and uses the connected session bound to the key.
 
 ```bash
 POST https://your-domain.com/api/v1/messages
@@ -1249,7 +1253,6 @@ Content-Type: application/json
 Authorization: Bearer <API_KEY>
 
 {
-  "from": "ROG8",
   "receiver": "628123456789",
   "type": "text",
   "messages": "Halo, ini pesan dari bot."
@@ -1267,7 +1270,6 @@ Authorization: Bearer <API_KEY>
 # Image with caption
 POST https://your-domain.com/api/v1/messages
 {
-  "from": "62812xxxxxxx",
   "receiver": "62813xxxxxxx",
   "type": "image",
   "messages": "Bukti transfer",
@@ -1276,7 +1278,6 @@ POST https://your-domain.com/api/v1/messages
 
 # Document
 {
-  "from": "ROG8",
   "receiver": "62813xxxxxxx",
   "type": "document",
   "media": {
@@ -1288,7 +1289,6 @@ POST https://your-domain.com/api/v1/messages
 
 # Location
 {
-  "from": "ROG8",
   "receiver": "62813xxxxxxx",
   "type": "location",
   "location": {
@@ -1322,11 +1322,10 @@ Content-Type: application/json
 
 ```json
 {
-  "description": "Send a WhatsApp message from a connected session. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
+  "description": "Send a WhatsApp message from the connected session linked to the API key.",
   "type": "object",
-  "required": ["from", "receiver"],
+  "required": ["receiver"],
   "properties": {
-    "from": { "type": "string", "description": "Session id (e.g. ROG8) or the phone number bound to it." },
     "receiver": { "type": "string", "description": "Recipient in international digits (e.g. 628123456789), a JID, or a group id ending with @g.us." },
     "type": { "type": "string", "enum": ["text", "image", "document", "location"], "description": "Message kind. Defaults to text." },
     "messages": { "type": "string", "description": "Text body, or the caption for image and document." },
@@ -1360,7 +1359,6 @@ Content-Type: application/json
 
 ```json
 {
-  "from": "ROG8",
   "receiver": "628123456789",
   "type": "text",
   "messages": "Halo, ini pesan dari bot."
@@ -1370,7 +1368,7 @@ Content-Type: application/json
 #### Full tool definition (download)
 
 The dashboard can also emit one combined object (`Download .json`, saved as
-`whatsapp-tool-<session>.json`) that a tool-import UI can consume directly:
+`whatsapp-tool.json`) that a tool-import UI can consume directly:
 
 ```json
 {
@@ -1384,7 +1382,6 @@ The dashboard can also emit one combined object (`Download .json`, saved as
   },
   "parameters": { "...": "the schema block above" },
   "example": {
-    "from": "ROG8",
     "receiver": "628123456789",
     "type": "text",
     "messages": "Halo, ini pesan dari bot."
@@ -1418,7 +1415,6 @@ returns a bare status code:
   "success": false,
   "code": "SESSION_NOT_CONNECTED",
   "message": "Session \"ROG8\" is not connected",
-  "field": "from",
   "hint": "Reconnect the session from Dashboard → Sessions (scan the QR code), then retry this request.",
   "details": { "session": "ROG8", "connected": false },
   "retryable": true,
@@ -1431,10 +1427,9 @@ returns a bare status code:
 | 400 | `INVALID_REQUEST` | Body failed validation | Read `field` and `details.issues` (all issues, not just the first) |
 | 400 | `RECEIVER_NOT_ON_WHATSAPP` | Number not registered on WhatsApp | Use international digits (`628123456789`) and confirm WhatsApp exists |
 | 401 | `UNAUTHORIZED` | Missing or revoked API key | Send `Authorization: Bearer <API_KEY>`; create a key in Dashboard → REST API |
-| 403 | `KEY_NOT_SCOPED` | Key cannot use that `from` | Use an allowed `from`; see `details.allowed` |
+| 403 | `SESSION_KEY_REQUIRED` | Credential does not identify exactly one session | Use a key created for the sending session in Dashboard → REST API |
 | 403 | `GROUP_DISABLED` | Group sending is off | Send 1:1, or enable `ALLOW_GROUP_SEND` |
 | 403 | `GROUP_NOT_ALLOWED` | Group not in the allowlist | Add the JID to `ALLOWED_GROUP_JIDS` |
-| 404 | `SESSION_NOT_FOUND` | `from` did not resolve | Use a session id from `details.available` (or `GET /sessions`) |
 | 409 | `SESSION_NOT_CONNECTED` | Session exists but is offline | Reconnect via Dashboard → Sessions, then retry |
 | 500 | `SEND_FAILED` | Unexpected send failure | Retry once; if it persists, report the `requestId` |
 

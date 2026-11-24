@@ -11,8 +11,13 @@
 
   function scopeLabel(sessions) {
     if (!Array.isArray(sessions) || sessions.length === 0 || sessions.includes("*"))
-      return "all sessions";
-    return sessions.join(", ");
+      return "Legacy global — cannot send";
+    return sessions
+      .map((id) => {
+        const session = state.sessions.find((entry) => entry.sessionId === id);
+        return session ? UI.sessionLabel(session, state.sessions) : window.App.getSessionLabel(id);
+      })
+      .join(", ");
   }
 
   function statusBadge(status) {
@@ -54,7 +59,7 @@
     }
 
     const used = boundSessions();
-    const available = state.sessions.filter((id) => !used.has(id));
+    const available = state.sessions.filter(({ sessionId }) => !used.has(sessionId));
     if (available.length === 0) {
       window.UI.setHtml(select, '<option value="">All sessions already have a key</option>');
       if (button) button.disabled = true;
@@ -64,14 +69,19 @@
     window.UI.setHtml(
       select,
       ['<option value="">Select a session…</option>']
-        .concat(available.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`))
+        .concat(
+          available.map(
+            (session) =>
+              `<option value="${esc(session.sessionId)}">${esc(UI.sessionLabel(session, state.sessions))}</option>`,
+          ),
+        )
         .join(""),
     );
     const preferred = window.App?.getSelectedSessionId?.();
-    if (preferred && available.includes(preferred)) select.value = preferred;
-    else if (available.length > 0) {
-      select.value = available[0];
-      window.App?.setSelectedSessionId?.(available[0]);
+    if (available.some(({ sessionId }) => sessionId === preferred)) select.value = preferred;
+    else {
+      select.value = available[0].sessionId;
+      window.App?.setSelectedSessionId?.(select.value);
     }
     select.onchange = () => window.App?.setSelectedSessionId?.(select.value);
     if (button) button.disabled = false;
@@ -79,10 +89,19 @@
 
   async function loadSessions() {
     const result = await window.API.get("/sessions");
-    state.sessions = (result.success ? result.data : []).map((session) =>
-      String(session.sessionId),
-    );
+    state.sessions = result.success ? result.data : [];
     refreshSessionOptions();
+    const filter = document.getElementById("log-filter-session");
+    UI.setHtml(
+      filter,
+      '<option value="">All Sessions</option>' +
+        state.sessions
+          .map(
+            (session) =>
+              `<option value="${esc(session.sessionId)}">${esc(UI.sessionLabel(session, state.sessions))}</option>`,
+          )
+          .join(""),
+    );
   }
 
   async function loadKeys() {
@@ -117,7 +136,7 @@
           <td class="text-muted text-sm">${formatTime(key.createdAt)}</td>
           <td class="text-muted text-sm">${formatTime(key.lastUsedAt)}</td>
           <td class="u-text-right">
-            <button class="btn btn-outline btn-sm btn-key-snippet" data-session="${esc(key.sessions?.[0] || "")}">Snippet</button>
+            ${key.sessions?.length === 1 && key.sessions[0] !== "*" ? '<button class="btn btn-outline btn-sm btn-key-snippet">Snippet</button>' : ""}
             <button class="btn btn-danger btn-sm" data-revoke-key="${esc(key.id)}">Revoke</button>
           </td>
         </tr>`,
@@ -130,7 +149,7 @@
     );
 
     table.querySelectorAll(".btn-key-snippet").forEach((button) => {
-      button.addEventListener("click", () => openIntegrationSnippet(button.dataset.session));
+      button.addEventListener("click", openIntegrationSnippet);
     });
 
     table.querySelectorAll("[data-revoke-key]").forEach((button) => {
@@ -180,7 +199,7 @@
         <tr>
           <td class="text-muted text-xs">${formatTime(entry.timestamp)}</td>
           <td class="text-sm">${esc(entry.keyLabel || "—")}<div class="text-muted text-xs font-mono">${esc(entry.keyId || "")}</div></td>
-          <td class="text-sm">${esc(entry.session || "—")}</td>
+          <td class="text-sm">${esc(entry.session ? scopeLabel([entry.session]) : "—")}</td>
           <td class="text-sm font-mono">${esc(entry.receiver || "—")}</td>
           <td class="text-sm">${esc(entry.type || "—")}</td>
           <td>${statusBadge(entry.status)}</td>
@@ -249,17 +268,13 @@
   }
 
   /** Copy-paste blocks for a third-party chatbot tool configuration. */
-  function openIntegrationSnippet(prefillFrom) {
+  function openIntegrationSnippet() {
     const endpoint = `${window.location.origin}/api/v1/messages`;
     const schema = {
       description:
-        "Send a WhatsApp message from a connected session. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
+        "Send a WhatsApp message from the connected session linked to the API key. Use text for plain messages, image/document with media.url, and location with latitude/longitude.",
       type: "object",
       properties: {
-        from: {
-          type: "string",
-          description: "Session id (e.g. ROG8) or the phone number bound to it.",
-        },
         receiver: {
           type: "string",
           description:
@@ -300,10 +315,9 @@
           description: "Force group semantics when receiver is not an @g.us JID.",
         },
       },
-      required: ["from", "receiver"],
+      required: ["receiver"],
     };
     const example = {
-      from: prefillFrom || "ROG8",
       receiver: "628123456789",
       type: "text",
       messages: "Halo, ini pesan dari bot.",
@@ -326,7 +340,7 @@
 
     window.Modal.show(
       "Integration snippet",
-      `<p class="text-sm text-muted">Copy each block into your chatbot's external tool configuration. Replace <code>&lt;API_KEY&gt;</code> with a key created below.</p>
+      `<p class="text-sm text-muted">Copy each block into your chatbot's external tool configuration. Replace <code>&lt;API_KEY&gt;</code> with the key for the session that should send the message.</p>
        <h4>Method &amp; URL</h4>
        <pre class="webhook-ref-code" id="snippet-url"></pre>
        <div class="u-mb-05"><button class="btn btn-outline btn-sm" data-copy-snippet="snippet-url">Copy URL</button></div>
@@ -374,7 +388,7 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `whatsapp-tool${prefillFrom ? `-${prefillFrom}` : ""}.json`;
+      link.download = "whatsapp-tool.json";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -438,7 +452,7 @@
           <div class="u-between-center u-mb-075">
             <h3 class="u-mt-0">Request Log</h3>
             <div class="flex gap-1">
-              <input id="log-filter-session" class="input input-sm" placeholder="filter session">
+              <select id="log-filter-session" class="input input-sm" aria-label="Filter by Session"></select>
               <select id="log-filter-status" class="input input-sm">
                 <option value="">all status</option>
                 <option value="200">200</option>
@@ -465,13 +479,10 @@
       document.getElementById("btn-refresh-logs").addEventListener("click", loadLogs);
       document.getElementById("log-filter-status").addEventListener("change", loadLogs);
 
-      let debounce = null;
-      document.getElementById("log-filter-session").addEventListener("input", () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(loadLogs, 300);
-      });
+      document.getElementById("log-filter-session").addEventListener("change", loadLogs);
 
-      await Promise.all([loadSessions(), loadKeys(), loadLogs()]);
+      await loadSessions();
+      await Promise.all([loadKeys(), loadLogs()]);
       state.timer = setInterval(loadLogs, 15000);
     },
 

@@ -13,7 +13,10 @@
     async render() {
       const sessions = await this.getSessions();
       const opts = sessions
-        .map((s) => `<option value="${s.sessionId || s.id}">${s.sessionId || s.id}</option>`)
+        .map(
+          (s) =>
+            `<option value="${UI.escapeHtml(s.sessionId || s.id)}">${UI.escapeHtml(UI.sessionLabel(s, sessions))}</option>`,
+        )
         .join("");
 
       UI.setHtml(

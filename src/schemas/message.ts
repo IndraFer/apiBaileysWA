@@ -1,8 +1,7 @@
 /**
  * Validation for the unified send endpoint.
  *
- * One shape for third-party integrations: pick a session by id or phone, a
- * receiver, a type, and the matching content fields.
+ * The API key fixes the sender. The body names the receiver and content.
  */
 import { z } from "zod";
 
@@ -10,8 +9,6 @@ export const MESSAGE_TYPES = ["text", "image", "document", "location"] as const;
 
 export const unifiedSendSchema = z
   .object({
-    /** Session id (`ROG8`) or the WhatsApp number bound to it. */
-    from: z.string().trim().min(1, "from is required"),
     /** Phone number, JID, or group id when isGroup is true. */
     receiver: z.string().trim().min(1, "receiver is required"),
     /** Message kind; text is the default. */
@@ -75,17 +72,11 @@ export type UnifiedSendInput = z.infer<typeof unifiedSendSchema>;
 export const unifiedSendJsonSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   title: "UnifiedSendRequest",
-  description:
-    "POST /api/v1/messages — send text, image, document or location from one WhatsApp session.",
+  description: "POST /api/v1/messages — send from the WhatsApp session bound to the API key.",
   type: "object",
   additionalProperties: false,
-  required: ["from", "receiver"],
+  required: ["receiver"],
   properties: {
-    from: {
-      type: "string",
-      description: "Session id (e.g. ROG8) or the phone number bound to that session.",
-      example: "ROG8",
-    },
     receiver: {
       type: "string",
       description: "Phone number in international digits, a JID, or a group id ending in @g.us.",

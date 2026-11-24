@@ -1,6 +1,7 @@
 import {
   deleteAuthState,
   getSavedSessionsWithMetadata,
+  listKnownSessions,
   updateSessionMetadata,
 } from "@/baileys/authState";
 import { BaileysConnection, BaileysNotConnectedError } from "@/baileys/connection";
@@ -63,6 +64,7 @@ class ConnectionManager {
         // metadata file from these options, so a missing field is lost on restart.
         const connection = new BaileysConnection(id, {
           ownerId: metadata?.ownerId,
+          sessionName: metadata?.sessionName,
           clientName: metadata?.clientName,
           webhookUrl: metadata?.webhookUrl,
           webhookSecret: metadata?.webhookSecret,
@@ -152,7 +154,7 @@ class ConnectionManager {
       return { qrCode: existing.qrCode ?? undefined };
     }
 
-    const saved = await getSavedSessionsWithMetadata<SessionMetadata>();
+    const saved = await listKnownSessions<SessionMetadata>();
     const metadata =
       saved.find((entry) => entry.id === sessionId)?.metadata ??
       existing?.getSessionMetadata() ??
@@ -174,6 +176,7 @@ class ConnectionManager {
 
     const connection = new BaileysConnection(sessionId, {
       ownerId: metadata.ownerId,
+      sessionName: metadata.sessionName,
       clientName: metadata.clientName,
       webhookUrl: metadata.webhookUrl,
       webhookSecret: metadata.webhookSecret,
@@ -247,6 +250,7 @@ class ConnectionManager {
    */
   listSessions(): Array<{
     sessionId: string;
+    sessionName?: string;
     ownerId: string;
     connected: boolean;
     user: unknown;
@@ -273,6 +277,7 @@ class ConnectionManager {
       }
       return {
         sessionId: id,
+        sessionName: conn.getOptions().sessionName,
         ownerId: conn.getOptions().ownerId || "",
         connected: conn.isConnected,
         user: conn.user,

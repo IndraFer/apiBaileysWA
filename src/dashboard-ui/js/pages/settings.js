@@ -25,11 +25,11 @@
       }
 
       if (assignedSessions.length === 1) {
-        return assignedSessions[0];
+        return window.App.getSessionLabel(assignedSessions[0]);
       }
 
       if (assignedSessions.length === 2) {
-        return assignedSessions.join(", ");
+        return assignedSessions.map((id) => window.App.getSessionLabel(id)).join(", ");
       }
 
       return `${assignedSessions.length} sessions selected`;
@@ -795,9 +795,9 @@
         return;
       }
 
-      const sessions = (sessionsRes.success ? sessionsRes.data : [])
-        .filter((session) => session.sessionId)
-        .sort((left, right) => String(left.sessionId).localeCompare(String(right.sessionId)));
+      const sessions = (sessionsRes.success ? sessionsRes.data : []).filter(
+        (session) => session.sessionId,
+      );
 
       let html = `
                 <tr>
@@ -833,7 +833,7 @@
 										<input type="checkbox" class="user-session-option" data-user-id="${escapeHtml(u.id)}" value="${escapeHtml(sessionId)}" ${checked} ${isCurrentUser ? "disabled" : ""}>
 										<span class="session-assign-info">
 											<span class="session-assign-title">
-												${escapeHtml(sessionId)}
+												${escapeHtml(UI.sessionLabel(session, sessions))}
 												<span class="badge ${connected ? "badge-success" : "badge-danger"}">${connected ? "CONNECTED" : "OFFLINE"}</span>
 											</span>
 											<span class="session-assign-meta">${escapeHtml(phone || "Phone not available")} · Last active: ${escapeHtml(lastActive)}</span>

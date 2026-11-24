@@ -280,6 +280,11 @@
       rememberSelectedSessionId(String(sessionId || ""));
     },
 
+    getSessionLabel(sessionId) {
+      const session = sessionCache.find((entry) => (entry.sessionId || entry.id) === sessionId);
+      return session ? UI.sessionLabel(session, sessionCache) : "Unavailable Session";
+    },
+
     resolveSelectedSession(sessions) {
       const ids = (sessions || [])
         .map((session) => String(session?.sessionId || session?.id || ""))

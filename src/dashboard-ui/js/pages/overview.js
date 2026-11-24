@@ -470,7 +470,7 @@
         state.charts.top = new window.Chart(topCanvas, {
           type: "bar",
           data: {
-            labels: data.topSessions.map((row) => row.sessionId),
+            labels: data.topSessions.map((row) => window.App.getSessionLabel(row.sessionId)),
             datasets: [
               {
                 label: "AI + skipped",

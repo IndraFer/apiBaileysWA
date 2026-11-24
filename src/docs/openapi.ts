@@ -270,7 +270,7 @@ export function generateOpenApiSpec(pkg: Record<string, unknown>, port: number) 
           tags: ["Messages"],
           summary: "Send text, image, document or location (unified)",
           description:
-            "Canonical path. /messages remains as an alias. from accepts a session id or its bound phone number (a key is bound to one session). Group targets require ALLOW_GROUP_SEND=true (and ALLOWED_GROUP_JIDS when set). A public JSON Schema is available at /api/v1/messages/schema.",
+            "Canonical path. /messages remains as an alias. Requires an API key scoped to exactly one session. The sender always comes from the key; any from field is ignored. Group targets require ALLOW_GROUP_SEND=true (and ALLOWED_GROUP_JIDS when set). A public JSON Schema is available at /api/v1/messages/schema.",
           security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
           requestBody: {
             required: true,
@@ -278,9 +278,8 @@ export function generateOpenApiSpec(pkg: Record<string, unknown>, port: number) 
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["from", "receiver"],
+                  required: ["receiver"],
                   properties: {
-                    from: { type: "string", example: "ROG8" },
                     receiver: { type: "string", example: "628123456789" },
                     type: {
                       type: "string",
@@ -348,13 +347,7 @@ export function generateOpenApiSpec(pkg: Record<string, unknown>, port: number) 
               },
             },
             403: {
-              description: "KEY_NOT_SCOPED, GROUP_DISABLED or GROUP_NOT_ALLOWED",
-              content: {
-                "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
-              },
-            },
-            404: {
-              description: "SESSION_NOT_FOUND",
+              description: "SESSION_KEY_REQUIRED, GROUP_DISABLED or GROUP_NOT_ALLOWED",
               content: {
                 "application/json": { schema: { $ref: "#/components/schemas/ApiError" } },
               },

@@ -59,11 +59,12 @@ function safeCompare(a: string, b: string): boolean {
  * - Redis mode: checks the same header candidates against Redis-stored API keys
  */
 export async function authMiddleware(c: Context, next: Next) {
-  // Skip auth in development
-  if (config.env === "development") {
-    return next();
-  }
+  if (config.env === "development") return next();
+  return enforcedAuthMiddleware(c, next);
+}
 
+/** Authenticate even in development when the route needs the key's identity. */
+export async function enforcedAuthMiddleware(c: Context, next: Next) {
   const authCandidates = collectAuthCandidates(c);
 
   // Try simple token auth first (timing-safe comparison)

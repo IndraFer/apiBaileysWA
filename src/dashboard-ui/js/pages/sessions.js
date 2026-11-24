@@ -80,10 +80,11 @@
         const sessionId = button.getAttribute("data-session-id");
         if (!sessionId) return;
         const action = button.getAttribute("data-action");
-        if (action === "reconnect") this.reconnectSession(sessionId);
-        else if (action === "pair") this.pairSession(sessionId);
+        const sessionName = button.closest("tr")?.dataset.sessionLabel || "Session";
+        if (action === "reconnect") this.reconnectSession(sessionId, sessionName);
+        else if (action === "pair") this.pairSession(sessionId, sessionName);
         else if (action === "settings") this.showSettingsModal(sessionId);
-        else if (action === "delete") this.deleteSession(sessionId);
+        else if (action === "delete") this.deleteSession(sessionId, sessionName);
       });
 
       this.loadSessions();
@@ -114,12 +115,12 @@
       UI.setHtml(
         el,
         `<div class="table-wrapper"><table>
-        <thead><tr><th>Session ID</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Assigned</th><th>Owner</th>" : ""}<th>Actions</th></tr></thead>
+        <thead><tr><th>Session Name</th><th>Status</th><th>Phone</th>${isAdmin ? "<th>Assigned</th><th>Owner</th>" : ""}<th>Actions</th></tr></thead>
         <tbody>${sessions
           .map(
             (s) => `
-          <tr>
-            <td><strong>${escapeHtml(s.sessionId || s.id || "—")}</strong></td>
+          <tr data-session-label="${escapeHtml(UI.sessionLabel(s, sessions))}">
+            <td><strong>${escapeHtml(UI.sessionLabel(s, sessions))}</strong></td>
             <td>${
               s.connected
                 ? '<span class="badge badge-success"><span class="badge-dot pulse"></span>CONNECTED</span>'
@@ -162,8 +163,8 @@
         `
         <form id="new-session-form">
           <div class="form-group">
-            <label for="session-id">Session ID</label>
-            <input type="text" id="session-id" placeholder="e.g. my-phone" required />
+            <label for="session-name">Session Name</label>
+            <input type="text" id="session-name" placeholder="e.g. Sales" maxlength="100" required />
           </div>
           <div class="form-group">
             <label for="session-webhook">Webhook URL (Optional)</label>
@@ -172,9 +173,6 @@
           <div class="form-group">
             <label class="checkbox-label"><input type="checkbox" id="session-pairing" /> Use Pairing Code (instead of QR)</label>
           </div>
-					<div class="form-group">
-						<label class="checkbox-label"><input type="checkbox" id="session-fresh-auth" checked /> Fresh Auth (clear old auth state before create)</label>
-					</div>
           <div class="form-group hidden" id="pairing-phone-group">
             <label for="session-phone">Phone Number</label>
             <input type="text" id="session-phone" placeholder="+6281234567890" />
@@ -195,17 +193,17 @@
 
       document.getElementById("new-session-form").addEventListener("submit", async (e) => {
         e.preventDefault();
-        const sessionId = document.getElementById("session-id").value.trim();
-        if (!sessionId) return Toast.warning("Session ID is required");
+        const sessionName = document.getElementById("session-name").value.trim();
+        if (!sessionName) return Toast.warning("Session Name is required");
 
         const body = {
+          sessionName,
           webhookUrl: document.getElementById("session-webhook").value.trim(),
           usePairingCode: pairingToggle.checked,
-          freshAuth: document.getElementById("session-fresh-auth").checked,
           phoneNumber: document.getElementById("session-phone").value.trim(),
         };
 
-        const result = await API.post(`/sessions/${sessionId}`, body);
+        const result = await API.post("/sessions", body);
         if (result.success) {
           Toast.success("Session created");
           // Session-dependent menus appear as soon as a session exists.
@@ -215,10 +213,7 @@
           // afterwards so a re-render cannot interfere with it.
           await this.loadSessions();
           if (result.data?.pairingCode) this.showPairingCode(result.data.pairingCode);
-          else
-            this.showQR(sessionId, {
-              freshAuth: body.freshAuth,
-            });
+          else this.showQR(result.data.sessionId, sessionName);
         } else {
           Toast.error(result.message || "Failed to create session");
         }
@@ -226,8 +221,8 @@
     },
 
     /** A session created but never scanned has no credentials; pair it now. */
-    async pairSession(sessionId) {
-      const result = await API.post(`/sessions/${sessionId}`, {});
+    async pairSession(sessionId, sessionName) {
+      const result = await API.post(`/sessions/${sessionId}/reconnect`, {});
       if (!result.success) {
         Toast.error(result.message || "Failed to start pairing");
         return;
@@ -237,11 +232,11 @@
         this.showPairingCode(result.data.pairingCode);
         return;
       }
-      this.showQR(sessionId);
+      this.showQR(sessionId, sessionName);
       this.loadSessions();
     },
 
-    async reconnectSession(sessionId) {
+    async reconnectSession(sessionId, sessionName) {
       const result = await API.post(`/sessions/${sessionId}/reconnect`, {});
       if (!result.success) {
         Toast.error(result.message || "Failed to reconnect session");
@@ -252,18 +247,14 @@
         this.showPairingCode(result.data.pairingCode);
         return;
       }
-      this.showQR(sessionId);
+      this.showQR(sessionId, sessionName);
     },
 
-    async showQR(sessionId, options = {}) {
-      const freshAuthBadge = options.freshAuth
-        ? '<div class="badge badge-info qr-fresh-auth-badge">FRESH AUTH ENABLED</div>'
-        : "";
+    async showQR(sessionId, sessionName) {
       Modal.show(
-        `QR Code — ${escapeHtml(sessionId)}`,
+        `QR Code — ${escapeHtml(sessionName)}`,
         `
         <div class="qr-container">
-          ${freshAuthBadge}
           <p class="qr-subtitle">QR Login Mode</p>
           <div class="badge badge-warning qr-status-chip" id="qr-status-chip">WAITING</div>
           <div id="qr-container-body">
@@ -273,10 +264,10 @@
         </div>
       `,
       );
-      this.pollQR(sessionId);
+      this.pollQR(sessionId, sessionName);
     },
 
-    async pollQR(sessionId) {
+    async pollQR(sessionId, sessionName) {
       if (pollTimer) clearInterval(pollTimer);
       let missingQrCount = 0;
 
@@ -304,7 +295,7 @@
             el,
             `<div class="u-fs-3rem">✓</div><p class="u-success-bold">Connected successfully!</p>`,
           );
-          Toast.success(`Session ${sessionId} connected!`);
+          Toast.success(`Session ${sessionName} connected!`);
           setTimeout(() => {
             Modal.hide();
             this.loadSessions();
@@ -356,10 +347,10 @@
       );
     },
 
-    async deleteSession(sessionId) {
+    async deleteSession(sessionId, sessionName) {
       const confirmed = await Modal.confirm(
         "Delete Session",
-        `<p class="u-mb-15-center">Are you sure you want to delete session <strong>"${escapeHtml(sessionId)}"</strong>?<br><span class="u-danger-text">* This action cannot be undone.</span></p>`,
+        `<p class="u-mb-15-center">Are you sure you want to delete session <strong>"${escapeHtml(sessionName)}"</strong>?<br><span class="u-danger-text">* This action cannot be undone.</span></p>`,
         {
           confirmText: "Delete",
           cancelText: "Cancel",
@@ -471,9 +462,13 @@
       }
 
       Modal.show(
-        `Update Settings — ${escapeHtml(sessionId)}`,
+        `Update Settings — ${escapeHtml(UI.sessionLabel(session, result.data))}`,
         `
         <form id="update-session-form">
+          <div class="form-group">
+            <label for="update-session-name">Session Name</label>
+            <input type="text" id="update-session-name" maxlength="100" value="${escapeHtml(session.sessionName || "")}" required />
+          </div>
           <div>
             <h4 class="u-fs-09-mb-1">Behaviour</h4>
             <label class="toggle-row">
@@ -588,6 +583,7 @@
         const ownerField = document.getElementById("update-owner");
         const body = {
           ...(ownerField ? { ownerId: ownerField.value } : {}),
+          sessionName: document.getElementById("update-session-name").value.trim(),
           webhookUrl: document.getElementById("update-webhook").value.trim(),
           webhookSecret: document.getElementById("update-secret").value.trim(),
           autoReadMessages: Boolean(document.getElementById("update-autoread")?.checked),
@@ -606,6 +602,7 @@
             }
           }
           Toast.success("Settings updated successfully");
+          window.App?.refreshAvailability?.();
           Modal.hide();
           this.loadSessions();
         } else {

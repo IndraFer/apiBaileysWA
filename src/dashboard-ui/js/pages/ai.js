@@ -225,7 +225,7 @@
               ${sessions
                 .map(
                   (session) =>
-                    `<option value="${escapeHtml(session.sessionId)}" ${session.sessionId === state.sessionId ? "selected" : ""}>${escapeHtml(session.sessionId)}</option>`,
+                    `<option value="${escapeHtml(session.sessionId)}" ${session.sessionId === state.sessionId ? "selected" : ""}>${escapeHtml(UI.sessionLabel(session, sessions))}</option>`,
                 )
                 .join("")}
             </select>

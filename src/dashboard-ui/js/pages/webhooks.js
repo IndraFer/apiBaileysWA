@@ -152,7 +152,7 @@
                            const id = entry.sessionId || entry.id;
                            return `<option value="${id}" ${
                              id === selectedWebhookSessionId ? "selected" : ""
-                           }>${id}</option>`;
+                           }>${escapeHtml(UI.sessionLabel(entry, sessions))}</option>`;
                          })
                          .join("")}
                      </select>
@@ -213,7 +213,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
                     const id = entry.sessionId || entry.id;
                     return `<option value="${id}" ${
                       id === selectedLogSessionId ? "selected" : ""
-                    }>${id}</option>`;
+                    }>${escapeHtml(UI.sessionLabel(entry, sessions))}</option>`;
                   })
                   .join("")}
               </select>
@@ -489,7 +489,7 @@ x-webhook-secret: &lt;optional secret&gt;</pre>
               : "-";
             return `<tr>
               <td>${new Date(log.timestamp).toLocaleTimeString()}</td>
-              <td>${escapeHtml(log.sessionId)}</td>
+              <td>${escapeHtml(window.App.getSessionLabel(log.sessionId))}</td>
               <td class="font-mono text-xs">${escapeHtml(log.event)}</td>
               <td><span class="badge ${statusClass} webhook-status-badge" title="${escapeHtml(log.status)}">${statusLabel}</span></td>
               <td class="text-xs text-muted webhook-latency">${latencyLabel}</td>

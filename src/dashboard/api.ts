@@ -2,10 +2,10 @@
  * Dashboard-specific API routes — SSE events, webhook config, stats.
  */
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { proto, WAPresence } from "@whiskeysockets/baileys";
+import { jidNormalizedUser, type proto, type WAPresence } from "@whiskeysockets/baileys";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
@@ -19,6 +19,7 @@ import {
   resolveWebhookTarget,
 } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
+import type { MemoryStore } from "@/baileys/store/memoryStore";
 import type {
   AiAgentConfig,
   GroupReplyConfig,
@@ -32,6 +33,17 @@ import {
   listDashboardUsers,
   setSessionAssignees,
 } from "@/dashboard/auth";
+import {
+  ChatMediaError,
+  chatMediaResponse,
+  loadChatMedia,
+  purgeChatMedia,
+} from "@/dashboard/chatMediaCache";
+import {
+  chatMessageContext,
+  describeChatMessage,
+  getChatAttachment,
+} from "@/dashboard/chatPresentation";
 import eventBus, { type DashboardEvent } from "@/dashboard/eventBus";
 import { forgetSessionOwner, getSessionOwner, setSessionOwner } from "@/dashboard/sessionOwners";
 import logger from "@/lib/logger";
@@ -173,6 +185,15 @@ function messageTextOf(content: unknown): string {
     )?.caption;
   return typeof text === "string" ? text.trim() : "";
 }
+
+function roomJids(jid: string, store?: MemoryStore): string[] {
+  const normalized = jidNormalizedUser(jid) || jid;
+  const pn = store?.lidToPn.get(normalized);
+  const lid = store?.pnToLid.get(normalized);
+  return [...new Set([pn || normalized, lid || normalized, jid])];
+}
+
+const sessionCollator = new Intl.Collator("en", { sensitivity: "base" });
 
 function getDashboardUserPayload(c: Context): DashboardUserPayload {
   return c.get("dashboardUser") as DashboardUserPayload;
@@ -545,6 +566,7 @@ dashboardApi.get("/sessions", async (c) => {
     .filter((entry) => !liveIds.has(entry.id))
     .map((entry) => ({
       sessionId: entry.id,
+      sessionName: entry.metadata?.sessionName,
       ownerId: getSessionOwner(entry.id) || entry.metadata?.ownerId || "",
       connected: false,
       paired: entry.paired,
@@ -573,61 +595,57 @@ dashboardApi.get("/sessions", async (c) => {
     .filter((session) => hasSessionAccess(c, String(session.sessionId || "")))
     .map((session) => ({
       ...session,
+      sessionName: session.sessionName || session.sessionId,
       assignedCount: assignCounts.get(String(session.sessionId || "")) || 0,
-    }));
+    }))
+    .sort(
+      (a, b) =>
+        sessionCollator.compare(a.sessionName, b.sessionName) ||
+        sessionCollator.compare(a.sessionId, b.sessionId) ||
+        (a.sessionId < b.sessionId ? -1 : Number(a.sessionId > b.sessionId)),
+    );
   return c.json({ success: true, data: sessions });
 });
 
-/**
- * POST /dashboard/api/sessions/:sessionId
- * Create a new session.
- */
-dashboardApi.post("/sessions/:sessionId", async (c) => {
-  const denied = requireCapability(c, "createSessions");
-  if (denied) return denied;
-  const sessionId = c.req.param("sessionId");
-  const userPayload = getDashboardUserPayload(c);
+async function createDashboardSession(c: Context, legacyId?: string) {
   const role = getDashboardRole(c);
-  // An admin reaches every session anyway, so admin-created sessions stay
-  // unowned: ownership exists to grant access, and an admin needs none.
-  const ownerId = role === "admin" ? "" : String(userPayload?.sub || "");
+  const ownerId = role === "admin" ? "" : getDashboardUserPayload(c).sub;
+  const parsed = createSessionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return error(c, parsed.error.issues[0].message, 400);
+  const body = parsed.data;
+  if (!legacyId && !body.sessionName) return error(c, "Session Name is required", 400);
 
-  // A manager creating a brand-new id is not assigned to it yet, so access is
-  // only required when this id already exists (re-create / fresh auth). Without
-  // that guard anyone could "create" over a session they cannot see.
-  const savedBefore = await getSavedSessionsWithMetadata<Record<string, unknown>>().catch(() => []);
-  if (savedBefore.some((entry) => entry.id === sessionId)) {
-    const sessionDenied = requireSessionAccess(c, sessionId);
-    if (sessionDenied) return sessionDenied;
-  }
-  if (role !== "admin") {
-    const limit = role === "manager" ? config.maxSessionsPerManager : config.maxSessionsPerUser;
-    if (limit > 0) {
-      const owned = connectionManager
-        .listSessions()
-        .filter((session) => session.ownerId === ownerId).length;
-      if (owned >= limit) {
-        return c.json(
-          {
-            success: false,
-            message: `Session limit reached: ${limit} for role ${role}. Delete an unused session or ask an admin to raise the limit.`,
-          },
+  try {
+    const live = connectionManager.listSessions();
+    const known = await listKnownSessions<SessionMetadata>();
+    if (role === "manager" && config.maxSessionsPerManager > 0) {
+      const owned = new Set(
+        live.filter((session) => session.ownerId === ownerId).map((s) => s.sessionId),
+      );
+      for (const entry of known) {
+        if (getSessionOwner(entry.id) === ownerId) owned.add(entry.id);
+      }
+      const limit = config.maxSessionsPerManager;
+      if (owned.size >= limit) {
+        return error(
+          c,
+          `Session limit reached: ${limit} for role ${role}. Delete an unused session or ask an admin to raise the limit.`,
           403,
         );
       }
     }
-  }
 
-  const body = await c.req.json().catch(() => ({}));
-
-  try {
-    if (body.freshAuth === true) {
-      // Force-create with new auth state when requested from dashboard.
-      await connectionManager.deleteSession(sessionId);
-    }
+    // New IDs are independent of the label and of any ID supplied in the body.
+    const usedIds = new Set(
+      [...live.map((s) => s.sessionId), ...known.map((s) => s.id)].map((id) => id.toLowerCase()),
+    );
+    let sessionId = legacyId || `s_${randomUUID()}`;
+    while (!legacyId && usedIds.has(sessionId)) sessionId = `s_${randomUUID()}`;
+    if (legacyId && body.freshAuth) await connectionManager.deleteSession(sessionId);
 
     const result = await connectionManager.createSession(sessionId, {
       ownerId: ownerId || undefined,
+      sessionName: body.sessionName,
       clientName: body.clientName,
       webhookUrl: body.webhookUrl,
       webhookSecret: body.webhookSecret,
@@ -648,11 +666,25 @@ dashboardApi.post("/sessions/:sessionId", async (c) => {
     return c.json({
       success: true,
       message: result.pairingCode ? "Pairing code generated" : "Session created — scan QR code",
-      data: result,
+      data: { ...result, sessionId },
     });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
+}
+
+dashboardApi.post("/sessions", async (c) => {
+  const denied = requireCapability(c, "createSessions");
+  return denied ?? createDashboardSession(c);
+});
+
+// A client-chosen ID can disclose whether a hidden session exists. Keep this
+// compatibility path for admins only, and reject other roles before any lookup.
+dashboardApi.post("/sessions/:sessionId", async (c) => {
+  if (getDashboardRole(c) !== "admin") return error(c, "Forbidden: admin access required", 403);
+  const sessionId = c.req.param("sessionId");
+  if (!isValidSessionId(sessionId)) return error(c, "Invalid session id", 400);
+  return createDashboardSession(c, sessionId);
 });
 
 /**
@@ -794,11 +826,14 @@ dashboardApi.patch("/sessions/:sessionId/settings", async (c) => {
 
     const next: SessionMetadata = {
       ...current,
+      sessionName: body.sessionName ?? current.sessionName,
       clientName: body.clientName ?? current.clientName,
       webhookUrl: body.webhookUrl === undefined ? current.webhookUrl : body.webhookUrl || undefined,
       webhookSecret: body.webhookSecret?.trim() || current.webhookSecret,
       includeMedia: body.includeMedia ?? current.includeMedia,
-      syncFullHistory: body.syncFullHistory ?? current.syncFullHistory,
+      syncFullHistory: Object.hasOwn(rawBody, "syncFullHistory")
+        ? body.syncFullHistory
+        : current.syncFullHistory,
       autoReply: body.autoReply ? normalizeAutoReplyConfig(body.autoReply) : current.autoReply,
       autoReadMessages: body.autoReadMessages ?? current.autoReadMessages,
       autoMarkOnline: body.autoMarkOnline ?? current.autoMarkOnline,
@@ -1687,24 +1722,12 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
   const sessionId = c.req.param("sessionId");
   const sessionDenied = requireSessionAccess(c, sessionId);
   if (sessionDenied) return sessionDenied;
-  const encodedJid = c.req.param("jid");
-  const jid = decodeURIComponent(encodedJid);
+  const jid = c.req.param("jid");
   const limit = Math.min(Math.max(Number(c.req.query("limit") || "50"), 1), 500);
 
   try {
     const session = connectionManager.getSession(sessionId);
     const store = session.getStore();
-
-    const contentText = messageTextOf;
-
-    const contextOf = (content: unknown): Record<string, unknown> | null => {
-      if (!content || typeof content !== "object") return null;
-      for (const value of Object.values(content as Record<string, unknown>)) {
-        const ctx = (value as { contextInfo?: unknown } | null)?.contextInfo;
-        if (ctx && typeof ctx === "object") return ctx as Record<string, unknown>;
-      }
-      return null;
-    };
 
     const labelFor = (value: string): string => {
       const identity = store.identityFor(value);
@@ -1713,9 +1736,10 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
 
     // Attach display identities so bubbles can show senders, quoted replies and
     // resolved mentions the same way the chat list does.
-    const messages = store.loadMessages(jid, limit).map((message) => {
+    const retained = roomJids(jid, store).map((id) => store.loadMessages(id, limit));
+    const messages = (retained.find((entries) => entries.length) ?? []).map((message) => {
       const senderJid = message.key.participant || message.key.remoteJid || "";
-      const context = contextOf(message.message);
+      const context = chatMessageContext(message);
       const quotedContent = context?.quotedMessage;
       const quotedJid = typeof context?.participant === "string" ? context.participant : "";
 
@@ -1730,13 +1754,14 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
           ? {
               jid: quotedJid,
               label: quotedJid ? labelFor(quotedJid) : "",
-              text: contentText(quotedContent).slice(0, 300),
+              text: describeChatMessage({ key: {}, message: quotedContent }).text.slice(0, 300),
             }
           : null;
 
       const identity = senderJid ? store.identityFor(senderJid) : { name: "", phone: "" };
       return {
         ...message,
+        presentation: describeChatMessage(message),
         senderJid,
         senderName: identity.name,
         senderPhone: identity.phone,
@@ -1747,6 +1772,43 @@ dashboardApi.get("/sessions/:sessionId/chats/:jid/messages", (c) => {
     return c.json({ success: true, data: messages });
   } catch (err) {
     return error(c, (err as Error).message, 500);
+  }
+});
+
+// The retained message, not a request-provided URL or filename, authorizes the fetch.
+dashboardApi.get("/sessions/:sessionId/chats/:jid/media/:messageId", async (c) => {
+  const denied = requireCapability(c, "viewChats");
+  if (denied) return denied;
+  const sessionId = c.req.param("sessionId");
+  const sessionDenied = requireSessionAccess(c, sessionId);
+  if (sessionDenied) return sessionDenied;
+  const jid = c.req.param("jid");
+  const messageId = c.req.param("messageId");
+  c.header("Cache-Control", "private, no-store");
+  try {
+    const existing = connectionManager.getSessionStatus(sessionId);
+    if (!existing.exists) return error(c, "Media Unavailable", 404);
+    const store = connectionManager.getSession(sessionId).getStore();
+    const aliases = roomJids(jid, store);
+    const message = aliases.map((id) => store.getMessage(id, messageId)).find(Boolean);
+    const attachment = message ? getChatAttachment(message) : null;
+    if (!attachment) return error(c, "Media Unavailable", 404);
+    const room = aliases[0] || jid;
+    const entry = await loadChatMedia(sessionId, room, messageId, attachment);
+    return chatMediaResponse(
+      entry,
+      attachment,
+      c.req.query("download") === "1",
+      c.req.header("Range"),
+    );
+  } catch (err) {
+    if (err instanceof ChatMediaError) return error(c, err.message, err.status);
+    logger.warn(
+      "[Chat Media] Could not serve attachment for session %s: %s",
+      sessionId,
+      (err as Error).message,
+    );
+    return error(c, "Media Unavailable", 502);
   }
 });
 
@@ -1917,15 +1979,18 @@ dashboardApi.post("/sessions/:sessionId/chats/delete", async (c) => {
     }
 
     const store = session.getStore();
+    const aliases = roomJids(jid, store);
+    const room = aliases.find((id) => store.loadMessages(id, 1).length) || jid;
     const lastMessages = store
-      .loadMessages(jid, 5)
+      .loadMessages(room, 5)
       .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
 
     if (lastMessages.length > 0) {
-      await session.chatModify({ delete: true, lastMessages }, jid);
+      await session.chatModify({ delete: true, lastMessages }, room);
     }
 
-    const local = store.deleteChat(jid);
+    const local = store.deleteChat(room);
+    await purgeChatMedia(sessionId, aliases);
 
     return c.json({
       success: true,
@@ -1963,8 +2028,16 @@ dashboardApi.post("/sessions/:sessionId/chats/end", async (c) => {
   if (!jid) return c.json({ success: false, message: "Provide the jid of the open chat" }, 400);
 
   try {
+    const store = connectionManager.getSessionStatus(sessionId).exists
+      ? connectionManager.getSession(sessionId).getStore()
+      : undefined;
     await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
-    return c.json({ success: true, message: "Chat ended; memory cleared", data: { jid } });
+    await purgeChatMedia(sessionId, roomJids(jid, store));
+    return c.json({
+      success: true,
+      message: "Chat ended; memory and attachments cleared",
+      data: { jid },
+    });
   } catch (err) {
     return error(c, (err as Error).message, 500);
   }
@@ -2351,17 +2424,20 @@ dashboardApi.post("/sessions/:sessionId/chats/clear", async (c) => {
     }
 
     const store = session.getStore();
+    const aliases = roomJids(jid, store);
+    const room = aliases.find((id) => store.loadMessages(id, 1).length) || jid;
     const lastMessages = store
-      .loadMessages(jid, 5)
+      .loadMessages(room, 5)
       .map((message) => ({ key: message.key, messageTimestamp: message.messageTimestamp ?? 0 }));
 
     // Clear on WhatsApp first: if it fails, the local copy stays so the two
     // sides never diverge silently.
     if (lastMessages.length > 0) {
-      await session.chatModify({ clear: true, lastMessages }, jid);
+      await session.chatModify({ clear: true, lastMessages }, room);
     }
 
-    const clearedMessages = store.clearChat(jid);
+    const clearedMessages = store.clearChat(room);
+    await purgeChatMedia(sessionId, aliases);
     // Memory is derived from this chat, so it goes with it.
     await forgetConversation(sessionId, jid, jid.endsWith("@g.us"));
 

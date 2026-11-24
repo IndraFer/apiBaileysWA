@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Show attachments and supported call-to-action links in retained Chat Rooms messages. Fetch attachment bytes only on View or Download and keep them in a private disk cache for up to three days. End Chat and Clear Chat remove the room's cached attachments without exposing view-once media.
+
+### Fixed
+
+- Separate dashboard session names from unique server-generated IDs. Names may be duplicated; sort A–Z by name with Session ID as the tie-breaker. Keep existing session IDs and webhook payloads unchanged.
+- Prevent managers from probing hidden session IDs through the legacy create endpoint.
+
+### Changed
+
+- Unified message sending requires a key bound to one connected session. Remove `from` from the API and tool schemas; ignore it if present in the payload.
+
 ## [1.58.1] - 2026-11-24
 
 ### Fixed

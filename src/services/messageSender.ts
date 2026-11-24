@@ -1,7 +1,7 @@
 /**
  * Unified outbound sender.
  *
- * Resolves a session from its id or bound phone number, normalizes the receiver
+ * Sends from the caller's already selected session, normalizes the receiver
  * into a JID, applies the group policy and forwards the built content to
  * Baileys. Every failure is a MessageSendError carrying a machine-readable code,
  * the offending field and an actionable hint, so a calling LLM can correct
@@ -12,13 +12,12 @@ import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import { validateOutboundUrl } from "@/lib/urlGuard";
 import type { UnifiedSendInput } from "@/schemas/message";
-import { extractPhone, formatGroup, formatPhone } from "@/utils/phone";
+import { formatGroup, formatPhone } from "@/utils/phone";
 
 export type SendErrorStatus = 400 | 403 | 404 | 409 | 429 | 504;
 
 export type SendErrorCode =
   | "INVALID_REQUEST"
-  | "SESSION_NOT_FOUND"
   | "SESSION_NOT_CONNECTED"
   | "GROUP_DISABLED"
   | "GROUP_NOT_ALLOWED"
@@ -80,29 +79,6 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-/** Resolve `from` by session id first, then by the phone bound to a session. */
-export function resolveSessionId(ref: string): string {
-  const value = ref.trim();
-  if (connectionManager.hasSession(value)) return value;
-
-  const digits = value.replace(/\D/g, "");
-  if (digits) {
-    for (const session of connectionManager.listSessions()) {
-      const user = session.user as { id?: string } | null;
-      const phone = user?.id ? extractPhone(String(user.id)) : "";
-      if (phone && (phone === digits || phone === value)) return session.sessionId;
-    }
-  }
-
-  throw new MessageSendError(`Session "${ref}" not found or not connected`, {
-    status: 404,
-    code: "SESSION_NOT_FOUND",
-    field: "from",
-    hint: "Call GET /sessions with the same API key to list available session ids, then pass a session id or its bound phone number as `from`.",
-    details: { from: ref },
-  });
 }
 
 /**
@@ -199,16 +175,14 @@ function contentFor(input: UnifiedSendInput): AnyMessageContent {
   }
 }
 
-export async function sendUnifiedMessage(input: UnifiedSendInput) {
+export async function sendUnifiedMessage(sessionId: string, input: UnifiedSendInput) {
   const { jid, isGroup } = resolveTarget(input);
-  const sessionId = resolveSessionId(input.from);
 
   const status = connectionManager.getSessionStatus(sessionId);
   if (!status.exists || !status.connected) {
     throw new MessageSendError(`Session "${sessionId}" is not connected`, {
       status: 409,
       code: "SESSION_NOT_CONNECTED",
-      field: "from",
       hint: "Reconnect the session from Dashboard → Sessions (scan the QR code), then retry this request.",
       details: { session: sessionId, connected: false },
     });

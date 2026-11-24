@@ -21,8 +21,11 @@ export const autoReplySchema = z
   })
   .optional();
 
+export const sessionNameSchema = z.string().trim().min(1, "Session Name is required").max(100);
+
 export const createSessionSchema = z
   .object({
+    sessionName: sessionNameSchema.optional(),
     clientName: z.string().optional(),
     webhookUrl: z.string().url("Invalid webhook URL").optional().or(z.literal("")),
     webhookSecret: z.string().optional(),

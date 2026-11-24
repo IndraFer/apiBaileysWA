@@ -2280,6 +2280,28 @@ details[open] > summary::before {
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.msg-action-link {
+  color: var(--info);
+  text-decoration: underline;
+}
+
+.msg-attachment {
+  display: grid;
+  gap: 0.35rem;
+  margin-block-end: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.chat-media-preview {
+  text-align: center;
+}
+
+.chat-media-preview :is(img, video, audio) {
+  max-inline-size: 100%;
+  max-block-size: 65dvh;
 }
 
 .msg-time {

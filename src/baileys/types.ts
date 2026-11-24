@@ -255,6 +255,8 @@ export interface AiAgentConfig {
 export interface SessionOptions {
   /** Dashboard user that created this session. */
   ownerId?: string;
+  /** Dashboard label only; never used to route requests. */
+  sessionName?: string;
   /** Display name for the client browser */
   clientName?: string;
   /** Webhook URL for this session */
@@ -302,6 +304,7 @@ export interface SessionOptions {
 export interface SessionMetadata {
   /** Dashboard user that created this session (absent for legacy sessions). */
   ownerId?: string;
+  sessionName?: string;
   clientName?: string;
   webhookUrl?: string;
   webhookSecret?: string;
