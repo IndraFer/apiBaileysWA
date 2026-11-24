@@ -2293,7 +2293,8 @@ details[open] > summary::before {
   gap: 0.35rem;
   inline-size: clamp(11rem, 28vw, 17rem);
   max-inline-size: 100%;
-  margin: 0 0 0.35rem;
+  margin-block: 0 0.35rem;
+  margin-inline: auto;
 }
 
 .msg-attachment figcaption {
@@ -2372,6 +2373,18 @@ details[open] > summary::before {
   cursor: pointer;
 }
 
+.msg-attachment-button:not([data-attachment="play"]) {
+  min-inline-size: 3rem;
+  min-block-size: 2.25rem;
+  padding-inline: 0.65rem;
+  border-color: transparent;
+  background: color-mix(in oklch, var(--bg-card), var(--accent) 18%);
+}
+
+.msg-attachment-button:not([data-attachment="play"]):active {
+  background: color-mix(in oklch, var(--bg-card), var(--accent) 32%);
+}
+
 .msg-attachment-button svg,
 .msg-audio-tray > svg {
   inline-size: 1.1rem;
@@ -2395,8 +2408,12 @@ details[open] > summary::before {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .msg-attachment-button:hover {
+  .msg-attachment-button[data-attachment="play"]:hover {
     border-color: var(--accent);
+  }
+
+  .msg-attachment-button:not([data-attachment="play"]):hover:not(:active) {
+    background: color-mix(in oklch, var(--bg-card), var(--accent) 25%);
   }
 }
 

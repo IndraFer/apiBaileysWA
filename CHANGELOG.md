@@ -6,11 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-25
+
+### Fixed
+
+- Center attachment cards within Chat Rooms bubbles, even when long captions widen the bubble. Center the controls and label on image cards while leaving message captions left-aligned.
+- Style View and Download as soft green pill buttons in light and dark themes.
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
 
-- Group Chat Rooms attachment controls inside preview cards and show filenames below the cards. Center View and Download on image cards and the Image label below them.
+- Group Chat Rooms attachment controls inside preview cards and show filenames below the cards.
 - Open PDF previews in the browser and keep Download as a separate action. Play audio and voice notes directly in the message bubble. All media still loads only on demand.
 
 ## [2.0.0] - 2026-11-24
