@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-11-25
+
+### Fixed
+
+- Pause AI routing and static fallback immediately after an operator replies from the dashboard, phone, or WhatsApp Web. Use the configured human idle duration (15 minutes by default) from the latest manual reply and apply it to known phone-number/LID aliases. API sends do not start this timer.
+- Discard queued replies and ignore superseded AI results. When the hold expires, resume only on a new inbound message, without answering messages that arrived during the hold.
+- Use the configured handover duration when `POST /chats/:sessionId/handoff` omits `pauseMinutes`. Honor an explicit duration and discard pending automatic replies.
+
 ## [2.0.3] - 2026-11-25
 
 ### Fixed

@@ -518,8 +518,8 @@ chatRoutes.post("/:sessionId/download-media", sessionValidator, async (c) => {
  * POST /chats/:sessionId/handoff
  *
  * AI -> human takeover. Pausing a conversation stops the AI from answering it
- * for `pauseMinutes` (default 30, clamped 1..1440), even while the AI window is
- * open, so the agent can take over without the bot talking over them.
+ * for `pauseMinutes` (defaults to the session's configured handoff duration).
+ * Pending replies are discarded, including when the AI window is open.
  */
 chatRoutes.post("/:sessionId/handoff", sessionValidator, async (c) => {
   const parsed = handoffSchema.safeParse(await c.req.json().catch(() => ({})));
@@ -527,10 +527,13 @@ chatRoutes.post("/:sessionId/handoff", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(c.req.param("sessionId") as string);
+    const { conversationId, pauseMinutes } = parsed.data;
     const reason = parsed.data.reason ?? "ai_handoff";
+    const receiver = conversationId.trim();
+    const jid = /^\+?\d+$/.test(receiver) ? formatPhone(receiver) : receiver;
     const result = session.pauseAi(
-      parsed.data.conversationId,
-      (parsed.data.pauseMinutes ?? 30) * 60_000,
+      jid,
+      pauseMinutes === undefined ? undefined : pauseMinutes * 60_000,
       reason,
     );
     return success(c, { ...result, reason }, "AI paused for this conversation");

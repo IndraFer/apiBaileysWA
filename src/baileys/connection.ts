@@ -11,6 +11,8 @@ import makeWASocket, {
   DisconnectReason,
   delay,
   fetchLatestBaileysVersion,
+  generateMessageIDV2,
+  isRealMessage,
   jidNormalizedUser,
   type MessageReceiptType,
   makeCacheableSignalKeyStore,
@@ -59,7 +61,11 @@ import {
   resolveAutoReplyPolicy,
   staticWindowMatches,
 } from "@/services/autoReply";
-import { ConversationRouter, type RouterGeneration } from "@/services/conversationRouter";
+import {
+  ConversationRouter,
+  type ConversationRouterOptions,
+  type RouterGeneration,
+} from "@/services/conversationRouter";
 import {
   isStaticReplyAllowed,
   resolveGroupReply,
@@ -79,13 +85,15 @@ import { clearTakeover, getTakeoverUntil, setTakeover } from "@/services/manualT
 import { matchOtpFilter, resolveOtpFilter } from "@/services/otpFilter";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
 import type { ToolExecution } from "@/services/ragTools";
-import { isAiWindowActive, type ResolvedRouting, resolveRoutingConfig } from "@/services/routing";
+import { isAiWindowActive, resolveRoutingConfig } from "@/services/routing";
 import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
 import { asyncSleep, distributedDelay, randomDelay } from "@/utils/asyncSleep";
 import { formatPhone } from "@/utils/phone";
 import { errorToString } from "@/utils/validation";
+
+type AiReplyInput = Parameters<ConversationRouterOptions["generateReply"]>[0];
 
 const msgRetryCounterCache = new NodeCache({
   stdTTL: 3600,
@@ -298,6 +306,7 @@ export class BaileysConnection {
   private guardStrikes = new Map<string, number>();
   /** Per-conversation debounce and human-pause state machine. */
   private aiRouter: ConversationRouter;
+  private activeAiTurns = new Map<string, () => void>();
   private _isConnected = false;
   private _qrCode: string | null = null;
   private _pairingCode: string | null = null;
@@ -316,7 +325,7 @@ export class BaileysConnection {
       sessionId,
       getRouting: () => resolveRoutingConfig(this.options.routing),
       isAiEligible: () => this.isAiEligible(),
-      generateReply: (input) => this.generateAiReply(input),
+      generateReply: (input) => this.generateCurrentAiReply(input),
       deliver: async (conversationId, text, lastMessage) => {
         await this.sendAutomaticReply(conversationId, text, lastMessage);
       },
@@ -725,6 +734,17 @@ export class BaileysConnection {
   }
 
   private async handleMessagesUpsert(data: BaileysEventMap["messages.upsert"]) {
+    const routing = resolveRoutingConfig(this.options.routing);
+    this.observeManualReplies(data.messages, routing.humanIdleMs);
+    // A notification webhook can finish after the hold expires. Do not turn
+    // an inbound message received during the hold into a delayed reply.
+    const heldAtReceipt = new Map<WAMessage, string>();
+    for (const message of data.messages) {
+      if (message.key.fromMe) continue;
+      const reason = this.humanHoldReason(message, routing.humanIdleMs);
+      if (reason) heldAtReceipt.set(message, reason);
+    }
+
     // Auto-read incoming messages if enabled (like WA Web read-receipts toggle)
     const shouldAutoRead = this.options.autoReadMessages ?? config.simulation.autoReadMessages;
     if (shouldAutoRead) {
@@ -796,7 +816,7 @@ export class BaileysConnection {
     const webhookResult = await this.sendToWebhook(payload);
 
     // Auto-reply logic
-    await this.handleAutoReply(data, webhookResult === "failed");
+    await this.handleAutoReply(data, webhookResult === "failed", heldAtReceipt);
   }
 
   /**
@@ -808,10 +828,13 @@ export class BaileysConnection {
    *      this conversation.
    *   2. Otherwise the legacy static auto-reply rules (unchanged).
    */
-  private async handleAutoReply(data: BaileysEventMap["messages.upsert"], webhookFailed: boolean) {
+  private async handleAutoReply(
+    data: BaileysEventMap["messages.upsert"],
+    webhookFailed: boolean,
+    heldAtReceipt: ReadonlyMap<WAMessage, string>,
+  ) {
     const autoReply = resolveAutoReplyConfig(this.options.autoReply);
     const ai = resolveAiConfig(this.options.ai);
-    const routing = resolveRoutingConfig(this.options.routing);
 
     // Only reply to incoming messages from others.
     const otpFilter = resolveOtpFilter(this.options.ai?.otpFilter);
@@ -878,7 +901,7 @@ export class BaileysConnection {
     await this.recordGroupDigest(data.messages);
     await this.recordMemory(messages);
 
-    const replyable = this.routeAutomaticReplies(messages, routing);
+    const replyable = this.routeAutomaticReplies(messages, heldAtReceipt);
     if (!autoReply.enabled || replyable.length === 0) return;
 
     const policy = resolveAutoReplyPolicy(autoReply);
@@ -943,19 +966,31 @@ export class BaileysConnection {
     }
   }
 
-  private routeAutomaticReplies(messages: WAMessage[], routing: ResolvedRouting): WAMessage[] {
+  private routeAutomaticReplies(
+    messages: WAMessage[],
+    heldAtReceipt: ReadonlyMap<WAMessage, string>,
+  ): WAMessage[] {
     const rooms = new Map<string, WAMessage[]>();
     for (const message of messages) {
       const jid = message.key.remoteJid;
-      // Apply the hold even if a message has no text or shares an upsert with another room.
-      if (!jid || !this.mayAutoReply(message)) continue;
+      if (!jid) continue;
+      const hold = heldAtReceipt.get(message) ?? this.humanHoldReason(message);
+      if (hold) {
+        recordDecision({
+          sessionId: this.sessionId,
+          conversationId: jid,
+          route: "human",
+          reason: hold,
+        });
+        continue;
+      }
       const batch = rooms.get(jid);
       if (batch) batch.push(message);
       else rooms.set(jid, [message]);
     }
     const staticCandidates: WAMessage[] = [];
     for (const batch of rooms.values()) {
-      if (this.enqueueForAi(batch, routing)) {
+      if (this.enqueueForAi(batch)) {
         // The model call can take seconds; show activity instead of silence.
         void this.signalAiWorking(batch[batch.length - 1]);
       } else {
@@ -965,19 +1000,22 @@ export class BaileysConnection {
     return staticCandidates;
   }
 
-  private mayAutoReply(message: WAMessage): boolean {
-    const jid = message.key.remoteJid;
-    if (!jid) return false;
-    const alternate = message.key.remoteJidAlt;
-    const until = Math.max(this.takeoverUntil(jid), alternate ? this.takeoverUntil(alternate) : 0);
-    if (!until) return true;
-    recordDecision({
-      sessionId: this.sessionId,
-      conversationId: jid,
-      route: "human",
-      reason: "manual_takeover",
-    });
-    return false;
+  private humanHoldReason(message: WAMessage, recoverIdleMs?: number): string | undefined {
+    const jids = this.messageRoomJids(message);
+    if (jids.some((jid) => this.takeoverUntil(jid))) return "manual_takeover";
+    if (jids.some((jid) => this.humanOwnedUntil(jid))) return "human_active";
+    // Recover a recent phone/Web reply from history after restarting.
+    if (recoverIdleMs !== undefined) {
+      const rooms = new Set(jids.flatMap((jid) => this.takeoverRoomJids(jid)));
+      const lastHumanAt = Math.max(
+        0,
+        ...[...rooms].map((jid) => this.lastHumanActivityAt(jid, recoverIdleMs)),
+      );
+      if (lastHumanAt) {
+        this.pauseAutomation(jids, lastHumanAt + recoverIdleMs, "human_active");
+        return "human_active";
+      }
+    }
   }
 
   /**
@@ -985,7 +1023,7 @@ export class BaileysConnection {
    * Returns true when the AI path owns this event (queued or paused), so the
    * static fallback rules do not also run.
    */
-  private enqueueForAi(messages: WAMessage[], routing: ResolvedRouting): boolean {
+  private enqueueForAi(messages: WAMessage[]): boolean {
     const last = messages[messages.length - 1];
     const remoteJid = last?.key.remoteJid;
     if (!last || !remoteJid) return false;
@@ -1055,31 +1093,13 @@ export class BaileysConnection {
       this.guardStrikes.delete(remoteJid);
     }
 
-    // A human wrote in this chat → keep it human-owned for humanIdleMs.
-    const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
-    if (lastHumanAt !== null) {
-      this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
-      // Queueing here held the message until the pause expired, so the AI
-      // answered a conversation a human had already handled.
-      this.aiRouter.dropPending(remoteJid);
+    if (!this.isAiEligible()) {
       recordDecision({
         sessionId: this.sessionId,
         conversationId: remoteJid,
-        route: "human",
-        reason: "human_active",
+        route: "paused",
+        reason: this.aiIneligibleReason(),
       });
-      return true;
-    }
-
-    if (!this.isAiEligible()) {
-      if (lastHumanAt === null) {
-        recordDecision({
-          sessionId: this.sessionId,
-          conversationId: remoteJid,
-          route: "paused",
-          reason: this.aiIneligibleReason(),
-        });
-      }
       return false;
     }
 
@@ -1216,14 +1236,30 @@ export class BaileysConnection {
     return images;
   }
 
+  private async generateCurrentAiReply(input: AiReplyInput): Promise<RouterGeneration> {
+    const jid = input.conversationId;
+    const suppressed: RouterGeneration = { ok: true, text: null };
+    const stopped = Promise.withResolvers<RouterGeneration>();
+    const stop = () => stopped.resolve(suppressed);
+    this.activeAiTurns.set(jid, stop);
+    const isCurrent = () => this.activeAiTurns.get(jid) === stop;
+    try {
+      // Free the router immediately when a human answers. The old provider
+      // request may still finish, but it must not block or answer a later turn.
+      const result = await Promise.race([this.generateAiReply(input, isCurrent), stopped.promise]);
+      return isCurrent() ? result : suppressed;
+    } finally {
+      if (isCurrent()) this.activeAiTurns.delete(jid);
+    }
+  }
+
   /** Generate a reply, or dispatch the event when the webhook driver is used. */
-  private async generateAiReply(input: {
-    conversationId: string;
-    texts: string[];
-    media?: WAMessage[];
-    participant?: string;
-  }): Promise<RouterGeneration> {
-    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
+  private async generateAiReply(
+    input: AiReplyInput,
+    isCurrent: () => boolean,
+  ): Promise<RouterGeneration> {
+    const canContinue = () => isCurrent() && !this.humanOwnedUntil(input.conversationId);
+    if (!canContinue()) return { ok: true, text: null };
     const ai = resolveAiConfig(this.options.ai);
     const startedAt = Date.now();
 
@@ -1280,7 +1316,7 @@ export class BaileysConnection {
       : "";
     const images = ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [];
     const linkContext = await collectLinkContext(input.texts);
-    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
+    if (!canContinue()) return { ok: true, text: null };
     const result = await generateAgentReply({
       sessionId: this.sessionId,
       conversationId: input.conversationId,
@@ -1289,11 +1325,14 @@ export class BaileysConnection {
       history: this.buildHistory(input.conversationId, input.texts),
       ai,
       timezone: routingCfg.timezone,
-      sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
+      sendMessage: async (message) => {
+        if (!canContinue()) return { ok: false, content: "Human takeover superseded this reply" };
+        return this.runAiSendTool(message, input.conversationId, ai.sendMessage);
+      },
       images,
       linkContext,
     });
-    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
+    if (!canContinue()) return { ok: true, text: null };
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {
       recordDecision({
@@ -1513,21 +1552,47 @@ export class BaileysConnection {
     return selectHistory(entries, config.aiHistory);
   }
 
-  /** Timestamp (ms) of the last human message, or null when there is none. */
-  private lastHumanActivityAt(conversationId: string, humanIdleMs: number): number | null {
-    const cutoff = Date.now() - humanIdleMs;
-    const history = this.store.loadMessages(conversationId, 20);
-    // loadMessages returns newest-first; start at the newest human message so
-    // the pause window is based on the latest takeover, not the oldest.
-    for (const msg of history) {
-      if (!msg?.key?.fromMe) continue;
-      const timestamp = toNumber(msg.messageTimestamp ?? 0) * 1000;
-      if (timestamp < cutoff) continue;
-      const id = msg.key.id ? String(msg.key.id) : "";
-      if (id && this.apiSentAt.has(id)) continue;
-      return timestamp;
+  private manualReplyAt(message: WAMessage): number {
+    const { fromMe, id, remoteJid } = message.key;
+    if (!fromMe || !id || !remoteJid || shouldIgnoreJid(remoteJid)) return 0;
+    if (this.apiSentAt.has(id) || isSystemMessage(message) || !isRealMessage(message)) return 0;
+    return Math.min(Date.now(), toNumber(message.messageTimestamp ?? 0) * 1_000);
+  }
+
+  /** Phone/Web sends arrive as fromMe upserts; pause immediately, not on the next inbound. */
+  private observeManualReplies(messages: WAMessage[], humanIdleMs: number): void {
+    const now = Date.now();
+    for (const message of messages) {
+      const sentAt = this.manualReplyAt(message);
+      if (sentAt && sentAt + humanIdleMs > now) {
+        this.pauseAutomation(this.messageRoomJids(message), sentAt + humanIdleMs, "human_active");
+      }
     }
-    return null;
+  }
+
+  private lastHumanActivityAt(jid: string, humanIdleMs: number): number {
+    const cutoff = Date.now() - humanIdleMs;
+    for (const message of this.store.loadMessages(jid, 20)) {
+      const sentAt = this.manualReplyAt(message);
+      if (sentAt > cutoff) return sentAt;
+    }
+    return 0;
+  }
+
+  private messageRoomJids(message: WAMessage): string[] {
+    return [message.key.remoteJid, message.key.remoteJidAlt].filter((jid): jid is string =>
+      Boolean(jid),
+    );
+  }
+
+  private pauseAutomation(jids: string[], until: number, reason: string): void {
+    for (const jid of new Set(jids.flatMap((jid) => this.takeoverRoomJids(jid)))) {
+      // Expiry or an early release must not revive a superseded model result.
+      this.activeAiTurns.get(jid)?.();
+      this.activeAiTurns.delete(jid);
+      this.aiRouter.pause(jid, until, reason);
+      this.aiRouter.dropPending(jid);
+    }
   }
 
   /**
@@ -1538,10 +1603,9 @@ export class BaileysConnection {
    */
   pauseForHumanActivity(conversationId: string): number {
     const routing = resolveRoutingConfig(this.options.routing);
-    const until = Date.now() + Math.max(60_000, routing.humanIdleMs);
-    this.aiRouter.pause(conversationId, until, "human_active");
-    this.aiRouter.dropPending(conversationId);
-    return until;
+    const until = Date.now() + routing.humanIdleMs;
+    this.pauseAutomation([conversationId], until, "human_active");
+    return this.humanOwnedUntil(conversationId);
   }
 
   /** Raw and normalized IDs plus the store's known alias for this room. */
@@ -1554,10 +1618,7 @@ export class BaileysConnection {
   /** Claim a conversation for a human until `until`, and silence automation. */
   setManualTakeover(conversationId: string, until: number, by: string): number {
     const entry = setTakeover(this.sessionId, conversationId, until, by);
-    for (const jid of this.takeoverRoomJids(conversationId)) {
-      this.aiRouter.pause(jid, entry.until, "manual_takeover");
-      this.aiRouter.dropPending(jid);
-    }
+    this.pauseAutomation([conversationId], entry.until, "manual_takeover");
     return entry.until;
   }
 
@@ -1593,10 +1654,11 @@ export class BaileysConnection {
    * Keep a conversation human-owned for `pauseMs`. Used by the AI handoff
    * endpoint; the deadline is clamped to at least one minute.
    */
-  pauseAi(conversationId: string, pauseMs: number, reason = "handoff"): { pausedUntil: number } {
-    const until = Date.now() + Math.max(60_000, pauseMs);
-    this.aiRouter.pause(conversationId, until, reason);
-    return { pausedUntil: until };
+  pauseAi(conversationId: string, pauseMs?: number, reason = "handoff"): { pausedUntil: number } {
+    const duration = pauseMs ?? resolveRoutingConfig(this.options.routing).handoffPauseMs;
+    const until = Date.now() + Math.max(60_000, duration);
+    this.pauseAutomation([conversationId], until, reason);
+    return { pausedUntil: this.humanOwnedUntil(conversationId) };
   }
 
   /** Remember an API-sent message id so it is not mistaken for human activity. */
@@ -1822,8 +1884,13 @@ export class BaileysConnection {
     checkTakeover();
     const sendStartedAt = Date.now();
     try {
-      const sent = await this.safeSocket().sendMessage(receiver, message, {
+      const socket = this.safeSocket();
+      // Baileys can emit the outgoing upsert before the send promise settles.
+      const messageId = generateMessageIDV2(this.user?.id);
+      this.rememberApiSent(messageId);
+      const sent = await socket.sendMessage(receiver, message, {
         quoted: options?.quoted,
+        messageId,
       });
       recordSendSample(Date.now() - sendStartedAt, true);
       this.rememberApiSent(sent?.key?.id);
@@ -2115,6 +2182,8 @@ export class BaileysConnection {
     }
     await this.store.destroy();
     this.aiRouter.dispose();
+    for (const stop of this.activeAiTurns.values()) stop();
+    this.activeAiTurns.clear();
     this.options.onConnectionClose?.();
   }
 

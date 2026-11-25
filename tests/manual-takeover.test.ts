@@ -9,7 +9,9 @@ import type { SessionOptions } from "@/baileys/types";
 import config from "@/config";
 import dashboardApi from "@/dashboard/api";
 import agentRoutes from "@/routes/agent";
+import chatRoutes from "@/routes/chat";
 import type { ResolvedSendMessageConfig } from "@/services/aiSendTool";
+import type { ConversationRouter, RouterGeneration } from "@/services/conversationRouter";
 import { clearTakeover } from "@/services/manualTakeover";
 
 const phone = "628111001001@s.whatsapp.net";
@@ -35,14 +37,19 @@ async function fixture(options: Partial<SessionOptions> = {}, webhookFailed = fa
   const sent: string[] = [];
   const socket = {
     presenceSubscribe: async (_jid: string) => {},
-    sendMessage: async (jid: string) => {
+    sendMessage: async (jid: string, _message?: unknown, options?: { messageId?: string }) => {
       sent.push(jid);
-      return { key: { id: randomUUID() } };
+      return { key: { id: options?.messageId ?? randomUUID() } };
     },
   };
   const inbound = session as unknown as {
     _isConnected: boolean;
+    aiRouter: ConversationRouter;
     socket: typeof socket;
+    generateAiReply: (input: {
+      conversationId: string;
+      texts: string[];
+    }) => Promise<RouterGeneration>;
     sendToWebhook: () => Promise<string>;
     humanizeReadStep: () => Promise<void>;
     handleMessagesUpsert: (payload: BaileysEventMap["messages.upsert"]) => Promise<void>;
@@ -87,7 +94,32 @@ async function fixture(options: Partial<SessionOptions> = {}, webhookFailed = fa
       allowlist: [lid, other],
       maxPerHour: 10,
     });
-  return { id, session, sent, webhook, socket, takeover, receive, tool };
+  const dashboardReply = (receiver: string) =>
+    dashboardApi.request(`/sessions/${id}/chats/send-text`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ receiver, text: "Operator reply" }),
+    });
+  const generate = spyOn(inbound, "generateAiReply").mockResolvedValue({
+    ok: true,
+    text: "AI reply",
+  });
+  // Drive the real debounce flush without waiting for its wall-clock timer.
+  const flush = (jid: string) =>
+    (inbound.aiRouter as unknown as { flush: (jid: string) => Promise<void> }).flush(jid);
+  return {
+    id,
+    session,
+    sent,
+    webhook,
+    socket,
+    takeover,
+    receive,
+    tool,
+    dashboardReply,
+    generate,
+    flush,
+  };
 }
 
 function message(
@@ -96,6 +128,208 @@ function message(
 ): WAMessage {
   return { key: { id: randomUUID(), remoteJid: jid, fromMe: false }, message: content };
 }
+
+const humanIdleMs = 15 * 60_000;
+const handoffPauseMs = 7 * 60_000;
+const routingOptions: Partial<SessionOptions> = {
+  ai: {
+    enabled: true,
+    mode: "always",
+    driver: "webhook",
+    agentUrl: "https://example.invalid/agent",
+    model: "fixture",
+  },
+  routing: {
+    batchIdleMs: 60_000,
+    batchMaxWaitMs: 60_000,
+    maxBatchMessages: 10,
+    humanIdleMs,
+    handoffPauseMs,
+  },
+};
+
+function fakeClock() {
+  const start = Math.floor(Date.now() / 1_000) * 1_000;
+  const clock = spyOn(Date, "now").mockReturnValue(start);
+  cleanup.push(() => clock.mockRestore());
+  return { start, advance: (ms: number) => clock.mockReturnValue(start + ms) };
+}
+
+function operatorMessage(jid: string): WAMessage {
+  const manual = message(jid, { conversation: "Operator on phone or Web" });
+  manual.key.fromMe = true;
+  manual.messageTimestamp = Math.floor(Date.now() / 1_000);
+  return manual;
+}
+
+test("a phone or Web reply drops the pending batch and renews human idle from the latest reply", async () => {
+  const f = await fixture(routingOptions);
+  const clock = fakeClock();
+  await f.receive(message(lid));
+  expect(f.session.aiPending).toBe(1);
+  await f.receive(operatorMessage(phone));
+  expect(f.session.humanOwnedUntil(lid)).toBe(clock.start + humanIdleMs);
+  expect(f.session.aiPending).toBe(0);
+  const later = 5 * 60_000;
+  clock.advance(later);
+  await f.receive(operatorMessage(lid));
+  expect(f.session.humanOwnedUntil(phone)).toBe(clock.start + later + humanIdleMs);
+  clock.advance(later + humanIdleMs - 1);
+  await f.receive(message(lid, { conversation: "During hold" }));
+  expect(f.session.aiPending).toBe(0);
+  clock.advance(later + humanIdleMs);
+  await f.flush(lid);
+  expect(f.generate).not.toHaveBeenCalled();
+  await f.receive(message(lid, { conversation: "Fresh after hold" }));
+  await f.flush(lid);
+  expect(f.generate.mock.calls.map(([input]) => input.texts)).toEqual([["Fresh after hold"]]);
+  expect(f.sent).toEqual([lid]);
+});
+
+test("a phone reply while AI generation is in flight blocks delivery and failure fallback", async () => {
+  const f = await fixture(routingOptions);
+  for (const result of [
+    { ok: true, text: "AI reply" },
+    { ok: false, error: "Model failed" },
+  ]) {
+    const clock = fakeClock();
+    const started = Promise.withResolvers<void>();
+    const model = Promise.withResolvers<RouterGeneration>();
+    f.generate.mockImplementationOnce(() => {
+      started.resolve();
+      return model.promise;
+    });
+    await f.receive(message(lid));
+    const job = f.flush(lid);
+    try {
+      await started.promise;
+      await f.receive(operatorMessage(phone));
+    } finally {
+      model.resolve(result);
+      await job;
+    }
+    expect(f.sent).toEqual([]);
+    clock.advance(humanIdleMs);
+  }
+});
+
+test("expiry does not revive an AI generation superseded by a manual reply", async () => {
+  const f = await fixture(routingOptions);
+  const clock = fakeClock();
+  const started = Promise.withResolvers<void>();
+  const model = Promise.withResolvers<RouterGeneration>();
+  f.generate.mockImplementationOnce(() => {
+    started.resolve();
+    return model.promise;
+  });
+  await f.receive(message(lid));
+  const job = f.flush(lid);
+  try {
+    await started.promise;
+    await f.receive(operatorMessage(phone));
+    await job;
+    clock.advance(humanIdleMs);
+    expect(f.sent).toEqual([]);
+    await f.receive(message(lid));
+    await f.flush(lid);
+    expect(f.sent).toEqual([lid]);
+  } finally {
+    model.resolve({ ok: true, text: "Stale model response" });
+  }
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(f.sent).toEqual([lid]);
+});
+
+test("history recovery honors a recent phone reply under the other room address", async () => {
+  const f = await fixture(routingOptions);
+  const clock = fakeClock();
+  const reply = operatorMessage(phone);
+  f.session.getStore().messages.set(phone, new Map([[reply.key.id ?? "", reply]]));
+  await f.receive(message(lid));
+  expect(f.session.humanOwnedUntil(lid)).toBe(clock.start + humanIdleMs);
+  expect(f.session.aiPending).toBe(0);
+  expect(f.sent).toEqual([]);
+});
+
+test("dashboard reply suppresses both addresses before routing, without answering a late webhook backlog", async () => {
+  const f = await fixture(routingOptions);
+  const clock = fakeClock();
+  await f.receive(message(lid));
+  const reply = await f.dashboardReply(phone);
+  expect(reply.status).toBe(200);
+  expect((await reply.json()).data.pausedUntil).toBe(clock.start + humanIdleMs);
+  expect(f.session.aiPending).toBe(0);
+  await f.receive(message(phone), message(lid, { locationMessage: {} }));
+  expect(f.session.aiPending).toBe(0);
+  expect(f.sent).toEqual([phone]);
+
+  const webhook = Promise.withResolvers<string>();
+  f.webhook.mockReturnValueOnce(webhook.promise);
+  const late = f.receive(message(lid, { conversation: "Received during hold" }));
+  clock.advance(humanIdleMs);
+  webhook.resolve("failed");
+  await late;
+  await f.flush(phone);
+  await f.flush(lid);
+  expect(f.generate).not.toHaveBeenCalled();
+  expect(f.sent).toEqual([phone]);
+});
+
+test("an API send echo does not trigger the human idle timer even before the send returns", async () => {
+  const f = await fixture(routingOptions);
+  const transport = spyOn(f.socket, "sendMessage").mockImplementation(
+    async (jid, _message, options) => {
+      const echo = operatorMessage(jid);
+      echo.key.id = options?.messageId ?? randomUUID();
+      await f.receive(echo);
+      return { key: { id: echo.key.id } };
+    },
+  );
+  await f.session.sendMessage(phone, { text: "Transactional send" });
+  expect(transport).toHaveBeenCalledTimes(1);
+  expect(f.session.humanOwnedUntil(lid)).toBe(0);
+  await f.receive(message(lid));
+  expect(f.session.aiPending).toBe(1);
+});
+
+test("human handover uses the configured timer, drops the pending batch and honors an explicit duration", async () => {
+  const f = await fixture(routingOptions);
+  const clock = fakeClock();
+  const enabled = spyOn(connectionManager, "hasSession").mockReturnValue(true);
+  const globalToken = config.auth.globalToken;
+  config.auth.globalToken = "fixture-handoff-token";
+  cleanup.push(() => {
+    enabled.mockRestore();
+    config.auth.globalToken = globalToken;
+  });
+  const handoff = (pauseMinutes?: number) =>
+    chatRoutes.request(`/${f.id}/handoff`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer fixture-handoff-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ conversationId: "628111001001", pauseMinutes }),
+    });
+  await f.receive(message(lid));
+  expect(f.session.aiPending).toBe(1);
+  const result = await handoff();
+  expect(result.status).toBe(200);
+  expect((await result.json()).data.pausedUntil).toBe(clock.start + handoffPauseMs);
+  expect(f.session.humanOwnedUntil(lid)).toBe(clock.start + handoffPauseMs);
+  expect(f.session.aiPending).toBe(0);
+  await f.receive(message(lid, { locationMessage: {} }));
+  expect(f.sent).toEqual([]);
+  clock.advance(handoffPauseMs);
+  await f.flush(lid);
+  expect(f.generate).not.toHaveBeenCalled();
+  await f.receive(message(lid, { conversation: "Fresh after handover" }));
+  await f.flush(lid);
+  expect(f.generate.mock.calls.map(([input]) => input.texts)).toEqual([["Fresh after handover"]]);
+  const override = await handoff(3);
+  expect(override.status).toBe(200);
+  expect((await override.json()).data.pausedUntil).toBe(clock.start + handoffPauseMs + 180_000);
+});
 
 test("dashboard takeover blocks AI queueing for the same contact under its LID", async () => {
   const f = await fixture({
