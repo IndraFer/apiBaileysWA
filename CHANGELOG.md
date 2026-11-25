@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-11-25
+
+### Fixed
+
+- Apply Manual Takeover before AI routing or static fallback for every conversation in an inbound batch, including messages without text and known phone-number/LID aliases.
+- Recheck takeover before automatic delivery, including after simulated typing, and reject agent replies to held rooms even when the receiver is a bare phone number. Keep manual and transactional sends available.
+
 ## [2.0.2] - 2026-11-25
 
 ### Fixed

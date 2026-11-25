@@ -12,14 +12,16 @@
  * from `/chats/:sessionId/send`.
  */
 import { timingSafeEqual } from "node:crypto";
+import type { AnyMessageContent, WAMessage } from "@whiskeysockets/baileys";
 import { Hono } from "hono";
+import { HumanTakeoverError } from "@/baileys/connection";
 import connectionManager from "@/baileys/connectionManager";
 import config from "@/config";
 import logger from "@/lib/logger";
 import { error, success } from "@/lib/response";
 import { sessionValidator } from "@/middleware/sessionValidator";
-import { sendMessageHandler } from "@/routes/chat";
 import { sendMessageSchema } from "@/schemas/chat";
+import { formatGroup, formatPhone } from "@/utils/phone";
 
 const agentRoutes = new Hono();
 
@@ -58,30 +60,36 @@ agentRoutes.post("/:sessionId/reply", sessionValidator, async (c) => {
 
   try {
     const session = connectionManager.getSession(sessionId);
-    const ownedUntil = session.humanOwnedUntil(receiver);
-    if (ownedUntil > Date.now()) {
-      logger.debug(
-        "[AgentReply] refused for %s: conversation is human-owned until %s",
-        sessionId,
-        new Date(ownedUntil).toISOString(),
-      );
-      return c.json(
-        {
-          success: false,
-          message: "Human takeover is active for this conversation",
-          data: { humanOwned: true, humanOwnedUntil: ownedUntil },
-        },
-        409,
-      );
+    const isLid = !isGroup && /^\d+(?::\d+)?@lid$/.test(receiver);
+    const jid = isGroup ? formatGroup(receiver) : isLid ? receiver : formatPhone(receiver);
+    session.assertAutomationAllowed(jid);
+    if (!isGroup && !isLid && !(await session.isOnWhatsApp(jid))) {
+      return error(c, "The receiver number is not registered on WhatsApp", 400);
     }
-
-    const result = await sendMessageHandler(sessionId, { receiver, message, isGroup, quoted });
+    const result = await session.sendAutomaticMessage(jid, message as AnyMessageContent, {
+      quoted: quoted as WAMessage,
+    });
     return success(
       c,
       { key: result?.key, messageTimestamp: result?.messageTimestamp },
       "Reply sent",
     );
   } catch (err) {
+    if (err instanceof HumanTakeoverError) {
+      logger.debug(
+        "[AgentReply] refused for %s: conversation is human-owned until %s",
+        sessionId,
+        new Date(err.until).toISOString(),
+      );
+      return c.json(
+        {
+          success: false,
+          message: err.message,
+          data: { humanOwned: true, humanOwnedUntil: err.until },
+        },
+        409,
+      );
+    }
     return error(c, (err as Error).message, 400);
   }
 });

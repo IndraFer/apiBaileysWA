@@ -11,6 +11,7 @@ import makeWASocket, {
   DisconnectReason,
   delay,
   fetchLatestBaileysVersion,
+  jidNormalizedUser,
   type MessageReceiptType,
   makeCacheableSignalKeyStore,
   type ParticipantAction,
@@ -75,7 +76,6 @@ import {
 import { extractMediaInfo, mediaDescriptor } from "@/services/inboundMedia";
 import { collectLinkContext } from "@/services/linkPreview";
 import { clearTakeover, getTakeoverUntil, setTakeover } from "@/services/manualTakeover";
-import { sendUnifiedMessage } from "@/services/messageSender";
 import { matchOtpFilter, resolveOtpFilter } from "@/services/otpFilter";
 import { sanitizeUserText, scanUserText } from "@/services/promptGuard";
 import type { ToolExecution } from "@/services/ragTools";
@@ -84,6 +84,7 @@ import { addToDeadLetter } from "@/services/webhookDeadLetter";
 import { addWebhookLog } from "@/services/webhookLog";
 import { webhookCircuitBreaker, webhookQueue, webhookRateLimiter } from "@/services/webhookQueue";
 import { asyncSleep, distributedDelay, randomDelay } from "@/utils/asyncSleep";
+import { formatPhone } from "@/utils/phone";
 import { errorToString } from "@/utils/validation";
 
 const msgRetryCounterCache = new NodeCache({
@@ -104,6 +105,12 @@ const autoReplyBurstCache = new NodeCache({
 export class BaileysNotConnectedError extends Error {
   constructor() {
     super("Session is not connected");
+  }
+}
+
+export class HumanTakeoverError extends Error {
+  constructor(readonly until: number) {
+    super("Human takeover is active for this conversation");
   }
 }
 
@@ -311,7 +318,7 @@ export class BaileysConnection {
       isAiEligible: () => this.isAiEligible(),
       generateReply: (input) => this.generateAiReply(input),
       deliver: async (conversationId, text, lastMessage) => {
-        await this.sendMessage(conversationId, { text }, { quoted: lastMessage });
+        await this.sendAutomaticReply(conversationId, text, lastMessage);
       },
       onFailure: async (conversationId, lastMessage) => {
         // Groups are AI-only unless the operator explicitly opted into the
@@ -343,11 +350,9 @@ export class BaileysConnection {
           );
           return;
         }
-        await this.sendMessage(
-          conversationId,
-          { text: autoReply.message },
-          { quoted: lastMessage },
-        );
+        if (!(await this.sendAutomaticReply(conversationId, autoReply.message, lastMessage))) {
+          return;
+        }
         recordDecision({
           sessionId: this.sessionId,
           conversationId,
@@ -873,13 +878,8 @@ export class BaileysConnection {
     await this.recordGroupDigest(data.messages);
     await this.recordMemory(messages);
 
-    if (this.enqueueForAi(messages, routing)) {
-      // The model call can take seconds; show activity instead of silence.
-      void this.signalAiWorking(messages[messages.length - 1]);
-      return;
-    }
-
-    if (!autoReply.enabled) return;
+    const replyable = this.routeAutomaticReplies(messages, routing);
+    if (!autoReply.enabled || replyable.length === 0) return;
 
     const policy = resolveAutoReplyPolicy(autoReply);
     const inWindow = staticWindowMatches(autoReply);
@@ -891,7 +891,7 @@ export class BaileysConnection {
     if (!primaryEligible && !webhookEligible) return;
 
     // Groups are answered by the AI only; static never speaks there.
-    const staticMessages = messages.filter((m) =>
+    const staticMessages = replyable.filter((m) =>
       isStaticReplyAllowed(m.key.remoteJid, {
         fallbackToStatic: groupReply.fallbackToStatic,
       }),
@@ -925,8 +925,12 @@ export class BaileysConnection {
 
         await this.humanizeReadStep(m);
 
-        logger.info("[%s] Sending auto-reply to %s", this.sessionId, remoteJid);
-        await this.sendMessage(remoteJid, { text: autoReply.message }, { quoted: m });
+        if (!(await this.sendAutomaticReply(remoteJid, autoReply.message, m))) {
+          autoReplyBurstCache.del(burstKey);
+          autoReplyCooldownCache.del(cooldownKey);
+          continue;
+        }
+        logger.info("[%s] Sent auto-reply to %s", this.sessionId, remoteJid);
         recordDecision({
           sessionId: this.sessionId,
           conversationId: remoteJid,
@@ -937,6 +941,43 @@ export class BaileysConnection {
         logger.error("[%s] Failed to send auto-reply: %s", this.sessionId, errorToString(err));
       }
     }
+  }
+
+  private routeAutomaticReplies(messages: WAMessage[], routing: ResolvedRouting): WAMessage[] {
+    const rooms = new Map<string, WAMessage[]>();
+    for (const message of messages) {
+      const jid = message.key.remoteJid;
+      // Apply the hold even if a message has no text or shares an upsert with another room.
+      if (!jid || !this.mayAutoReply(message)) continue;
+      const batch = rooms.get(jid);
+      if (batch) batch.push(message);
+      else rooms.set(jid, [message]);
+    }
+    const staticCandidates: WAMessage[] = [];
+    for (const batch of rooms.values()) {
+      if (this.enqueueForAi(batch, routing)) {
+        // The model call can take seconds; show activity instead of silence.
+        void this.signalAiWorking(batch[batch.length - 1]);
+      } else {
+        staticCandidates.push(...batch);
+      }
+    }
+    return staticCandidates;
+  }
+
+  private mayAutoReply(message: WAMessage): boolean {
+    const jid = message.key.remoteJid;
+    if (!jid) return false;
+    const alternate = message.key.remoteJidAlt;
+    const until = Math.max(this.takeoverUntil(jid), alternate ? this.takeoverUntil(alternate) : 0);
+    if (!until) return true;
+    recordDecision({
+      sessionId: this.sessionId,
+      conversationId: jid,
+      route: "human",
+      reason: "manual_takeover",
+    });
+    return false;
   }
 
   /**
@@ -1015,21 +1056,6 @@ export class BaileysConnection {
     }
 
     // A human wrote in this chat → keep it human-owned for humanIdleMs.
-    // An operator holds this conversation explicitly; the AI stays away until
-    // the deadline, across restarts.
-    const takeoverUntil = getTakeoverUntil(this.sessionId, remoteJid);
-    if (takeoverUntil > Date.now()) {
-      this.aiRouter.pause(remoteJid, takeoverUntil, "manual_takeover");
-      this.aiRouter.dropPending(remoteJid);
-      recordDecision({
-        sessionId: this.sessionId,
-        conversationId: remoteJid,
-        route: "human",
-        reason: "manual_takeover",
-      });
-      return true;
-    }
-
     const lastHumanAt = this.lastHumanActivityAt(remoteJid, routing.humanIdleMs);
     if (lastHumanAt !== null) {
       this.aiRouter.pause(remoteJid, lastHumanAt + routing.humanIdleMs, "human_active");
@@ -1135,32 +1161,20 @@ export class BaileysConnection {
     }
 
     try {
-      if (target.endsWith("@lid")) {
-        // sendUnifiedMessage formats non-group JIDs as phone numbers, which
-        // would corrupt a @lid conversation. Send to the exact JID instead.
-        const sent = await this.sendMessage(target, { text: input.text });
-        return {
-          ok: true,
-          content: JSON.stringify({
-            ok: true,
-            to: target,
-            messageId: sent?.key?.id ?? null,
-          }),
-        };
-      }
-
-      const sent = await sendUnifiedMessage(this.sessionId, {
-        receiver: target,
-        type: "text",
-        messages: input.text,
-        isGroup: target.endsWith("@g.us"),
-      });
+      const jid = await this.resolveAiToolRecipient(target, currentChat);
+      const sent = await this.sendAutomaticMessage(
+        jid,
+        { text: input.text },
+        {
+          conversationId: currentChat,
+        },
+      );
       return {
         ok: true,
         content: JSON.stringify({
           ok: true,
-          to: sent.to,
-          messageId: sent.messageId,
+          to: jid,
+          messageId: sent?.key?.id ?? null,
         }),
       };
     } catch (error) {
@@ -1168,6 +1182,26 @@ export class BaileysConnection {
       logger.warn("[%s] AI send tool failed: %s", this.sessionId, message);
       return { ok: false, content: `Tool error: ${message}` };
     }
+  }
+
+  private async resolveAiToolRecipient(target: string, conversationId: string): Promise<string> {
+    // Preserve the group policy and registration check of unified sending.
+    const isGroup = target.endsWith("@g.us");
+    const isLid = target.endsWith("@lid");
+    const jid = isGroup || isLid ? target : formatPhone(target);
+    this.assertAutomationAllowed(conversationId, jid);
+    if (isLid) return jid;
+    if (!this.isConnected) throw new BaileysNotConnectedError();
+    if (isGroup) {
+      if (!config.messaging.allowGroupSend) throw new Error("Group messages are disabled");
+      const allowed = config.messaging.allowedGroupJids;
+      if (allowed.length && !allowed.includes(jid) && !allowed.includes(jid.slice(0, -5))) {
+        throw new Error("Group is not in ALLOWED_GROUP_JIDS");
+      }
+    } else if (!(await this.isOnWhatsApp(jid))) {
+      throw new Error("The receiver number is not registered on WhatsApp");
+    }
+    return jid;
   }
 
   /** Download at most two current-batch images for an opt-in vision request. */
@@ -1189,6 +1223,7 @@ export class BaileysConnection {
     media?: WAMessage[];
     participant?: string;
   }): Promise<RouterGeneration> {
+    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
     const ai = resolveAiConfig(this.options.ai);
     const startedAt = Date.now();
 
@@ -1243,6 +1278,9 @@ export class BaileysConnection {
           isGroup,
         })
       : "";
+    const images = ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [];
+    const linkContext = await collectLinkContext(input.texts);
+    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
     const result = await generateAgentReply({
       sessionId: this.sessionId,
       conversationId: input.conversationId,
@@ -1252,9 +1290,10 @@ export class BaileysConnection {
       ai,
       timezone: routingCfg.timezone,
       sendMessage: (message) => this.runAiSendTool(message, input.conversationId, ai.sendMessage),
-      images: ai.vision.enabled ? await this.downloadVisionImages(input.media ?? []) : [],
-      linkContext: await collectLinkContext(input.texts),
+      images,
+      linkContext,
     });
+    if (this.humanOwnedUntil(input.conversationId)) return { ok: true, text: null };
     const latencyMs = Date.now() - startedAt;
     if (!result.ok) {
       recordDecision({
@@ -1505,24 +1544,38 @@ export class BaileysConnection {
     return until;
   }
 
-  /** Claim a conversation for a human until `until`, and silence the AI. */
+  /** Raw and normalized IDs plus the store's known alias for this room. */
+  private takeoverRoomJids(jid: string): string[] {
+    const normalized = jidNormalizedUser(jid) || jid;
+    const alias = this.store.lidToPn.get(normalized) || this.store.pnToLid.get(normalized);
+    return [...new Set(alias ? [jid, normalized, alias] : [jid, normalized])];
+  }
+
+  /** Claim a conversation for a human until `until`, and silence automation. */
   setManualTakeover(conversationId: string, until: number, by: string): number {
     const entry = setTakeover(this.sessionId, conversationId, until, by);
-    this.aiRouter.pause(conversationId, entry.until, "manual_takeover");
-    this.aiRouter.dropPending(conversationId);
+    for (const jid of this.takeoverRoomJids(conversationId)) {
+      this.aiRouter.pause(jid, entry.until, "manual_takeover");
+      this.aiRouter.dropPending(jid);
+    }
     return entry.until;
   }
 
   /** Hand the conversation back to the AI. */
   clearManualTakeover(conversationId: string): boolean {
-    const removed = clearTakeover(this.sessionId, conversationId);
-    this.aiRouter.resume(conversationId);
+    let removed = false;
+    for (const jid of this.takeoverRoomJids(conversationId)) {
+      if (clearTakeover(this.sessionId, jid)) removed = true;
+      this.aiRouter.resume(jid);
+    }
     return removed;
   }
 
   /** Active manual takeover deadline, or 0. */
   takeoverUntil(conversationId: string): number {
-    return getTakeoverUntil(this.sessionId, conversationId);
+    return Math.max(
+      ...this.takeoverRoomJids(conversationId).map((jid) => getTakeoverUntil(this.sessionId, jid)),
+    );
   }
 
   /**
@@ -1531,8 +1584,8 @@ export class BaileysConnection {
    */
   humanOwnedUntil(conversationId: string): number {
     return Math.max(
-      getTakeoverUntil(this.sessionId, conversationId),
-      this.aiRouter.pausedUntilFor(conversationId),
+      this.takeoverUntil(conversationId),
+      ...this.takeoverRoomJids(conversationId).map((jid) => this.aiRouter.pausedUntilFor(jid)),
     );
   }
 
@@ -1622,11 +1675,48 @@ export class BaileysConnection {
     return this.socket;
   }
 
+  assertAutomationAllowed(...jids: string[]): void {
+    const until = Math.max(...jids.map((jid) => this.humanOwnedUntil(jid)));
+    if (until > Date.now()) throw new HumanTakeoverError(until);
+  }
+
+  async sendAutomaticMessage(
+    receiver: string,
+    message: AnyMessageContent,
+    options?: { quoted?: WAMessage; conversationId?: string },
+  ) {
+    return this.sendMessage(receiver, message, {
+      quoted: options?.quoted,
+      automaticFor: options?.conversationId ?? receiver,
+    });
+  }
+
+  private async sendAutomaticReply(receiver: string, text: string, quoted: WAMessage) {
+    try {
+      await this.sendAutomaticMessage(
+        receiver,
+        { text },
+        {
+          quoted,
+          conversationId: quoted.key.remoteJidAlt ?? undefined,
+        },
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof HumanTakeoverError) return false;
+      throw error;
+    }
+  }
+
   async sendMessage(
     receiver: string,
     message: AnyMessageContent,
-    options?: { quoted?: WAMessage; simulateTyping?: boolean },
+    options?: { quoted?: WAMessage; simulateTyping?: boolean; automaticFor?: string },
   ) {
+    const checkTakeover = () => {
+      if (options?.automaticFor) this.assertAutomationAllowed(options.automaticFor, receiver);
+    };
+    checkTakeover();
     const shouldSimulateTyping =
       options?.simulateTyping ?? this.options.simulateTyping ?? config.simulation.typingBeforeSend;
     const hz = config.humanize;
@@ -1727,6 +1817,9 @@ export class BaileysConnection {
       await delay(paceMs);
     }
 
+    // Typing and pacing both await. Re-check immediately before handing off
+    // to Baileys; operator and transactional sends have no automation scope.
+    checkTakeover();
     const sendStartedAt = Date.now();
     try {
       const sent = await this.safeSocket().sendMessage(receiver, message, {
